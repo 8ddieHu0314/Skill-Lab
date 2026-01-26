@@ -1,5 +1,5 @@
 [project]
-name = "agent-skills-eval"
+name = "skill-lab"
 version = "0.1.0"
 description = "A framework for evaluating agent skills through static analysis and quality checks"
 readme = "README.md"
@@ -19,7 +19,7 @@ dev = [
 ]
 
 [project.scripts]
-agent-skills-eval = "agent_skills_eval.cli:app"
+skill-lab = "skill_lab.cli:app"
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]

@@ -6,7 +6,7 @@ from typing import Optional
 
 import yaml
 
-from agent_skills_eval.core.models import Skill, SkillMetadata
+from skill_lab.core.models import Skill, SkillMetadata
 
 # Regex pattern for YAML frontmatter
 # Allows empty frontmatter (---\n---) as well as content between markers

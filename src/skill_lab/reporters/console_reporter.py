@@ -5,7 +5,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from agent_skills_eval.core.models import EvaluationReport, Severity
+from skill_lab.core.models import EvaluationReport, Severity
 
 
 class ConsoleReporter:
@@ -51,7 +51,7 @@ class ConsoleReporter:
             Panel(
                 f"[bold]Skill:[/bold] {skill_name}\n"
                 f"[bold]Path:[/bold] {report.skill_path}",
-                title="Agent Skills Evaluation",
+                title="Skill Lab Evaluation",
                 border_style="blue",
             )
         )

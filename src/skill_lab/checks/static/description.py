@@ -3,9 +3,9 @@
 import re
 from typing import ClassVar
 
-from agent_skills_eval.checks.base import StaticCheck
-from agent_skills_eval.core.models import CheckResult, EvalDimension, Severity, Skill
-from agent_skills_eval.core.registry import register_check
+from skill_lab.checks.base import StaticCheck
+from skill_lab.core.models import CheckResult, EvalDimension, Severity, Skill
+from skill_lab.core.registry import register_check
 
 # Maximum description length
 MAX_DESCRIPTION_LENGTH = 1024

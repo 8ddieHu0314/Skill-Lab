@@ -3,7 +3,7 @@
 from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
-    from agent_skills_eval.checks.base import StaticCheck
+    from skill_lab.checks.base import StaticCheck
 
 
 class CheckRegistry:

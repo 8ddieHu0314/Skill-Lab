@@ -1,4 +1,4 @@
-# Agent Skills Evaluation Framework
+# Skill Lab
 
 A Python CLI tool for evaluating agent skills through static analysis and quality checks.
 
@@ -29,33 +29,33 @@ pip install -e ".[dev]"
 
 ```bash
 # Console output (default)
-agent-skills-eval evaluate ./my-skill
+skill-lab evaluate ./my-skill
 
 # JSON output
-agent-skills-eval evaluate ./my-skill --format json
+skill-lab evaluate ./my-skill --format json
 
 # Save to file
-agent-skills-eval evaluate ./my-skill --output report.json
+skill-lab evaluate ./my-skill --output report.json
 
 # Verbose (show all checks, not just failures)
-agent-skills-eval evaluate ./my-skill --verbose
+skill-lab evaluate ./my-skill --verbose
 ```
 
 ### Quick Validation
 
 ```bash
 # Returns exit code 0 if valid, 1 if invalid
-agent-skills-eval validate ./my-skill
+skill-lab validate ./my-skill
 ```
 
 ### List Available Checks
 
 ```bash
 # List all checks
-agent-skills-eval list-checks
+skill-lab list-checks
 
 # Filter by dimension
-agent-skills-eval list-checks --dimension structure
+skill-lab list-checks --dimension structure
 ```
 
 ## Check Categories
@@ -127,7 +127,7 @@ pip install -e ".[dev]"
 pytest tests/ -v
 
 # Run with coverage
-pytest tests/ --cov=agent_skills_eval
+pytest tests/ --cov=skill_lab
 
 # Type checking
 mypy src/
@@ -139,8 +139,8 @@ ruff check src/
 ## Project Structure
 
 ```
-agent-skills-eval/
-├── src/agent_skills_eval/
+skill-lab/
+├── src/skill_lab/
 │   ├── cli.py                    # CLI interface
 │   ├── core/
 │   │   ├── models.py             # Data models

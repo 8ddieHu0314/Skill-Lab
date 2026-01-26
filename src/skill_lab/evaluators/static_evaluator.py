@@ -4,14 +4,14 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from agent_skills_eval.checks.base import StaticCheck
-from agent_skills_eval.core.models import CheckResult, EvaluationReport, Severity, Skill
-from agent_skills_eval.core.registry import registry
-from agent_skills_eval.core.scoring import build_summary, calculate_score
-from agent_skills_eval.parsers.skill_parser import parse_skill
+from skill_lab.checks.base import StaticCheck
+from skill_lab.core.models import CheckResult, EvaluationReport, Severity, Skill
+from skill_lab.core.registry import registry
+from skill_lab.core.scoring import build_summary, calculate_score
+from skill_lab.parsers.skill_parser import parse_skill
 
 # Import static checks to trigger registration
-from agent_skills_eval.checks.static import content, description, naming, structure  # noqa: F401
+from skill_lab.checks.static import content, description, naming, structure  # noqa: F401
 
 
 class StaticEvaluator:

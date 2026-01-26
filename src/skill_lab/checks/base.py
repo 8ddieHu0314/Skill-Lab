@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from typing import ClassVar
 
-from agent_skills_eval.core.models import CheckResult, EvalDimension, Severity, Skill
+from skill_lab.core.models import CheckResult, EvalDimension, Severity, Skill
 
 
 class StaticCheck(ABC):

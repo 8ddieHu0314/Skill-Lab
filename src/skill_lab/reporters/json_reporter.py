@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import TextIO
 
-from agent_skills_eval.core.models import EvaluationReport
+from skill_lab.core.models import EvaluationReport
 
 
 class JsonReporter:

@@ -4,31 +4,31 @@ from pathlib import Path
 
 import pytest
 
-from agent_skills_eval.checks.static.content import (
+from skill_lab.checks.static.content import (
     BodyNotEmptyCheck,
     HasExamplesCheck,
     LineBudgetCheck,
     NoTimeSensitiveCheck,
     NoWindowsPathsCheck,
 )
-from agent_skills_eval.checks.static.description import (
+from skill_lab.checks.static.description import (
     DescriptionMaxLengthCheck,
     DescriptionNotEmptyCheck,
     DescriptionRequiredCheck,
     DescriptionThirdPersonCheck,
 )
-from agent_skills_eval.checks.static.naming import (
+from skill_lab.checks.static.naming import (
     GerundConventionCheck,
     NameFormatCheck,
     NameRequiredCheck,
     NoReservedWordsCheck,
 )
-from agent_skills_eval.checks.static.structure import (
+from skill_lab.checks.static.structure import (
     NoUnexpectedFilesCheck,
     SkillMdExistsCheck,
     ValidFrontmatterCheck,
 )
-from agent_skills_eval.core.models import Severity, Skill, SkillMetadata
+from skill_lab.core.models import Severity, Skill, SkillMetadata
 
 
 def make_skill(

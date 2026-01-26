@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_skills_eval.evaluators.static_evaluator import StaticEvaluator
+from skill_lab.evaluators.static_evaluator import StaticEvaluator
 
 
 class TestStaticEvaluator:

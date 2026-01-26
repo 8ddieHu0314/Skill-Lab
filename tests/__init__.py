@@ -1,1 +1,1 @@
-"""Tests for agent-skills-eval."""
+"""Tests for skill-lab."""

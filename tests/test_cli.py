@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from agent_skills_eval.cli import app
+from skill_lab.cli import app
 
 runner = CliRunner()
 

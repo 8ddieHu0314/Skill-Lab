@@ -1,6 +1,6 @@
 """Core components for the evaluation framework."""
 
-from agent_skills_eval.core.models import (
+from skill_lab.core.models import (
     CheckResult,
     EvalDimension,
     EvaluationReport,
@@ -8,8 +8,8 @@ from agent_skills_eval.core.models import (
     Skill,
     SkillMetadata,
 )
-from agent_skills_eval.core.registry import CheckRegistry, registry
-from agent_skills_eval.core.scoring import calculate_score
+from skill_lab.core.registry import CheckRegistry, registry
+from skill_lab.core.scoring import calculate_score
 
 __all__ = [
     "CheckResult",

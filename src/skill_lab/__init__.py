@@ -1,4 +1,4 @@
-"""Agent Skills Evaluation Framework.
+"""Skill Lab - Agent Skills Evaluation Framework.
 
 A Python CLI tool for evaluating agent skills through static analysis and quality checks.
 """

@@ -2,8 +2,8 @@
 
 import pytest
 
-from agent_skills_eval.core.models import CheckResult, EvalDimension, Severity
-from agent_skills_eval.core.scoring import (
+from skill_lab.core.models import CheckResult, EvalDimension, Severity
+from skill_lab.core.scoring import (
     build_summary,
     calculate_dimension_score,
     calculate_score,

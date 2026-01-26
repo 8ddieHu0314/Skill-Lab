@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_skills_eval.parsers.skill_parser import (
+from skill_lab.parsers.skill_parser import (
     extract_metadata,
     parse_frontmatter,
     parse_skill,

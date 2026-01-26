@@ -1,6 +1,6 @@
 """Quality score calculation for evaluation results."""
 
-from agent_skills_eval.core.models import CheckResult, EvalDimension, Severity
+from skill_lab.core.models import CheckResult, EvalDimension, Severity
 
 # Weights for each dimension in the final score
 DIMENSION_WEIGHTS: dict[EvalDimension, float] = {

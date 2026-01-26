@@ -1,4 +1,4 @@
-"""CLI interface for agent-skills-eval."""
+"""CLI interface for skill-lab."""
 
 import sys
 from enum import Enum
@@ -9,14 +9,14 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from agent_skills_eval.core.models import EvalDimension
-from agent_skills_eval.core.registry import registry
-from agent_skills_eval.evaluators.static_evaluator import StaticEvaluator
-from agent_skills_eval.reporters.console_reporter import ConsoleReporter
-from agent_skills_eval.reporters.json_reporter import JsonReporter
+from skill_lab.core.models import EvalDimension
+from skill_lab.core.registry import registry
+from skill_lab.evaluators.static_evaluator import StaticEvaluator
+from skill_lab.reporters.console_reporter import ConsoleReporter
+from skill_lab.reporters.json_reporter import JsonReporter
 
 app = typer.Typer(
-    name="agent-skills-eval",
+    name="skill-lab",
     help="Evaluate agent skills through static analysis and quality checks.",
     add_completion=False,
 )
