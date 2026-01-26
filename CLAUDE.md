@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A Python CLI tool for evaluating agent skills (SKILL.md files) through static analysis and quality checks. It parses YAML frontmatter and markdown content from skill definitions, runs 20 static checks across 4 dimensions (structure, naming, description, content), and produces a weighted 0-100 quality score.
 
+The architecture of the project can be found in ARCHITECTURE.md file
+
 ## Commands
 
 ```bash
