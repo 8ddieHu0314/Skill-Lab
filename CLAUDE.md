@@ -8,6 +8,8 @@ A Python CLI tool for evaluating agent skills (SKILL.md files) through static an
 
 The architecture of the project can be found in ARCHITECTURE.md file
 
+The implementation plan of the project can be found in IMPLMENTATION_PLAN.md file. Always put the most updated plan in this file.
+
 ## Commands
 
 ```bash
@@ -46,3 +48,7 @@ ruff check src/                     # Linting
 - `EvaluationReport`: Complete evaluation with score and summary
 - `Severity`: ERROR (must fix), WARNING (should fix), INFO (suggestion)
 - `EvalDimension`: STRUCTURE, NAMING, DESCRIPTION, CONTENT
+
+**Scoring Weights**: Final score is a weighted average across dimensions:
+- Dimension weights: STRUCTURE 30%, NAMING 20%, DESCRIPTION 25%, CONTENT 25%
+- Severity weights: ERROR 1.0, WARNING 0.5, INFO 0.25
