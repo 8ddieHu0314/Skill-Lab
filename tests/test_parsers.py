@@ -2,8 +2,6 @@
 
 from pathlib import Path
 
-import pytest
-
 from skill_lab.parsers.skill_parser import (
     extract_metadata,
     parse_frontmatter,

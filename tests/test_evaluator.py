@@ -2,27 +2,23 @@
 
 from pathlib import Path
 
-import pytest
-
 from skill_lab.evaluators.static_evaluator import StaticEvaluator
 
 
 class TestStaticEvaluator:
     """Tests for StaticEvaluator class."""
 
-    def test_evaluate_valid_skill(self, valid_skill_path: Path):
-        evaluator = StaticEvaluator()
+    def test_evaluate_valid_skill(self, evaluator: StaticEvaluator, valid_skill_path: Path):
         report = evaluator.evaluate(valid_skill_path)
 
-        assert report.skill_path == str(valid_skill_path)
+        assert Path(report.skill_path) == valid_skill_path
         assert report.skill_name == "creating-reports"
         assert report.checks_run > 0
         assert report.quality_score > 0
         assert report.timestamp
         assert report.duration_ms >= 0
 
-    def test_evaluate_invalid_skill(self, invalid_skill_path: Path):
-        evaluator = StaticEvaluator()
+    def test_evaluate_invalid_skill(self, evaluator: StaticEvaluator, invalid_skill_path: Path):
         report = evaluator.evaluate(invalid_skill_path)
 
         assert not report.overall_pass
@@ -38,22 +34,19 @@ class TestStaticEvaluator:
             for r in report.results
         )
 
-    def test_validate_valid_skill(self, valid_skill_path: Path):
-        evaluator = StaticEvaluator()
+    def test_validate_valid_skill(self, evaluator: StaticEvaluator, valid_skill_path: Path):
         passed, errors = evaluator.validate(valid_skill_path)
 
         assert passed
         assert len(errors) == 0
 
-    def test_validate_invalid_skill(self, invalid_skill_path: Path):
-        evaluator = StaticEvaluator()
+    def test_validate_invalid_skill(self, evaluator: StaticEvaluator, invalid_skill_path: Path):
         passed, errors = evaluator.validate(invalid_skill_path)
 
         assert not passed
         assert len(errors) > 0
 
-    def test_report_to_dict(self, valid_skill_path: Path):
-        evaluator = StaticEvaluator()
+    def test_report_to_dict(self, evaluator: StaticEvaluator, valid_skill_path: Path):
         report = evaluator.evaluate(valid_skill_path)
 
         report_dict = report.to_dict()

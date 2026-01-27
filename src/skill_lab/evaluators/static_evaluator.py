@@ -13,6 +13,8 @@ from skill_lab.parsers.skill_parser import parse_skill
 # Import static checks to trigger registration
 from skill_lab.checks.static import content, description, naming, structure  # noqa: F401
 
+from rich import print
+
 
 class StaticEvaluator:
     """Evaluator that runs static checks on skills."""

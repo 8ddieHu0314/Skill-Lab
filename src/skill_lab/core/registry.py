@@ -1,6 +1,6 @@
 """Check registration system for managing available checks."""
 
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from skill_lab.checks.base import StaticCheck

@@ -4,6 +4,8 @@ from pathlib import Path
 
 import pytest
 
+from skill_lab.evaluators.static_evaluator import StaticEvaluator
+
 
 @pytest.fixture
 def fixtures_dir() -> Path:
@@ -33,3 +35,9 @@ def invalid_skill_path(skills_dir: Path) -> Path:
 def minimal_skill_path(skills_dir: Path) -> Path:
     """Get the path to a minimal valid skill fixture."""
     return skills_dir / "minimal-skill"
+
+
+@pytest.fixture
+def evaluator() -> StaticEvaluator:
+    """Get a StaticEvaluator instance."""
+    return StaticEvaluator()

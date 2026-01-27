@@ -6,9 +6,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A Python CLI tool for evaluating agent skills (SKILL.md files) through static analysis and quality checks. It parses YAML frontmatter and markdown content from skill definitions, runs 20 static checks across 4 dimensions (structure, naming, description, content), and produces a weighted 0-100 quality score.
 
-The architecture of the project can be found in ARCHITECTURE.md file
+## Documentation
 
-The implementation plan of the project can be found in IMPLMENTATION_PLAN.md file. Always put the most updated plan in this file.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - Tech stack and system architecture
+- [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) - Roadmap and implementation details (always keep updated)
+- [docs/CHECKS.md](docs/CHECKS.md) - List of all quality checks with descriptions
 
 ## Commands
 
