@@ -19,14 +19,21 @@ from rich import print
 class StaticEvaluator:
     """Evaluator that runs static checks on skills."""
 
-    def __init__(self, check_ids: list[str] | None = None) -> None:
+    def __init__(
+        self,
+        check_ids: list[str] | None = None,
+        spec_only: bool = False,
+    ) -> None:
         """Initialize the evaluator.
 
         Args:
             check_ids: Optional list of specific check IDs to run.
                       If None, all registered checks are run.
+            spec_only: If True, only run checks required by the Agent Skills spec.
+                      Quality suggestion checks will be skipped.
         """
         self.check_ids = check_ids
+        self.spec_only = spec_only
 
     def _get_checks(self) -> list[StaticCheck]:
         """Get the check instances to run.
@@ -39,8 +46,13 @@ class StaticEvaluator:
             for check_id in self.check_ids:
                 check_class = registry.get(check_id)
                 if check_class:
+                    # If spec_only, skip non-spec-required checks
+                    if self.spec_only and not check_class.spec_required:
+                        continue
                     checks.append(check_class())
             return checks
+        elif self.spec_only:
+            return [check_class() for check_class in registry.get_spec_required()]
         else:
             return [check_class() for check_class in registry.get_all()]
 

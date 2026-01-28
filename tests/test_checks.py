@@ -20,6 +20,7 @@ from skill_lab.checks.static.description import (
 from skill_lab.checks.static.naming import (
     GerundConventionCheck,
     NameFormatCheck,
+    NameMatchesDirectoryCheck,
     NameRequiredCheck,
     NoReservedWordsCheck,
 )
@@ -127,6 +128,7 @@ class TestNamingChecks:
             skill = make_skill(name=reserved)
             result = check.run(skill)
             assert not result.passed, f"Expected '{reserved}' to fail"
+            assert result.severity == Severity.WARNING  # Quality suggestion, not in spec
 
     def test_gerund_convention_pass(self):
         check = GerundConventionCheck()
@@ -140,6 +142,20 @@ class TestNamingChecks:
         skill = make_skill(name="report-maker")
         result = check.run(skill)
         assert not result.passed
+        assert result.severity == Severity.INFO  # Quality suggestion, not in spec
+
+    def test_name_matches_directory_pass(self):
+        check = NameMatchesDirectoryCheck()
+        skill = make_skill(name="my-skill", path=Path("/test/my-skill"))
+        result = check.run(skill)
+        assert result.passed
+
+    def test_name_matches_directory_fail(self):
+        check = NameMatchesDirectoryCheck()
+        skill = make_skill(name="different-name", path=Path("/test/my-skill"))
+        result = check.run(skill)
+        assert not result.passed
+        assert result.severity == Severity.ERROR
 
 
 class TestDescriptionChecks:
@@ -186,6 +202,7 @@ class TestDescriptionChecks:
         skill = make_skill(description="I will help you create reports.")
         result = check.run(skill)
         assert not result.passed
+        assert result.severity == Severity.INFO  # Quality suggestion, not in spec
 
 
 class TestContentChecks:
@@ -202,6 +219,7 @@ class TestContentChecks:
         skill = make_skill(body="")
         result = check.run(skill)
         assert not result.passed
+        assert result.severity == Severity.WARNING  # Quality suggestion, spec allows empty body
 
     def test_body_too_short(self):
         check = BodyNotEmptyCheck()
@@ -244,6 +262,7 @@ class TestContentChecks:
         skill = make_skill(body="Use path C:\\Users\\test")
         result = check.run(skill)
         assert not result.passed
+        assert result.severity == Severity.INFO  # Quality suggestion, not in spec
 
     def test_no_time_sensitive_pass(self):
         check = NoTimeSensitiveCheck()
@@ -256,3 +275,4 @@ class TestContentChecks:
         skill = make_skill(body="Updated on 2024-01-15")
         result = check.run(skill)
         assert not result.passed
+        assert result.severity == Severity.INFO  # Quality suggestion, not in spec

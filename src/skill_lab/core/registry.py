@@ -59,6 +59,22 @@ class CheckRegistry:
         """
         return [c for c in self._checks.values() if c.dimension.value == dimension]
 
+    def get_spec_required(self) -> list[type["StaticCheck"]]:
+        """Get all checks that are required by the Agent Skills spec.
+
+        Returns:
+            List of spec-required check classes.
+        """
+        return [c for c in self._checks.values() if c.spec_required]
+
+    def get_quality_suggestions(self) -> list[type["StaticCheck"]]:
+        """Get all checks that are quality suggestions (not spec-required).
+
+        Returns:
+            List of quality suggestion check classes.
+        """
+        return [c for c in self._checks.values() if not c.spec_required]
+
     def list_ids(self) -> list[str]:
         """Get all registered check IDs.
 

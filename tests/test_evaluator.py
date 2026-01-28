@@ -56,3 +56,33 @@ class TestStaticEvaluator:
         assert "quality_score" in report_dict
         assert "results" in report_dict
         assert isinstance(report_dict["results"], list)
+
+    def test_evaluate_spec_only(self, valid_skill_path: Path):
+        """Test that spec_only mode only runs spec-required checks."""
+        evaluator = StaticEvaluator(spec_only=True)
+        report = evaluator.evaluate(valid_skill_path)
+
+        # Should only run 8 spec-required checks
+        assert report.checks_run == 8
+
+        # All results should be from spec-required checks
+        spec_required_ids = {
+            "structure.skill-md-exists",
+            "structure.valid-frontmatter",
+            "naming.required",
+            "naming.format",
+            "naming.matches-directory",
+            "description.required",
+            "description.not-empty",
+            "description.max-length",
+        }
+        result_ids = {r.check_id for r in report.results}
+        assert result_ids == spec_required_ids
+
+    def test_evaluate_all_checks(self, valid_skill_path: Path):
+        """Test that default mode runs all checks including quality suggestions."""
+        evaluator = StaticEvaluator(spec_only=False)
+        report = evaluator.evaluate(valid_skill_path)
+
+        # Should run all 21 checks
+        assert report.checks_run == 21

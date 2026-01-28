@@ -65,9 +65,17 @@ def evaluate(
             help="Show all checks, not just failures",
         ),
     ] = False,
+    spec_only: Annotated[
+        bool,
+        typer.Option(
+            "--spec-only",
+            "-s",
+            help="Only run checks required by the Agent Skills spec (skip quality suggestions)",
+        ),
+    ] = False,
 ) -> None:
     """Evaluate a skill and generate a quality report."""
-    evaluator = StaticEvaluator()
+    evaluator = StaticEvaluator(spec_only=spec_only)
     report = evaluator.evaluate(skill_path)
 
     if format == OutputFormat.json:
@@ -98,9 +106,17 @@ def validate(
             resolve_path=True,
         ),
     ],
+    spec_only: Annotated[
+        bool,
+        typer.Option(
+            "--spec-only",
+            "-s",
+            help="Only run checks required by the Agent Skills spec (skip quality suggestions)",
+        ),
+    ] = False,
 ) -> None:
     """Quick validation that reports only errors."""
-    evaluator = StaticEvaluator()
+    evaluator = StaticEvaluator(spec_only=spec_only)
     passed, errors = evaluator.validate(skill_path)
 
     if passed:
@@ -124,6 +140,21 @@ def list_checks(
             help="Filter by dimension (structure, naming, description, content)",
         ),
     ] = None,
+    spec_only: Annotated[
+        bool,
+        typer.Option(
+            "--spec-only",
+            "-s",
+            help="Only show checks required by the Agent Skills spec",
+        ),
+    ] = False,
+    suggestions_only: Annotated[
+        bool,
+        typer.Option(
+            "--suggestions-only",
+            help="Only show quality suggestion checks (not spec-required)",
+        ),
+    ] = False,
 ) -> None:
     """List all available checks."""
     # Get checks
@@ -135,6 +166,10 @@ def list_checks(
             console.print(f"[red]Invalid dimension: {dimension}[/red]")
             console.print(f"Valid dimensions: {', '.join(d.value for d in EvalDimension)}")
             raise typer.Exit(code=1)
+    elif spec_only:
+        checks = registry.get_spec_required()
+    elif suggestions_only:
+        checks = registry.get_quality_suggestions()
     else:
         checks = registry.get_all()
 
@@ -148,6 +183,7 @@ def list_checks(
     table.add_column("Name")
     table.add_column("Dimension", style="blue")
     table.add_column("Severity")
+    table.add_column("Spec", style="green")
     table.add_column("Description")
 
     severity_styles = {
@@ -158,16 +194,19 @@ def list_checks(
 
     for check_class in sorted(checks, key=lambda c: c.check_id):
         severity_style = severity_styles.get(check_class.severity.value, "white")
+        spec_badge = "[green]Yes[/green]" if check_class.spec_required else "[dim]No[/dim]"
         table.add_row(
             check_class.check_id,
             check_class.check_name,
             check_class.dimension.value,
             f"[{severity_style}]{check_class.severity.value}[/{severity_style}]",
+            spec_badge,
             check_class.description,
         )
 
     console.print(table)
-    console.print(f"\nTotal: {len(checks)} checks")
+    spec_count = sum(1 for c in checks if c.spec_required)
+    console.print(f"\nTotal: {len(checks)} checks ({spec_count} spec-required, {len(checks) - spec_count} quality suggestions)")
 
 
 def main() -> None:

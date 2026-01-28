@@ -22,7 +22,7 @@ def skills_dir(fixtures_dir: Path) -> Path:
 @pytest.fixture
 def valid_skill_path(skills_dir: Path) -> Path:
     """Get the path to a valid skill fixture."""
-    return skills_dir / "valid-skill"
+    return skills_dir / "creating-reports"
 
 
 @pytest.fixture
@@ -34,7 +34,7 @@ def invalid_skill_path(skills_dir: Path) -> Path:
 @pytest.fixture
 def minimal_skill_path(skills_dir: Path) -> Path:
     """Get the path to a minimal valid skill fixture."""
-    return skills_dir / "minimal-skill"
+    return skills_dir / "testing-features"
 
 
 @pytest.fixture

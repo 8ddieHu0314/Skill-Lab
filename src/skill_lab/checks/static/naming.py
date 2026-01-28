@@ -13,7 +13,7 @@ NAME_PATTERN = re.compile(r"^[a-z][a-z0-9-]*[a-z0-9]$|^[a-z]$")
 # Maximum name length
 MAX_NAME_LENGTH = 64
 
-# Reserved words that cannot appear in skill names
+# Reserved words that should not appear in skill names (quality suggestion, not in spec)
 RESERVED_WORDS = {"anthropic", "claude", "openai", "gpt"}
 
 # Common gerund prefixes
@@ -62,6 +62,7 @@ class NameRequiredCheck(StaticCheck):
     description: ClassVar[str] = "Name field is present in frontmatter"
     severity: ClassVar[Severity] = Severity.ERROR
     dimension: ClassVar[EvalDimension] = EvalDimension.NAMING
+    spec_required: ClassVar[bool] = True
 
     def run(self, skill: Skill) -> CheckResult:
         if skill.metadata is None:
@@ -91,6 +92,7 @@ class NameFormatCheck(StaticCheck):
     description: ClassVar[str] = "Name is lowercase, hyphen-separated, max 64 chars"
     severity: ClassVar[Severity] = Severity.ERROR
     dimension: ClassVar[EvalDimension] = EvalDimension.NAMING
+    spec_required: ClassVar[bool] = True
 
     def run(self, skill: Skill) -> CheckResult:
         if skill.metadata is None or not skill.metadata.name:
@@ -131,13 +133,47 @@ class NameFormatCheck(StaticCheck):
 
 
 @register_check
+class NameMatchesDirectoryCheck(StaticCheck):
+    """Check that name matches the parent directory name (spec requirement)."""
+
+    check_id: ClassVar[str] = "naming.matches-directory"
+    check_name: ClassVar[str] = "Name Matches Directory"
+    description: ClassVar[str] = "Name must match the parent directory name"
+    severity: ClassVar[Severity] = Severity.ERROR
+    dimension: ClassVar[EvalDimension] = EvalDimension.NAMING
+    spec_required: ClassVar[bool] = True
+
+    def run(self, skill: Skill) -> CheckResult:
+        if skill.metadata is None or not skill.metadata.name:
+            return self._fail(
+                "No name to validate",
+                location=str(skill.path / "SKILL.md"),
+            )
+
+        name = skill.metadata.name
+        directory_name = skill.path.name
+
+        if name != directory_name:
+            return self._fail(
+                f"Name '{name}' does not match directory name '{directory_name}'",
+                details={"name": name, "directory": directory_name},
+                location=str(skill.path / "SKILL.md"),
+            )
+
+        return self._pass(
+            f"Name '{name}' matches directory name",
+            location=str(skill.path / "SKILL.md"),
+        )
+
+
+@register_check
 class NoReservedWordsCheck(StaticCheck):
-    """Check that name doesn't contain reserved words."""
+    """Check that name doesn't contain reserved words (quality suggestion)."""
 
     check_id: ClassVar[str] = "naming.no-reserved"
     check_name: ClassVar[str] = "No Reserved Words"
     description: ClassVar[str] = "Name does not contain 'anthropic', 'claude', etc."
-    severity: ClassVar[Severity] = Severity.ERROR
+    severity: ClassVar[Severity] = Severity.WARNING
     dimension: ClassVar[EvalDimension] = EvalDimension.NAMING
 
     def run(self, skill: Skill) -> CheckResult:
@@ -169,12 +205,12 @@ class NoReservedWordsCheck(StaticCheck):
 
 @register_check
 class GerundConventionCheck(StaticCheck):
-    """Check that name uses gerund form."""
+    """Check that name uses gerund form (quality suggestion, not in spec)."""
 
     check_id: ClassVar[str] = "naming.gerund-convention"
     check_name: ClassVar[str] = "Gerund Naming"
     description: ClassVar[str] = "Name uses gerund form (e.g., 'creating-docs')"
-    severity: ClassVar[Severity] = Severity.WARNING
+    severity: ClassVar[Severity] = Severity.INFO
     dimension: ClassVar[EvalDimension] = EvalDimension.NAMING
 
     def run(self, skill: Skill) -> CheckResult:

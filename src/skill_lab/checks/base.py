@@ -19,6 +19,9 @@ class StaticCheck(ABC):
     severity: ClassVar[Severity]
     dimension: ClassVar[EvalDimension]
 
+    # Whether this check is required by the Agent Skills spec (default: False = quality suggestion)
+    spec_required: ClassVar[bool] = False
+
     @abstractmethod
     def run(self, skill: Skill) -> CheckResult:
         """Execute the check against a skill.

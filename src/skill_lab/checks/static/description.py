@@ -39,6 +39,7 @@ class DescriptionRequiredCheck(StaticCheck):
     description: ClassVar[str] = "Description field is present in frontmatter"
     severity: ClassVar[Severity] = Severity.ERROR
     dimension: ClassVar[EvalDimension] = EvalDimension.DESCRIPTION
+    spec_required: ClassVar[bool] = True
 
     def run(self, skill: Skill) -> CheckResult:
         if skill.metadata is None:
@@ -68,6 +69,7 @@ class DescriptionNotEmptyCheck(StaticCheck):
     description: ClassVar[str] = "Description is not empty or whitespace-only"
     severity: ClassVar[Severity] = Severity.ERROR
     dimension: ClassVar[EvalDimension] = EvalDimension.DESCRIPTION
+    spec_required: ClassVar[bool] = True
 
     def run(self, skill: Skill) -> CheckResult:
         if skill.metadata is None:
@@ -99,6 +101,7 @@ class DescriptionMaxLengthCheck(StaticCheck):
     description: ClassVar[str] = f"Description is under {MAX_DESCRIPTION_LENGTH} characters"
     severity: ClassVar[Severity] = Severity.ERROR
     dimension: ClassVar[EvalDimension] = EvalDimension.DESCRIPTION
+    spec_required: ClassVar[bool] = True
 
     def run(self, skill: Skill) -> CheckResult:
         if skill.metadata is None:
@@ -125,12 +128,12 @@ class DescriptionMaxLengthCheck(StaticCheck):
 
 @register_check
 class DescriptionThirdPersonCheck(StaticCheck):
-    """Check that description uses third-person voice."""
+    """Check that description uses third-person voice (quality suggestion, not in spec)."""
 
     check_id: ClassVar[str] = "description.third-person"
     check_name: ClassVar[str] = "Third-Person Voice"
     description: ClassVar[str] = "Description uses third-person voice"
-    severity: ClassVar[Severity] = Severity.WARNING
+    severity: ClassVar[Severity] = Severity.INFO
     dimension: ClassVar[EvalDimension] = EvalDimension.DESCRIPTION
 
     def run(self, skill: Skill) -> CheckResult:
@@ -165,12 +168,12 @@ class DescriptionThirdPersonCheck(StaticCheck):
 
 @register_check
 class DescriptionIncludesTriggersCheck(StaticCheck):
-    """Check that description includes trigger information."""
+    """Check that description includes trigger information (spec recommendation)."""
 
     check_id: ClassVar[str] = "description.includes-triggers"
     check_name: ClassVar[str] = "Includes Triggers"
     description: ClassVar[str] = "Description describes when to use the skill"
-    severity: ClassVar[Severity] = Severity.WARNING
+    severity: ClassVar[Severity] = Severity.INFO
     dimension: ClassVar[EvalDimension] = EvalDimension.DESCRIPTION
 
     def run(self, skill: Skill) -> CheckResult:

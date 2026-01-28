@@ -42,7 +42,7 @@ src/skill_lab/
 │   ├── base.py               # StaticCheck abstract base class
 │   └── static/               # Check implementations
 │       ├── structure.py      # 5 checks
-│       ├── naming.py         # 4 checks
+│       ├── naming.py         # 5 checks
 │       ├── description.py    # 5 checks
 │       └── content.py        # 6 checks
 ├── evaluators/
@@ -89,7 +89,9 @@ src/skill_lab/
 │  4. Detect subfolders       │   │  Methods:                             │
 │  5. Return Skill object     │   │  • register(check_class)              │
 │                             │   │  • get_all() → list[StaticCheck]      │
-└─────────────────────────────┘   │  • get_by_dimension(dim)              │
+│                             │   │  • get_by_dimension(dim)              │
+│                             │   │  • get_spec_required()                │
+└─────────────────────────────┘   │  • get_quality_suggestions()          │
                                   └───────────────────────────────────────┘
                                                     ▲
                                                     │ @register_check
@@ -97,7 +99,7 @@ src/skill_lab/
                     │                    │                    │              │
             ┌───────────────┐    ┌───────────────┐    ┌───────────────┐ ┌──────────┐
             │ structure.py  │    │  naming.py    │    │description.py │ │content.py│
-            │ (5 checks)    │    │  (4 checks)   │    │ (5 checks)    │ │(6 checks)│
+            │ (5 checks)    │    │  (5 checks)   │    │ (5 checks)    │ │(6 checks)│
             └───────────────┘    └───────────────┘    └───────────────┘ └──────────┘
 ```
 
@@ -194,7 +196,7 @@ class SkillMdExistsCheck(StaticCheck):
 from skill_lab.checks.static import content, description, naming, structure
 
 # This import executes the module code, which runs @register_check decorators
-# Now registry.get_all() returns all 20 check classes
+# Now registry.get_all() returns all 21 check classes
 ```
 
 #### Why This Pattern?
@@ -233,11 +235,11 @@ DIMENSION_WEIGHTS = {
 
 ```
 Structure: 5 checks, all pass       → 100 × 0.30 = 30.0
-Naming: 4 checks, 1 ERROR fails     →  75 × 0.20 = 15.0
+Naming: 5 checks, 1 ERROR fails     →  80 × 0.20 = 16.0
 Description: 5 checks, all pass     → 100 × 0.25 = 25.0
 Content: 6 checks, 1 WARNING fails  →  90 × 0.25 = 22.5
 ──────────────────────────────────────────────────────
-Final Score: 92.5
+Final Score: 93.5
 ```
 
 ---
@@ -263,14 +265,18 @@ Built with **Typer** which provides:
 
 ```bash
 # Main evaluation command
-skill-lab evaluate ./my-skill [--format console|json] [--output file.json] [--verbose]
+skill-lab evaluate ./my-skill [--format console|json] [--output file.json] [--verbose] [--spec-only]
 
 # Quick validation (exit 0 or 1)
-skill-lab validate ./my-skill
+skill-lab validate ./my-skill [--spec-only]
 
 # List available checks
-skill-lab list-checks [--dimension structure|naming|description|content]
+skill-lab list-checks [--dimension structure|naming|description|content] [--spec-only] [--suggestions-only]
 ```
+
+**Spec Filtering:**
+- `--spec-only` / `-s`: Only run checks required by the Agent Skills spec (8 checks)
+- `--suggestions-only`: List only quality suggestion checks (13 checks)
 
 ---
 
@@ -308,8 +314,9 @@ Structured output for programmatic use:
 
 1. Create a class extending `StaticCheck` in the appropriate `checks/static/` module
 2. Define class attributes: `check_id`, `check_name`, `description`, `severity`, `dimension`
-3. Implement `run(skill: Skill) -> CheckResult` using `self._pass()` or `self._fail()`
-4. Add the `@register_check` decorator - no other wiring needed
+3. Set `spec_required = True` if the check enforces the Agent Skills spec (default is `False`)
+4. Implement `run(skill: Skill) -> CheckResult` using `self._pass()` or `self._fail()`
+5. Add the `@register_check` decorator - no other wiring needed
 
 ```python
 @register_check
@@ -319,9 +326,14 @@ class MyNewCheck(StaticCheck):
     description: ClassVar[str] = "What this check verifies"
     severity: ClassVar[Severity] = Severity.WARNING
     dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
+    spec_required: ClassVar[bool] = False  # True if required by Agent Skills spec
 
     def run(self, skill: Skill) -> CheckResult:
         if some_condition:
             return self._pass("Check passed")
         return self._fail("Check failed", details={"reason": "..."})
 ```
+
+**Check Categories:**
+- **Spec-required checks** (8): Must pass to be valid per the Agent Skills spec. Use `spec_required = True` and `Severity.ERROR`.
+- **Quality suggestions** (13): Best practices that improve skill quality. Use `spec_required = False` (default) with `Severity.WARNING` or `Severity.INFO`.

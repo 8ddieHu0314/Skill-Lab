@@ -34,12 +34,12 @@ MAX_REFERENCE_DEPTH = 1
 
 @register_check
 class BodyNotEmptyCheck(StaticCheck):
-    """Check that SKILL.md body has content."""
+    """Check that SKILL.md body has content (quality suggestion, spec allows empty body)."""
 
     check_id: ClassVar[str] = "content.body-not-empty"
     check_name: ClassVar[str] = "Body Not Empty"
     description: ClassVar[str] = "SKILL.md body has meaningful content"
-    severity: ClassVar[Severity] = Severity.ERROR
+    severity: ClassVar[Severity] = Severity.WARNING
     dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
 
     def run(self, skill: Skill) -> CheckResult:
@@ -121,12 +121,12 @@ class HasExamplesCheck(StaticCheck):
 
 @register_check
 class NoWindowsPathsCheck(StaticCheck):
-    """Check for Windows-style paths."""
+    """Check for Windows-style paths (quality suggestion, not in spec)."""
 
     check_id: ClassVar[str] = "content.no-windows-paths"
     check_name: ClassVar[str] = "No Windows Paths"
     description: ClassVar[str] = "Content does not contain Windows-style paths"
-    severity: ClassVar[Severity] = Severity.WARNING
+    severity: ClassVar[Severity] = Severity.INFO
     dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
 
     def run(self, skill: Skill) -> CheckResult:
@@ -151,12 +151,12 @@ class NoWindowsPathsCheck(StaticCheck):
 
 @register_check
 class NoTimeSensitiveCheck(StaticCheck):
-    """Check for hardcoded dates."""
+    """Check for hardcoded dates (quality suggestion, not in spec)."""
 
     check_id: ClassVar[str] = "content.no-time-sensitive"
     check_name: ClassVar[str] = "No Time-Sensitive Content"
     description: ClassVar[str] = "Content does not contain hardcoded dates"
-    severity: ClassVar[Severity] = Severity.WARNING
+    severity: ClassVar[Severity] = Severity.INFO
     dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
 
     def run(self, skill: Skill) -> CheckResult:

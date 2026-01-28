@@ -26,6 +26,7 @@ class SkillMdExistsCheck(StaticCheck):
     description: ClassVar[str] = "SKILL.md file exists in the skill directory"
     severity: ClassVar[Severity] = Severity.ERROR
     dimension: ClassVar[EvalDimension] = EvalDimension.STRUCTURE
+    spec_required: ClassVar[bool] = True
 
     def run(self, skill: Skill) -> CheckResult:
         skill_md_path = skill.path / "SKILL.md"
@@ -59,6 +60,7 @@ class ValidFrontmatterCheck(StaticCheck):
     description: ClassVar[str] = "YAML frontmatter is parseable and valid"
     severity: ClassVar[Severity] = Severity.ERROR
     dimension: ClassVar[EvalDimension] = EvalDimension.STRUCTURE
+    spec_required: ClassVar[bool] = True
 
     def run(self, skill: Skill) -> CheckResult:
         # Check for parse errors related to frontmatter
