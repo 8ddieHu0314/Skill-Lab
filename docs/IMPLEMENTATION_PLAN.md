@@ -160,9 +160,9 @@ scoring:
 
 | Phase | Focus | Status | Deliverables |
 |-------|-------|--------|--------------|
-| **Phase 1** | Static Analysis (MVP) | **DONE** | SKILL.md parsing, 20 static checks, JSON output, CLI |
-| **Phase 2** | Trigger Testing | Next | Given/When/Then DSL, LLM orchestration, 4-type trigger tests |
-| **Phase 3** | Trace Analysis | Planned | JSONL parsing, command/file/sequence checks, efficiency metrics |
+| **Phase 1** | Static Analysis (MVP) | **DONE** | SKILL.md parsing, 21 static checks, JSON output, CLI |
+| **Phase 2** | Trigger Testing | **DONE** | Given/When/Then DSL, runtime adapters, 4-type trigger tests, CLI |
+| **Phase 3** | Trace Analysis | Next | JSONL parsing, command/file/sequence checks, efficiency metrics |
 | **Phase 4** | Rubric Grading | Planned | LLM-as-judge pipeline, structured output |
 | **Phase 5** | Ecosystem Integration | Planned | Quality badges, marketplace publishing, CI/CD gates, benchmarks |
 
@@ -228,7 +228,7 @@ src/skill_lab/
 
 ---
 
-# Phase 2: Trigger Testing (NEXT PRIORITY)
+# Phase 2: Trigger Testing - COMPLETE
 
 ## Goal
 
@@ -662,15 +662,15 @@ skill-lab test-triggers ./my-skill --type negative
 
 ## Deliverables
 
-- [ ] `TriggerTestCase`, `TriggerResult`, `TriggerReport` data models
-- [ ] YAML test case loader with validation
-- [ ] `RuntimeAdapter` abstract base class
-- [ ] Codex CLI runtime adapter (`codex exec --json`)
-- [ ] Claude/MCP runtime adapter
-- [ ] Trace analyzer (detect skill invocations from traces)
-- [ ] `TriggerEvaluator` orchestrator class
-- [ ] CLI command: `skill-lab test-triggers`
-- [ ] Trigger metrics in evaluation report
+- [x] `TriggerTestCase`, `TriggerResult`, `TriggerReport` data models
+- [x] YAML test case loader with validation
+- [x] `RuntimeAdapter` abstract base class
+- [x] Codex CLI runtime adapter (`codex exec --json`)
+- [x] Claude/MCP runtime adapter
+- [x] Trace analyzer (detect skill invocations from traces)
+- [x] `TriggerEvaluator` orchestrator class
+- [x] CLI command: `skill-lab test-triggers`
+- [x] Trigger metrics in evaluation report
 
 ---
 

@@ -8,11 +8,12 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from skill_lab.core.models import EvalDimension
+from skill_lab.core.models import EvalDimension, TriggerReport, TriggerType
 from skill_lab.core.registry import registry
 from skill_lab.evaluators.static_evaluator import StaticEvaluator
 from skill_lab.reporters.console_reporter import ConsoleReporter
 from skill_lab.reporters.json_reporter import JsonReporter
+from skill_lab.triggers.trigger_evaluator import TriggerEvaluator
 
 app = typer.Typer(
     name="skill-lab",
@@ -207,6 +208,142 @@ def list_checks(
     console.print(table)
     spec_count = sum(1 for c in checks if c.spec_required)
     console.print(f"\nTotal: {len(checks)} checks ({spec_count} spec-required, {len(checks) - spec_count} quality suggestions)")
+
+
+@app.command("test-triggers")
+def test_triggers(
+    skill_path: Annotated[
+        Path,
+        typer.Argument(
+            help="Path to the skill directory",
+            exists=True,
+            file_okay=False,
+            dir_okay=True,
+            resolve_path=True,
+        ),
+    ],
+    runtime: Annotated[
+        Optional[str],
+        typer.Option(
+            "--runtime",
+            "-r",
+            help="Runtime to use (codex, claude, or auto-detect)",
+        ),
+    ] = None,
+    type_filter: Annotated[
+        Optional[str],
+        typer.Option(
+            "--type",
+            "-t",
+            help="Only run tests of this trigger type (explicit, implicit, contextual, negative)",
+        ),
+    ] = None,
+    output: Annotated[
+        Optional[Path],
+        typer.Option(
+            "--output",
+            "-o",
+            help="Output file path for JSON report",
+        ),
+    ] = None,
+    format: Annotated[
+        OutputFormat,
+        typer.Option(
+            "--format",
+            "-f",
+            help="Output format",
+        ),
+    ] = OutputFormat.console,
+) -> None:
+    """Run trigger tests to verify skill activation.
+
+    Tests whether the skill activates correctly for different prompt types:
+    - explicit: Skill named directly with $ prefix
+    - implicit: Describes exact scenario without naming skill
+    - contextual: Realistic noisy prompt with domain context
+    - negative: Should NOT trigger (catches false positives)
+
+    Requires test definitions in tests/scenarios.yaml or tests/triggers.yaml.
+    """
+    # Parse type filter
+    trigger_type: Optional[TriggerType] = None
+    if type_filter:
+        try:
+            trigger_type = TriggerType(type_filter.lower())
+        except ValueError:
+            console.print(f"[red]Invalid trigger type: {type_filter}[/red]")
+            console.print(f"Valid types: {', '.join(t.value for t in TriggerType)}")
+            raise typer.Exit(code=1)
+
+    # Run evaluation
+    evaluator = TriggerEvaluator(runtime=runtime)
+    report = evaluator.evaluate(skill_path, type_filter=trigger_type)
+
+    # Output results
+    if format == OutputFormat.json:
+        import json as json_module
+        report_json = json_module.dumps(report.to_dict(), indent=2)
+        if output:
+            output.write_text(report_json)
+            console.print(f"Report written to: {output}")
+        else:
+            console.print(report_json)
+    else:
+        _print_trigger_report(report)
+
+    # Exit with non-zero code if tests failed
+    if not report.overall_pass:
+        raise typer.Exit(code=1)
+
+
+def _print_trigger_report(report: TriggerReport) -> None:
+    """Print a trigger test report to console."""
+    # Header
+    console.print()
+    console.print(f"[bold]Trigger Test Report: {report.skill_name}[/bold]")
+    console.print(f"Runtime: {report.runtime}")
+    console.print()
+
+    # Summary
+    if report.overall_pass:
+        console.print(f"[green]All {report.tests_passed} tests passed![/green]")
+    else:
+        console.print(
+            f"[red]{report.tests_failed} of {report.tests_run} tests failed[/red]"
+        )
+    console.print()
+
+    # Results table
+    table = Table(title="Test Results")
+    table.add_column("Test", style="cyan")
+    table.add_column("Type", style="blue")
+    table.add_column("Status")
+    table.add_column("Message")
+
+    for result in report.results:
+        status = "[green]PASS[/green]" if result.passed else "[red]FAIL[/red]"
+        table.add_row(
+            result.test_name,
+            result.trigger_type.value,
+            status,
+            result.message,
+        )
+
+    console.print(table)
+    console.print()
+
+    # Summary by type
+    if report.summary_by_type:
+        console.print("[bold]Summary by Trigger Type:[/bold]")
+        for type_name, stats in report.summary_by_type.items():
+            passed = stats["passed"]
+            total = stats["total"]
+            pct = (passed / total * 100) if total > 0 else 0
+            color = "green" if passed == total else "yellow" if passed > 0 else "red"
+            console.print(f"  {type_name}: [{color}]{passed}/{total} ({pct:.0f}%)[/{color}]")
+        console.print()
+
+    console.print(f"Duration: {report.duration_ms:.1f}ms")
 
 
 def main() -> None:
