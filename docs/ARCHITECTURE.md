@@ -34,8 +34,10 @@ src/skill_lab/
 ├── __main__.py               # Allows `python -m skill_lab`
 ├── core/
 │   ├── models.py             # Data classes (Skill, CheckResult, TriggerResult, etc.)
-│   ├── registry.py           # Check auto-discovery system
-│   └── scoring.py            # Quality score calculation
+│   ├── registry.py           # Check auto-discovery system (extends generic Registry[T])
+│   ├── scoring.py            # Quality score calculation and shared metrics
+│   ├── utils.py              # Shared utilities (generic Registry[T], calculate_metrics)
+│   └── exceptions.py         # Custom exception hierarchy (SkillLabError, ParseError, etc.)
 ├── parsers/
 │   ├── skill_parser.py       # SKILL.md parser (YAML + markdown)
 │   └── trace_parser.py       # JSONL trace parser
@@ -154,45 +156,73 @@ class TriggerType(str, Enum):  # Phase 2
 
 #### Immutable Data Classes
 
+All models use Python 3.10+ union syntax (`T | None`) instead of `Optional[T]`:
+
 ```python
 @dataclass(frozen=True)
 class Skill:
     path: Path
-    metadata: Optional[SkillMetadata]  # name, description, raw dict
-    body: str                           # Markdown content after frontmatter
-    has_scripts: bool                   # /scripts folder exists
-    has_references: bool                # /references folder exists
-    has_assets: bool                    # /assets folder exists
-    parse_errors: tuple[str, ...]       # Errors during parsing
+    metadata: SkillMetadata | None  # name, description, raw dict
+    body: str                        # Markdown content after frontmatter
+    has_scripts: bool                # /scripts folder exists
+    has_references: bool             # /references folder exists
+    has_assets: bool                 # /assets folder exists
+    parse_errors: tuple[str, ...]    # Errors during parsing
 
 @dataclass(frozen=True)
 class CheckResult:
-    check_id: str           # e.g., "structure.skill-md-exists"
-    check_name: str         # e.g., "SKILL.md Exists"
+    check_id: str            # e.g., "structure.skill-md-exists"
+    check_name: str          # e.g., "SKILL.md Exists"
     passed: bool
     severity: Severity
     dimension: EvalDimension
     message: str
-    details: Optional[dict] # Additional context
-    location: Optional[str] # File path where issue found
+    details: dict | None     # Additional context
+    location: str | None     # File path where issue found
 ```
 
 ---
 
 ### Check Registration Pattern
 
-The check registration system uses Python's decorator and module import mechanism for auto-discovery.
+The check registration system uses Python's decorator and module import mechanism for auto-discovery. Both static checks and trace handlers share a generic `Registry[T]` base class.
 
-#### 1. Global Registry (Singleton)
+#### 1. Generic Registry Base Class
+
+```python
+# core/utils.py
+class Registry(Generic[T]):
+    """Generic registry for auto-discovery patterns."""
+
+    def __init__(self, id_extractor: Callable[[type[T]], str]) -> None:
+        self._items: dict[str, type[T]] = {}
+        self._id_extractor = id_extractor
+
+    def register(self, item_class: type[T]) -> type[T]:
+        item_id = self._id_extractor(item_class)
+        self._items[item_id] = item_class
+        return item_class
+
+    def get(self, item_id: str) -> type[T] | None:
+        return self._items.get(item_id)
+
+    def get_all(self) -> list[type[T]]:
+        return list(self._items.values())
+```
+
+#### 2. Specialized Check Registry
 
 ```python
 # core/registry.py
-class CheckRegistry:
-    _checks: dict[str, type[StaticCheck]] = {}
+class CheckRegistry(Registry["StaticCheck"]):
+    """Registry for static checks with dimension filtering."""
 
-    def register(self, check_class) -> check_class:
-        self._checks[check_class.check_id] = check_class
-        return check_class  # Returns class for decorator use
+    def __init__(self) -> None:
+        super().__init__(id_extractor=lambda cls: cls.check_id)
+
+    def get_by_dimension(self, dimension: str) -> list[type[StaticCheck]]: ...
+    def get_spec_required(self) -> list[type[StaticCheck]]: ...
+    def get_quality_suggestions(self) -> list[type[StaticCheck]]: ...
 
 registry = CheckRegistry()  # Global singleton
 
@@ -200,7 +230,7 @@ def register_check(check_class):
     return registry.register(check_class)
 ```
 
-#### 2. Check Definition (with decorator)
+#### 3. Check Definition (with decorator)
 
 ```python
 # checks/static/structure.py
@@ -217,7 +247,41 @@ class SkillMdExistsCheck(StaticCheck):
         return self._fail("SKILL.md not found")
 ```
 
-#### 3. Registration Trigger (import side effect)
+#### 4. Base Class Helper Methods
+
+The `StaticCheck` base class provides helper methods to reduce code duplication:
+
+```python
+# checks/base.py
+class StaticCheck(ABC):
+    def _skill_md_location(self, skill: Skill) -> str:
+        """Get the standard location string for SKILL.md."""
+        return str(skill.path / "SKILL.md")
+
+    def _require_metadata(self, skill: Skill, context: str = "perform this check") -> CheckResult | None:
+        """Check that skill has metadata, returning a failure result if not."""
+        if skill.metadata is None:
+            return self._fail(
+                f"No frontmatter found, cannot {context}",
+                location=self._skill_md_location(skill),
+            )
+        return None
+
+    def _pass(self, message: str, **kwargs) -> CheckResult: ...
+    def _fail(self, message: str, **kwargs) -> CheckResult: ...
+```
+
+Usage in checks:
+```python
+def run(self, skill: Skill) -> CheckResult:
+    # Early return if no metadata
+    if result := self._require_metadata(skill, "check name field"):
+        return result
+    assert skill.metadata is not None  # Type narrowing for mypy
+    # ... check logic using skill.metadata
+```
+
+#### 5. Registration Trigger (import side effect)
 
 ```python
 # evaluators/static_evaluator.py
@@ -268,6 +332,33 @@ Description: 5 checks, all pass     → 100 × 0.25 = 25.0
 Content: 6 checks, 1 WARNING fails  →  90 × 0.25 = 22.5
 ──────────────────────────────────────────────────────
 Final Score: 93.5
+```
+
+#### Shared Metric Utilities
+
+All evaluators (static, trace, trigger) use shared utilities for consistent metric calculation:
+
+```python
+# core/utils.py
+@dataclass
+class EvaluationMetrics:
+    total: int
+    passed: int
+    failed: int
+    pass_rate: float
+
+def calculate_metrics(results: list[T]) -> EvaluationMetrics:
+    """Calculate pass/fail metrics from any list of results with a 'passed' attribute."""
+    ...
+
+# core/scoring.py
+def build_summary_by_attribute(
+    results: list[T],
+    attribute: str,
+    value_extractor: Callable[[Any], str] | None = None,
+) -> dict[str, dict[str, int]]:
+    """Build summary statistics grouped by an attribute (e.g., dimension, check_type)."""
+    ...
 ```
 
 ---
@@ -327,12 +418,14 @@ Uses Rich library for terminal output:
 - Color-coded score (green ≥80, yellow ≥60, red <60)
 - Table of results with severity icons
 - Dimension summary
+- **Verbose hints**: When checks are hidden in non-verbose mode, displays "(N passing checks hidden, run with --verbose to see all)"
 
 #### JsonReporter
 
 Structured output for programmatic use:
 - Full `EvaluationReport` serialized via `to_dict()` methods
 - Machine-readable for CI/CD integration
+- **Schema versioning**: Includes `"schema_version": "1.0"` field for API consumers to track compatibility
 
 ---
 
@@ -386,12 +479,12 @@ class TriggerType(str, Enum):
 
 @dataclass(frozen=True)
 class TraceEvent:
-    type: str                    # e.g., "item.started", "item.completed"
-    item_type: Optional[str]     # e.g., "command_execution"
-    command: Optional[str]       # The command that was run
-    output: Optional[str]        # Command output
-    timestamp: Optional[str]
-    raw: dict                    # Original event for debugging
+    type: str                 # e.g., "item.started", "item.completed"
+    item_type: str | None     # e.g., "command_execution"
+    command: str | None       # The command that was run
+    output: str | None        # Command output
+    timestamp: str | None
+    raw: dict                 # Original event for debugging
 
 @dataclass(frozen=True)
 class TriggerTestCase:
@@ -401,7 +494,7 @@ class TriggerTestCase:
     prompt: str
     trigger_type: TriggerType
     expected: TriggerExpectation
-    runtime: Optional[str]
+    runtime: str | None
 
 @dataclass(frozen=True)
 class TriggerResult:
@@ -412,7 +505,7 @@ class TriggerResult:
     skill_triggered: bool
     expected_trigger: bool
     message: str
-    trace_path: Optional[Path]
+    trace_path: Path | None
     events_count: int
 ```
 
@@ -475,6 +568,53 @@ test_cases:
 | **Decorator-based registration** | No central file listing all checks needed |
 | **Weighted scoring** | Different severities and dimensions have different impact |
 | **Strict typing** | mypy strict mode enforced in `pyproject.toml` |
+| **Generic Registry[T]** | Eliminates code duplication between CheckRegistry and TraceCheckRegistry |
+| **Base class helpers** | `_require_metadata()`, `_skill_md_location()`, `_require_field()` reduce repetitive null-checks |
+| **Shared metric utilities** | `calculate_metrics()` ensures consistent pass/fail calculation across all evaluators |
+| **Custom exception hierarchy** | `SkillLabError` base with `context` and `suggestion` fields for actionable error messages |
+| **T \| None over Optional[T]** | Python 3.10+ union syntax for cleaner, more readable type annotations |
+
+---
+
+### Custom Exception Hierarchy (`core/exceptions.py`)
+
+All custom exceptions extend `SkillLabError` which provides structured error handling:
+
+```python
+class SkillLabError(Exception):
+    """Base exception for skill-lab with context and suggestions."""
+    def __init__(
+        self,
+        message: str,
+        *,
+        context: dict[str, Any] | None = None,  # Additional error context
+        suggestion: str | None = None,           # Actionable guidance
+    ) -> None: ...
+
+class ParseError(SkillLabError):
+    """Errors during parsing (YAML, traces, etc.)."""
+
+class CheckExecutionError(SkillLabError):
+    """Errors during check execution."""
+
+class TraceParseError(ParseError):
+    """Errors specific to trace file parsing."""
+
+class TestDefinitionError(SkillLabError):
+    """Errors in test definition files."""
+
+class RuntimeError(SkillLabError):
+    """Errors from runtime adapters."""
+```
+
+Usage:
+```python
+raise ParseError(
+    "Invalid YAML frontmatter",
+    context={"line": 5, "file": "SKILL.md"},
+    suggestion="Ensure frontmatter starts and ends with '---'"
+)
+```
 
 ---
 
@@ -578,12 +718,12 @@ class TraceCheckDefinition:
     """A trace check defined in YAML."""
     id: str
     type: str  # command_presence, file_creation, event_sequence, loop_detection, efficiency
-    description: Optional[str] = None
-    pattern: Optional[str] = None       # for command_presence
-    path: Optional[str] = None          # for file_creation
+    description: str | None = None
+    pattern: str | None = None          # for command_presence
+    path: str | None = None             # for file_creation
     sequence: tuple[str, ...] = ()      # for event_sequence
     max_retries: int = 3                # for loop_detection
-    max_commands: Optional[int] = None  # for efficiency
+    max_commands: int | None = None     # for efficiency
 
 @dataclass(frozen=True)
 class TraceCheckResult:
@@ -592,7 +732,7 @@ class TraceCheckResult:
     check_type: str
     passed: bool
     message: str
-    details: Optional[dict] = None
+    details: dict | None = None
 
 @dataclass
 class TraceReport:
@@ -612,7 +752,7 @@ class TraceReport:
 
 ### Handler Registration Pattern
 
-Similar to static checks, trace handlers use a decorator-based registration system:
+Similar to static checks, trace handlers use a decorator-based registration system. The `TraceCheckRegistry` also extends the generic `Registry[T]` base class.
 
 ```python
 from skill_lab.tracechecks.registry import register_trace_handler
@@ -621,7 +761,17 @@ from skill_lab.tracechecks.handlers.base import TraceCheckHandler
 @register_trace_handler("command_presence")
 class CommandPresenceHandler(TraceCheckHandler):
     def run(self, check, analyzer, project_dir) -> TraceCheckResult:
-        if analyzer.command_was_run(check.pattern):
-            return self._pass(check, f"Command matching '{check.pattern}' was executed")
-        return self._fail(check, f"No command matching '{check.pattern}' found")
+        # Use _require_field() helper for parameter validation
+        pattern = self._require_field(check, "pattern")
+        if isinstance(pattern, TraceCheckResult):
+            return pattern  # Missing field, return error result
+
+        if analyzer.command_was_run(pattern):
+            return self._pass(check, f"Command matching '{pattern}' was executed")
+        return self._fail(check, f"No command matching '{pattern}' found")
 ```
+
+The `TraceCheckHandler` base class provides:
+- `_pass(check, message, details)` - Create passing result
+- `_fail(check, message, details)` - Create failing result
+- `_require_field(check, field_name)` - Validate required YAML fields, returns error result if missing

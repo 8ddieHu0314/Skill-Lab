@@ -73,7 +73,12 @@ class ClaudeRuntime(RuntimeAdapter):
             return 127
 
     def parse_trace(self, trace_path: Path) -> Iterator[TraceEvent]:
-        """Parse Claude trace into normalized TraceEvent objects."""
+        """Parse Claude trace into normalized TraceEvent objects.
+
+        Filters out stream_event types (text streaming deltas) as they
+        are not useful for trace analysis - we only care about tool
+        invocations and results.
+        """
         if not trace_path.exists():
             return
 
@@ -83,6 +88,9 @@ class ClaudeRuntime(RuntimeAdapter):
                 continue
             try:
                 raw = json.loads(line)
+                # Skip stream events (text deltas) - not useful for analysis
+                if raw.get("type") == "stream_event":
+                    continue
                 yield self._normalize_event(raw)
             except json.JSONDecodeError:
                 continue
@@ -90,10 +98,23 @@ class ClaudeRuntime(RuntimeAdapter):
     def _normalize_event(self, raw: dict[str, Any]) -> TraceEvent:
         """Convert Claude event to normalized TraceEvent.
 
-        Claude Code emits events with different structure than Codex.
-        This method maps Claude's format to our common TraceEvent model.
+        Claude Code stream-json format emits:
+        - tool_use: {"type": "tool_use", "id": "...", "name": "Bash", "input": {...}}
+        - tool_result: {"type": "tool_result", "tool_use_id": "...", "content": "..."}
+        - stream_event: {"type": "stream_event", "event": {...}} (text streaming)
+        - result: {"type": "result", ...} (final result)
+
+        Tool names are PascalCase: Bash, Read, Write, Edit, Glob, Grep, etc.
         """
         event_type = raw.get("type", "unknown")
+
+        # Skip stream_event (just text streaming tokens, not actions)
+        if event_type == "stream_event":
+            return TraceEvent(
+                type="stream",
+                item_type="text_delta",
+                raw=raw,
+            )
 
         # Map Claude event types to our normalized types
         type_mapping = {
@@ -101,28 +122,37 @@ class ClaudeRuntime(RuntimeAdapter):
             "tool_use": "item.started",
             "tool_result": "item.completed",
             "message": "turn.completed",
+            "result": "turn.completed",
         }
 
-        normalized_type = type_mapping.get(event_type, event_type)
+        normalized_type = type_mapping.get(event_type) or event_type
 
         # Extract command from tool_use events
         command = None
         item_type = None
         if event_type == "tool_use":
             tool_name = raw.get("name", "")
-            if tool_name == "bash":
-                command = raw.get("input", {}).get("command")
+            tool_input = raw.get("input", {})
+
+            # Bash tool - extract command
+            if tool_name == "Bash":
+                command = tool_input.get("command")
                 item_type = "command_execution"
-            elif tool_name in ("read", "write", "edit"):
+            # File operation tools
+            elif tool_name in ("Read", "Write", "Edit"):
                 item_type = "file_operation"
+                # For Write/Edit, capture the file path as context
+                command = tool_input.get("file_path")
+            # Other tools (Glob, Grep, WebFetch, etc.)
             else:
-                item_type = tool_name
+                item_type = tool_name.lower()
 
         # Extract output from tool_result events
         output = None
         if event_type == "tool_result":
             output = raw.get("content")
-            item_type = "command_execution"
+            # tool_result doesn't carry the tool type, mark as generic
+            item_type = "tool_result"
 
         return TraceEvent(
             type=normalized_type,

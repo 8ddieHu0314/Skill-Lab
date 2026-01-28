@@ -34,3 +34,10 @@ For full CLI options, see [ARCHITECTURE.md - CLI Commands](docs/ARCHITECTURE.md#
 - **Adding a check**: See [ARCHITECTURE.md - Adding a New Check](docs/ARCHITECTURE.md#adding-a-new-check)
 - **Understanding data flow**: See [ARCHITECTURE.md - Data Flow](docs/ARCHITECTURE.md#data-flow)
 - **Check details**: See [CHECKS.md](docs/CHECKS.md)
+
+
+## Useful Sources for References
+
+- [OpenAI: How to Evaluate Agent Skills](https://developers.openai.com/blog/eval-skills/) - Criteria for skill evaluation (focus on 1-5 for deterministic checks)
+- [Medium: How to Evaluate AI Agent Skills Without Relying on Vibes](https://jpcaparas.medium.com/how-to-evaluate-ai-agent-skills-without-relying-on-vibes-9a5764ad18c4) - Refined version of OpenAI's approach
+- [Agent Skills Specification](https://agentskills.io/specification) - Official specification for SKILL.md format
