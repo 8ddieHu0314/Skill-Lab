@@ -162,7 +162,7 @@ scoring:
 |-------|-------|--------|--------------|
 | **Phase 1** | Static Analysis (MVP) | **DONE** | SKILL.md parsing, 21 static checks, JSON output, CLI |
 | **Phase 2** | Trigger Testing | **DONE** | Given/When/Then DSL, runtime adapters, 4-type trigger tests, CLI |
-| **Phase 3** | Trace Analysis | Next | JSONL parsing, command/file/sequence checks, efficiency metrics |
+| **Phase 3** | Trace Analysis | **DONE** | JSONL parsing, command/file/sequence checks, efficiency metrics |
 | **Phase 4** | Rubric Grading | Planned | LLM-as-judge pipeline, structured output |
 | **Phase 5** | Ecosystem Integration | Planned | Quality badges, marketplace publishing, CI/CD gates, benchmarks |
 
@@ -674,13 +674,42 @@ skill-lab test-triggers ./my-skill --type negative
 
 ---
 
-# Phase 3: Trace Analysis
+# Phase 3: Trace Analysis - COMPLETE
 
 ## Goal
 
 Parse JSONL execution logs to validate process/outcome goals through deterministic checks.
 
 > **Note:** Phase 2 introduces `TraceAnalyzer` for basic trigger detection. Phase 3 extends this with configurable, YAML-driven checks that skill authors can customize per skill.
+
+## What Was Built
+
+A YAML-driven trace check system that:
+1. Loads check definitions from `tests/trace_checks.yaml`
+2. Parses JSONL trace files into normalized TraceEvent objects
+3. Runs checks via registered handlers (command_presence, file_creation, event_sequence, loop_detection, efficiency)
+4. Produces TraceReport with pass/fail results and summary
+
+## Architecture
+
+```
+src/skill_lab/
+├── tracechecks/
+│   ├── __init__.py
+│   ├── registry.py             # TraceCheckRegistry with @register_trace_handler
+│   ├── trace_check_loader.py   # Parse tests/trace_checks.yaml
+│   └── handlers/
+│       ├── base.py             # TraceCheckHandler ABC
+│       ├── command_presence.py # Check if pattern found in commands
+│       ├── file_creation.py    # Check if file exists at path
+│       ├── event_sequence.py   # Check commands in correct order
+│       ├── loop_detection.py   # Detect excessive command repetition
+│       └── efficiency.py       # Check token/command count limits
+├── parsers/
+│   └── trace_parser.py         # Standalone JSONL parser
+└── evaluators/
+    └── trace_evaluator.py      # Orchestrate trace check execution
+```
 
 ## Check Types
 
@@ -740,14 +769,18 @@ skill-lab eval-trace ./my-skill --trace ./execution.jsonl
 
 ## Deliverables
 
-- [ ] `ExecutionTrace` model (extends Phase 2's TraceEvent)
-- [ ] JSONL trace parser (Codex format, then Claude)
-- [ ] Trace format normalization layer
-- [ ] Command presence check
-- [ ] File creation verification check
-- [ ] Event sequence validation check
-- [ ] Loop/thrashing detection check
-- [ ] CLI command: `skill-lab eval-trace`
+- [x] `TraceCheckDefinition`, `TraceCheckResult`, `TraceReport` models
+- [x] JSONL trace parser with format normalization
+- [x] `TraceCheckRegistry` with `@register_trace_handler` decorator
+- [x] Command presence check handler
+- [x] File creation verification check handler
+- [x] Event sequence validation check handler
+- [x] Loop/thrashing detection check handler
+- [x] Efficiency (command count) check handler
+- [x] `TraceEvaluator` orchestrator class
+- [x] CLI command: `skill-lab eval-trace`
+- [x] Console reporter for trace reports
+- [x] Test fixtures and unit tests
 
 ---
 

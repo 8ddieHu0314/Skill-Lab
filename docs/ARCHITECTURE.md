@@ -37,7 +37,8 @@ src/skill_lab/
 │   ├── registry.py           # Check auto-discovery system
 │   └── scoring.py            # Quality score calculation
 ├── parsers/
-│   └── skill_parser.py       # SKILL.md parser (YAML + markdown)
+│   ├── skill_parser.py       # SKILL.md parser (YAML + markdown)
+│   └── trace_parser.py       # JSONL trace parser
 ├── checks/
 │   ├── base.py               # StaticCheck abstract base class
 │   └── static/               # Check implementations
@@ -46,7 +47,19 @@ src/skill_lab/
 │       ├── description.py    # 5 checks
 │       └── content.py        # 6 checks
 ├── evaluators/
-│   └── static_evaluator.py   # Orchestrates static check execution
+│   ├── static_evaluator.py   # Orchestrates static check execution
+│   └── trace_evaluator.py    # Orchestrates trace check execution
+├── tracechecks/              # Trace analysis (Phase 3)
+│   ├── __init__.py
+│   ├── registry.py           # TraceCheckRegistry with @register_trace_handler
+│   ├── trace_check_loader.py # Load check definitions from YAML
+│   └── handlers/             # Trace check handler implementations
+│       ├── base.py           # TraceCheckHandler ABC
+│       ├── command_presence.py
+│       ├── file_creation.py
+│       ├── event_sequence.py
+│       ├── loop_detection.py
+│       └── efficiency.py
 ├── triggers/                 # Trigger testing (Phase 2)
 │   ├── test_loader.py        # Load test cases from YAML
 │   ├── trace_analyzer.py     # Analyze execution traces
@@ -130,6 +143,7 @@ class EvalDimension(str, Enum):
     NAMING = "naming"            # 20% weight
     DESCRIPTION = "description"  # 25% weight
     CONTENT = "content"          # 25% weight
+    EXECUTION = "execution"      # 0% (evaluated separately via trace checks)
 
 class TriggerType(str, Enum):  # Phase 2
     EXPLICIT = "explicit"        # Skill named with $ prefix
@@ -289,6 +303,9 @@ skill-lab list-checks [--dimension structure|naming|description|content] [--spec
 
 # Trigger testing (Phase 2)
 skill-lab test-triggers ./my-skill [--runtime codex|claude] [--type explicit|implicit|contextual|negative] [--format console|json]
+
+# Trace evaluation (Phase 3)
+skill-lab eval-trace ./my-skill --trace ./execution.jsonl [--format console|json] [--output file.json]
 ```
 
 **Spec Filtering:**
@@ -488,3 +505,123 @@ class MyNewCheck(StaticCheck):
 **Check Categories:**
 - **Spec-required checks** (8): Must pass to be valid per the Agent Skills spec. Use `spec_required = True` and `Severity.ERROR`.
 - **Quality suggestions** (13): Best practices that improve skill quality. Use `spec_required = False` (default) with `Severity.WARNING` or `Severity.INFO`.
+
+---
+
+## Trace Analysis (Phase 3)
+
+Trace analysis validates execution traces against YAML-defined checks. This enables skill authors to define custom checks for command presence, file creation, event sequences, and loop detection.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Trace Evaluation Flow                                                   │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  1. Load check definitions from YAML                                    │
+│     tests/trace_checks.yaml → TraceCheckDefinition objects              │
+│                              │                                          │
+│  2. Parse trace file                                                    │
+│     execution.jsonl → TraceEvent list → TraceAnalyzer                   │
+│                              │                                          │
+│  3. Run each check via handler                                          │
+│     TraceCheckRegistry.get(type) → Handler.run() → TraceCheckResult     │
+│                              │                                          │
+│  4. Build report                                                        │
+│     TraceReport → pass rate, summary by type                            │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Check Types
+
+| Type | Description | YAML Fields |
+|------|-------------|-------------|
+| **command_presence** | Did specific command run? | `pattern` |
+| **file_creation** | Was expected file created? | `path` |
+| **event_sequence** | Commands in correct order? | `sequence` |
+| **loop_detection** | Detect thrashing/excessive retries | `max_retries` |
+| **efficiency** | Token usage, command count limits | `max_commands` |
+
+### Trace Check Definition (YAML)
+
+```yaml
+# tests/trace_checks.yaml
+checks:
+  - id: npm-install-ran
+    type: command_presence
+    pattern: "npm install"
+
+  - id: package-json-created
+    type: file_creation
+    path: "package.json"
+
+  - id: correct-sequence
+    type: event_sequence
+    sequence: ["npm init", "npm install", "npm run build"]
+
+  - id: no-excessive-retries
+    type: loop_detection
+    max_retries: 3
+
+  - id: command-count-limit
+    type: efficiency
+    max_commands: 20
+```
+
+### Data Models
+
+```python
+@dataclass(frozen=True)
+class TraceCheckDefinition:
+    """A trace check defined in YAML."""
+    id: str
+    type: str  # command_presence, file_creation, event_sequence, loop_detection, efficiency
+    description: Optional[str] = None
+    pattern: Optional[str] = None       # for command_presence
+    path: Optional[str] = None          # for file_creation
+    sequence: tuple[str, ...] = ()      # for event_sequence
+    max_retries: int = 3                # for loop_detection
+    max_commands: Optional[int] = None  # for efficiency
+
+@dataclass(frozen=True)
+class TraceCheckResult:
+    """Result of a single trace check execution."""
+    check_id: str
+    check_type: str
+    passed: bool
+    message: str
+    details: Optional[dict] = None
+
+@dataclass
+class TraceReport:
+    """Complete trace evaluation report."""
+    trace_path: str
+    project_dir: str
+    timestamp: str
+    duration_ms: float
+    checks_run: int
+    checks_passed: int
+    checks_failed: int
+    overall_pass: bool
+    pass_rate: float
+    results: list[TraceCheckResult]
+    summary: dict
+```
+
+### Handler Registration Pattern
+
+Similar to static checks, trace handlers use a decorator-based registration system:
+
+```python
+from skill_lab.tracechecks.registry import register_trace_handler
+from skill_lab.tracechecks.handlers.base import TraceCheckHandler
+
+@register_trace_handler("command_presence")
+class CommandPresenceHandler(TraceCheckHandler):
+    def run(self, check, analyzer, project_dir) -> TraceCheckResult:
+        if analyzer.command_was_run(check.pattern):
+            return self._pass(check, f"Command matching '{check.pattern}' was executed")
+        return self._fail(check, f"No command matching '{check.pattern}' found")
+```

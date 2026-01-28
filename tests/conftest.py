@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from skill_lab.evaluators.static_evaluator import StaticEvaluator
+from skill_lab.evaluators.trace_evaluator import TraceEvaluator
 
 
 @pytest.fixture
@@ -41,3 +42,21 @@ def minimal_skill_path(skills_dir: Path) -> Path:
 def evaluator() -> StaticEvaluator:
     """Get a StaticEvaluator instance."""
     return StaticEvaluator()
+
+
+@pytest.fixture
+def traces_dir(fixtures_dir: Path) -> Path:
+    """Get the path to the traces fixtures directory."""
+    return fixtures_dir / "traces"
+
+
+@pytest.fixture
+def sample_trace_path(traces_dir: Path) -> Path:
+    """Get the path to the sample trace file."""
+    return traces_dir / "sample_trace.jsonl"
+
+
+@pytest.fixture
+def trace_evaluator() -> TraceEvaluator:
+    """Get a TraceEvaluator instance."""
+    return TraceEvaluator()

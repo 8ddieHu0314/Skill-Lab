@@ -21,6 +21,7 @@ class EvalDimension(str, Enum):
     NAMING = "naming"
     DESCRIPTION = "description"
     CONTENT = "content"
+    EXECUTION = "execution"  # Phase 3: Trace-based checks
 
 
 class TriggerType(str, Enum):
@@ -265,4 +266,83 @@ class TriggerReport:
             "pass_rate": self.pass_rate,
             "results": [r.to_dict() for r in self.results],
             "summary_by_type": self.summary_by_type,
+        }
+
+
+# =============================================================================
+# Phase 3: Trace Analysis Models
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class TraceCheckDefinition:
+    """A trace check defined in YAML.
+
+    Skill authors define these in tests/trace_checks.yaml to specify
+    custom validations for execution traces.
+    """
+
+    id: str
+    type: str  # command_presence, file_creation, event_sequence, loop_detection, efficiency
+    description: Optional[str] = None
+    pattern: Optional[str] = None  # for command_presence
+    path: Optional[str] = None  # for file_creation
+    sequence: tuple[str, ...] = field(default_factory=tuple)  # for event_sequence
+    max_retries: int = 3  # for loop_detection
+    max_commands: Optional[int] = None  # for efficiency
+
+
+@dataclass(frozen=True)
+class TraceCheckResult:
+    """Result of a single trace check execution."""
+
+    check_id: str
+    check_type: str
+    passed: bool
+    message: str
+    details: Optional[dict[str, Any]] = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        result: dict[str, Any] = {
+            "check_id": self.check_id,
+            "check_type": self.check_type,
+            "passed": self.passed,
+            "message": self.message,
+        }
+        if self.details is not None:
+            result["details"] = self.details
+        return result
+
+
+@dataclass
+class TraceReport:
+    """Complete trace evaluation report."""
+
+    trace_path: str
+    project_dir: str
+    timestamp: str
+    duration_ms: float
+    checks_run: int
+    checks_passed: int
+    checks_failed: int
+    overall_pass: bool
+    pass_rate: float
+    results: list[TraceCheckResult]
+    summary: dict[str, Any]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "trace_path": self.trace_path,
+            "project_dir": self.project_dir,
+            "timestamp": self.timestamp,
+            "duration_ms": self.duration_ms,
+            "checks_run": self.checks_run,
+            "checks_passed": self.checks_passed,
+            "checks_failed": self.checks_failed,
+            "overall_pass": self.overall_pass,
+            "pass_rate": self.pass_rate,
+            "results": [r.to_dict() for r in self.results],
+            "summary": self.summary,
         }

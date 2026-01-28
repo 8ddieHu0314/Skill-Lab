@@ -5,7 +5,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from skill_lab.core.models import EvaluationReport, Severity
+from skill_lab.core.models import EvaluationReport, Severity, TraceReport
 
 
 class ConsoleReporter:
@@ -104,4 +104,70 @@ class ConsoleReporter:
                 color = "green" if failed == 0 else "yellow" if failed < passed else "red"
                 self.console.print(f"  {dim}: [{color}]{passed}/{total} passed[/{color}]")
 
+        self.console.print()
+
+    def report_trace(self, report: TraceReport) -> None:
+        """Print a trace evaluation report to the console.
+
+        Args:
+            report: The trace report to print.
+        """
+        # Header
+        self.console.print()
+        self.console.print(
+            Panel(
+                f"[bold]Trace:[/bold] {report.trace_path}\n"
+                f"[bold]Project:[/bold] {report.project_dir}",
+                title="Trace Evaluation Report",
+                border_style="blue",
+            )
+        )
+
+        # Summary
+        self.console.print()
+        if report.overall_pass:
+            self.console.print(f"[green]All {report.checks_passed} checks passed![/green]")
+        else:
+            self.console.print(
+                f"[red]{report.checks_failed} of {report.checks_run} checks failed[/red]"
+            )
+        self.console.print(f"Pass rate: {report.pass_rate:.1f}%")
+        self.console.print()
+
+        # Results table
+        results_to_show = report.results if self.verbose else [r for r in report.results if not r.passed]
+
+        if results_to_show:
+            table = Table(title="Check Results" if self.verbose else "Failed Checks")
+            table.add_column("Status", width=6)
+            table.add_column("Check ID", style="cyan", width=25)
+            table.add_column("Type", style="blue", width=18)
+            table.add_column("Message", width=50)
+
+            for result in results_to_show:
+                status = "[green]PASS[/green]" if result.passed else "[red]FAIL[/red]"
+                table.add_row(
+                    status,
+                    result.check_id,
+                    result.check_type,
+                    result.message,
+                )
+
+            self.console.print(table)
+        elif not self.verbose:
+            self.console.print("[green]All checks passed![/green]")
+        self.console.print()
+
+        # Summary by type
+        if report.summary.get("by_type"):
+            self.console.print("[bold]Summary by Check Type:[/bold]")
+            for type_name, stats in report.summary["by_type"].items():
+                passed = stats["passed"]
+                total = stats["total"]
+                pct = (passed / total * 100) if total > 0 else 0
+                color = "green" if passed == total else "yellow" if passed > 0 else "red"
+                self.console.print(f"  {type_name}: [{color}]{passed}/{total} ({pct:.0f}%)[/{color}]")
+            self.console.print()
+
+        self.console.print(f"Duration: {report.duration_ms:.1f}ms")
         self.console.print()

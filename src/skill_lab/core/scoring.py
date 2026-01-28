@@ -3,11 +3,14 @@
 from skill_lab.core.models import CheckResult, EvalDimension, Severity
 
 # Weights for each dimension in the final score
+# Note: EXECUTION dimension is for trace-based checks and has 0 weight
+# in static analysis scoring. It's evaluated separately via trace evaluation.
 DIMENSION_WEIGHTS: dict[EvalDimension, float] = {
     EvalDimension.STRUCTURE: 0.30,
     EvalDimension.NAMING: 0.20,
     EvalDimension.DESCRIPTION: 0.25,
     EvalDimension.CONTENT: 0.25,
+    EvalDimension.EXECUTION: 0.0,  # Evaluated separately via trace evaluation
 }
 
 # Weights for severity levels when calculating dimension scores

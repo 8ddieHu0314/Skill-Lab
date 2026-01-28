@@ -8,9 +8,10 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from skill_lab.core.models import EvalDimension, TriggerReport, TriggerType
+from skill_lab.core.models import EvalDimension, TraceReport, TriggerReport, TriggerType
 from skill_lab.core.registry import registry
 from skill_lab.evaluators.static_evaluator import StaticEvaluator
+from skill_lab.evaluators.trace_evaluator import TraceEvaluator
 from skill_lab.reporters.console_reporter import ConsoleReporter
 from skill_lab.reporters.json_reporter import JsonReporter
 from skill_lab.triggers.trigger_evaluator import TriggerEvaluator
@@ -336,6 +337,145 @@ def _print_trigger_report(report: TriggerReport) -> None:
     if report.summary_by_type:
         console.print("[bold]Summary by Trigger Type:[/bold]")
         for type_name, stats in report.summary_by_type.items():
+            passed = stats["passed"]
+            total = stats["total"]
+            pct = (passed / total * 100) if total > 0 else 0
+            color = "green" if passed == total else "yellow" if passed > 0 else "red"
+            console.print(f"  {type_name}: [{color}]{passed}/{total} ({pct:.0f}%)[/{color}]")
+        console.print()
+
+    console.print(f"Duration: {report.duration_ms:.1f}ms")
+
+
+@app.command("eval-trace")
+def eval_trace(
+    skill_path: Annotated[
+        Path,
+        typer.Argument(
+            help="Path to the skill directory",
+            exists=True,
+            file_okay=False,
+            dir_okay=True,
+            resolve_path=True,
+        ),
+    ],
+    trace: Annotated[
+        Path,
+        typer.Option(
+            "--trace",
+            "-t",
+            help="Path to the JSONL trace file",
+            exists=True,
+            file_okay=True,
+            dir_okay=False,
+            resolve_path=True,
+        ),
+    ],
+    output: Annotated[
+        Optional[Path],
+        typer.Option(
+            "--output",
+            "-o",
+            help="Output file path for JSON report",
+        ),
+    ] = None,
+    format: Annotated[
+        OutputFormat,
+        typer.Option(
+            "--format",
+            "-f",
+            help="Output format",
+        ),
+    ] = OutputFormat.console,
+) -> None:
+    """Evaluate a trace against YAML-defined trace checks.
+
+    Runs checks defined in tests/trace_checks.yaml against the provided
+    execution trace file. Supports check types:
+    - command_presence: Verify specific commands were run
+    - file_creation: Check if files were created
+    - event_sequence: Verify commands in correct order
+    - loop_detection: Detect excessive command repetition
+    - efficiency: Check command count limits
+    """
+    try:
+        evaluator = TraceEvaluator()
+        report = evaluator.evaluate(skill_path, trace)
+    except FileNotFoundError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(code=1)
+    except ValueError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(code=1)
+
+    # Output results
+    if format == OutputFormat.json:
+        import json as json_module
+
+        report_json = json_module.dumps(report.to_dict(), indent=2)
+        if output:
+            output.write_text(report_json)
+            console.print(f"Report written to: {output}")
+        else:
+            console.print(report_json)
+    else:
+        _print_trace_report(report)
+
+    # Exit with non-zero code if checks failed
+    if not report.overall_pass:
+        raise typer.Exit(code=1)
+
+
+def _print_trace_report(report: TraceReport) -> None:
+    """Print a trace evaluation report to console."""
+    from rich.panel import Panel
+    from rich.table import Table
+
+    # Header
+    console.print()
+    console.print(
+        Panel(
+            f"[bold]Trace:[/bold] {report.trace_path}\n"
+            f"[bold]Project:[/bold] {report.project_dir}",
+            title="Trace Evaluation Report",
+            border_style="blue",
+        )
+    )
+
+    # Summary
+    console.print()
+    if report.overall_pass:
+        console.print(f"[green]All {report.checks_passed} checks passed![/green]")
+    else:
+        console.print(
+            f"[red]{report.checks_failed} of {report.checks_run} checks failed[/red]"
+        )
+    console.print(f"Pass rate: {report.pass_rate:.1f}%")
+    console.print()
+
+    # Results table
+    table = Table(title="Check Results")
+    table.add_column("Status", width=6)
+    table.add_column("Check ID", style="cyan", width=25)
+    table.add_column("Type", style="blue", width=18)
+    table.add_column("Message", width=50)
+
+    for result in report.results:
+        status = "[green]PASS[/green]" if result.passed else "[red]FAIL[/red]"
+        table.add_row(
+            status,
+            result.check_id,
+            result.check_type,
+            result.message,
+        )
+
+    console.print(table)
+    console.print()
+
+    # Summary by type
+    if report.summary.get("by_type"):
+        console.print("[bold]Summary by Check Type:[/bold]")
+        for type_name, stats in report.summary["by_type"].items():
             passed = stats["passed"]
             total = stats["total"]
             pct = (passed / total * 100) if total > 0 else 0
