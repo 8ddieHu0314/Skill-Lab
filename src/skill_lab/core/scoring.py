@@ -1,5 +1,8 @@
 """Quality score calculation for evaluation results."""
 
+from dataclasses import dataclass
+from typing import Any, Protocol, TypeVar
+
 from skill_lab.core.models import CheckResult, EvalDimension, Severity
 
 # Weights for each dimension in the final score
@@ -19,6 +22,60 @@ SEVERITY_WEIGHTS: dict[Severity, float] = {
     Severity.WARNING: 0.5,
     Severity.INFO: 0.25,
 }
+
+
+# Protocol for results that have a 'passed' attribute
+class HasPassed(Protocol):
+    """Protocol for objects with a passed attribute."""
+
+    @property
+    def passed(self) -> bool: ...
+
+
+T = TypeVar("T", bound=HasPassed)
+
+
+@dataclass
+class EvaluationMetrics:
+    """Common metrics calculated from evaluation results."""
+
+    total: int
+    passed: int
+    failed: int
+    pass_rate: float
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary."""
+        return {
+            "total": self.total,
+            "passed": self.passed,
+            "failed": self.failed,
+            "pass_rate": self.pass_rate,
+        }
+
+
+def calculate_metrics(results: list[T]) -> EvaluationMetrics:
+    """Calculate common metrics from any list of results with 'passed' attribute.
+
+    This utility function is used by all evaluators to compute consistent metrics.
+
+    Args:
+        results: List of result objects with a 'passed' attribute.
+
+    Returns:
+        EvaluationMetrics with passed/failed counts and pass rate.
+    """
+    total = len(results)
+    passed = sum(1 for r in results if r.passed)
+    failed = total - passed
+    pass_rate = (passed / total * 100) if total > 0 else 0.0
+
+    return EvaluationMetrics(
+        total=total,
+        passed=passed,
+        failed=failed,
+        pass_rate=pass_rate,
+    )
 
 
 def calculate_dimension_score(results: list[CheckResult]) -> float:
@@ -65,7 +122,7 @@ def calculate_score(results: list[CheckResult]) -> float:
     return round(total_score, 2)
 
 
-def build_summary(results: list[CheckResult]) -> dict:
+def build_summary(results: list[CheckResult]) -> dict[str, Any]:
     """Build a summary of results by severity and dimension.
 
     Args:
@@ -99,3 +156,48 @@ def build_summary(results: list[CheckResult]) -> dict:
         "by_severity": by_severity,
         "by_dimension": by_dimension,
     }
+
+
+def build_summary_by_attribute(
+    results: list[T],
+    attribute: str,
+    value_extractor: Any = None,
+) -> dict[str, dict[str, int]]:
+    """Build a summary of results grouped by an attribute.
+
+    Generic utility for building summaries grouped by any attribute
+    (e.g., check_type, trigger_type).
+
+    Args:
+        results: List of result objects.
+        attribute: Name of the attribute to group by.
+        value_extractor: Optional function to extract the grouping value.
+                        If None, uses getattr with .value for enums.
+
+    Returns:
+        Dictionary mapping attribute values to pass/fail/total counts.
+    """
+    summary: dict[str, dict[str, int]] = {}
+
+    for result in results:
+        # Get the attribute value
+        attr_value = getattr(result, attribute)
+        if value_extractor:
+            key = value_extractor(attr_value)
+        elif hasattr(attr_value, "value"):
+            key = attr_value.value
+        else:
+            key = str(attr_value)
+
+        # Initialize if needed
+        if key not in summary:
+            summary[key] = {"total": 0, "passed": 0, "failed": 0}
+
+        # Update counts
+        summary[key]["total"] += 1
+        if result.passed:
+            summary[key]["passed"] += 1
+        else:
+            summary[key]["failed"] += 1
+
+    return summary

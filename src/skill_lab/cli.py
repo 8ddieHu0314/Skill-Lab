@@ -81,15 +81,15 @@ def evaluate(
     report = evaluator.evaluate(skill_path)
 
     if format == OutputFormat.json:
-        reporter = JsonReporter()
+        json_reporter = JsonReporter()
         if output:
-            reporter.write_file(report, output)
+            json_reporter.write_file(report, output)
             console.print(f"Report written to: {output}")
         else:
-            console.print(reporter.format(report))
+            console.print(json_reporter.format(report))
     else:
-        reporter = ConsoleReporter(verbose=verbose)
-        reporter.report(report)
+        console_reporter = ConsoleReporter(verbose=verbose)
+        console_reporter.report(report)
 
     # Exit with non-zero code if validation failed
     if not report.overall_pass:

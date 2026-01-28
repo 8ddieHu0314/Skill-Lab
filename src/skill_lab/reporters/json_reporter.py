@@ -2,21 +2,26 @@
 
 import json
 from pathlib import Path
-from typing import TextIO
+from typing import Any, TextIO
 
 from skill_lab.core.models import EvaluationReport
+
+# Schema version for API compatibility tracking
+SCHEMA_VERSION = "1.0"
 
 
 class JsonReporter:
     """Reporter that outputs evaluation results as JSON."""
 
-    def __init__(self, indent: int = 2) -> None:
+    def __init__(self, indent: int = 2, include_schema_version: bool = True) -> None:
         """Initialize the reporter.
 
         Args:
             indent: JSON indentation level. Use None for compact output.
+            include_schema_version: If True, add schema_version field to output.
         """
         self.indent = indent
+        self.include_schema_version = include_schema_version
 
     def format(self, report: EvaluationReport) -> str:
         """Format an evaluation report as JSON.
@@ -27,7 +32,10 @@ class JsonReporter:
         Returns:
             JSON string representation.
         """
-        return json.dumps(report.to_dict(), indent=self.indent)
+        data: dict[str, Any] = report.to_dict()
+        if self.include_schema_version:
+            data = {"schema_version": SCHEMA_VERSION, **data}
+        return json.dumps(data, indent=self.indent)
 
     def write(self, report: EvaluationReport, output: TextIO) -> None:
         """Write an evaluation report to a file-like object.

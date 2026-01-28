@@ -34,9 +34,9 @@ class FileCreationHandler(TraceCheckHandler):
         Returns:
             TraceCheckResult indicating if file exists.
         """
-        file_path = check.path
-        if not file_path:
-            return self._fail(check, "Missing required 'path' field")
+        file_path = self._require_field(check, "path")
+        if isinstance(file_path, TraceCheckResult):
+            return file_path
 
         if analyzer.file_was_created(file_path, project_dir):
             return self._pass(

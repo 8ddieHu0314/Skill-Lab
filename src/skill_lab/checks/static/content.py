@@ -48,7 +48,7 @@ class BodyNotEmptyCheck(StaticCheck):
         if not body:
             return self._fail(
                 "SKILL.md body is empty",
-                location=str(skill.path / "SKILL.md"),
+                location=self._skill_md_location(skill),
             )
 
         # Check for minimal content (at least 50 characters of actual content)
@@ -56,12 +56,12 @@ class BodyNotEmptyCheck(StaticCheck):
             return self._fail(
                 f"SKILL.md body is too short ({len(body)} characters)",
                 details={"length": len(body), "minimum": 50},
-                location=str(skill.path / "SKILL.md"),
+                location=self._skill_md_location(skill),
             )
 
         return self._pass(
             f"SKILL.md body has content ({len(body)} characters)",
-            location=str(skill.path / "SKILL.md"),
+            location=self._skill_md_location(skill),
         )
 
 
@@ -83,12 +83,12 @@ class LineBudgetCheck(StaticCheck):
             return self._fail(
                 f"Body exceeds {MAX_LINE_COUNT} lines (got {line_count})",
                 details={"line_count": line_count, "max_lines": MAX_LINE_COUNT},
-                location=str(skill.path / "SKILL.md"),
+                location=self._skill_md_location(skill),
             )
 
         return self._pass(
             f"Body within line budget ({line_count}/{MAX_LINE_COUNT})",
-            location=str(skill.path / "SKILL.md"),
+            location=self._skill_md_location(skill),
         )
 
 
@@ -109,13 +109,13 @@ class HasExamplesCheck(StaticCheck):
             if re.search(pattern, body, re.MULTILINE):
                 return self._pass(
                     "Content contains code examples",
-                    location=str(skill.path / "SKILL.md"),
+                    location=self._skill_md_location(skill),
                 )
 
         return self._fail(
             "Content does not contain code examples",
             details={"suggestion": "Add code examples using fenced code blocks (```)"},
-            location=str(skill.path / "SKILL.md"),
+            location=self._skill_md_location(skill),
         )
 
 
@@ -135,17 +135,17 @@ class NoWindowsPathsCheck(StaticCheck):
 
         if matches:
             return self._fail(
-                f"Content contains Windows-style paths",
+                "Content contains Windows-style paths",
                 details={
                     "found": matches[:5],
                     "suggestion": "Use forward slashes (/) for cross-platform compatibility",
                 },
-                location=str(skill.path / "SKILL.md"),
+                location=self._skill_md_location(skill),
             )
 
         return self._pass(
             "No Windows-style paths found",
-            location=str(skill.path / "SKILL.md"),
+            location=self._skill_md_location(skill),
         )
 
 
@@ -178,12 +178,12 @@ class NoTimeSensitiveCheck(StaticCheck):
                         "found": real_dates[:5],
                         "suggestion": "Avoid hardcoded dates that may become stale",
                     },
-                    location=str(skill.path / "SKILL.md"),
+                    location=self._skill_md_location(skill),
                 )
 
         return self._pass(
             "No hardcoded dates found",
-            location=str(skill.path / "SKILL.md"),
+            location=self._skill_md_location(skill),
         )
 
 

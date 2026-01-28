@@ -70,18 +70,18 @@ class ValidFrontmatterCheck(StaticCheck):
             return self._fail(
                 "Invalid YAML frontmatter",
                 details={"errors": frontmatter_errors},
-                location=str(skill.path / "SKILL.md"),
+                location=self._skill_md_location(skill),
             )
 
         if skill.metadata is None:
             return self._fail(
                 "No frontmatter found in SKILL.md",
-                location=str(skill.path / "SKILL.md"),
+                location=self._skill_md_location(skill),
             )
 
         return self._pass(
             "Valid YAML frontmatter",
-            location=str(skill.path / "SKILL.md"),
+            location=self._skill_md_location(skill),
         )
 
 

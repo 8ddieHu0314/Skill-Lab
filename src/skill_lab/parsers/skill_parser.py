@@ -2,7 +2,7 @@
 
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Any
 
 import yaml
 
@@ -13,7 +13,7 @@ from skill_lab.core.models import Skill, SkillMetadata
 FRONTMATTER_PATTERN = re.compile(r"^---[ \t]*\r?\n(.*?)^---[ \t]*\r?\n?", re.DOTALL | re.MULTILINE)
 
 
-def parse_frontmatter(content: str) -> tuple[Optional[dict], str, list[str]]:
+def parse_frontmatter(content: str) -> tuple[dict[str, Any] | None, str, list[str]]:
     """Parse YAML frontmatter from markdown content.
 
     Args:
@@ -46,7 +46,7 @@ def parse_frontmatter(content: str) -> tuple[Optional[dict], str, list[str]]:
     return frontmatter, body, errors
 
 
-def extract_metadata(frontmatter: Optional[dict]) -> tuple[Optional[SkillMetadata], list[str]]:
+def extract_metadata(frontmatter: dict[str, Any] | None) -> tuple[SkillMetadata | None, list[str]]:
     """Extract skill metadata from frontmatter.
 
     Args:

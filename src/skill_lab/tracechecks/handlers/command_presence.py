@@ -34,9 +34,9 @@ class CommandPresenceHandler(TraceCheckHandler):
         Returns:
             TraceCheckResult indicating if pattern was found.
         """
-        pattern = check.pattern
-        if not pattern:
-            return self._fail(check, "Missing required 'pattern' field")
+        pattern = self._require_field(check, "pattern")
+        if isinstance(pattern, TraceCheckResult):
+            return pattern
 
         if analyzer.command_was_run(pattern):
             return self._pass(

@@ -42,21 +42,19 @@ class DescriptionRequiredCheck(StaticCheck):
     spec_required: ClassVar[bool] = True
 
     def run(self, skill: Skill) -> CheckResult:
-        if skill.metadata is None:
-            return self._fail(
-                "No frontmatter found, cannot check description",
-                location=str(skill.path / "SKILL.md"),
-            )
+        if fail := self._require_metadata(skill, "check description"):
+            return fail
+        assert skill.metadata is not None
 
         if "description" not in skill.metadata.raw:
             return self._fail(
                 "Description field is missing from frontmatter",
-                location=str(skill.path / "SKILL.md"),
+                location=self._skill_md_location(skill),
             )
 
         return self._pass(
             "Description field present",
-            location=str(skill.path / "SKILL.md"),
+            location=self._skill_md_location(skill),
         )
 
 
@@ -72,23 +70,21 @@ class DescriptionNotEmptyCheck(StaticCheck):
     spec_required: ClassVar[bool] = True
 
     def run(self, skill: Skill) -> CheckResult:
-        if skill.metadata is None:
-            return self._fail(
-                "No frontmatter found",
-                location=str(skill.path / "SKILL.md"),
-            )
+        if fail := self._require_metadata(skill):
+            return fail
+        assert skill.metadata is not None
 
         desc = skill.metadata.description.strip()
 
         if not desc:
             return self._fail(
                 "Description is empty or whitespace-only",
-                location=str(skill.path / "SKILL.md"),
+                location=self._skill_md_location(skill),
             )
 
         return self._pass(
             f"Description has content ({len(desc)} characters)",
-            location=str(skill.path / "SKILL.md"),
+            location=self._skill_md_location(skill),
         )
 
 
@@ -104,11 +100,9 @@ class DescriptionMaxLengthCheck(StaticCheck):
     spec_required: ClassVar[bool] = True
 
     def run(self, skill: Skill) -> CheckResult:
-        if skill.metadata is None:
-            return self._fail(
-                "No frontmatter found",
-                location=str(skill.path / "SKILL.md"),
-            )
+        if fail := self._require_metadata(skill):
+            return fail
+        assert skill.metadata is not None
 
         desc = skill.metadata.description
         length = len(desc)
@@ -117,12 +111,12 @@ class DescriptionMaxLengthCheck(StaticCheck):
             return self._fail(
                 f"Description exceeds {MAX_DESCRIPTION_LENGTH} characters (got {length})",
                 details={"length": length, "max_length": MAX_DESCRIPTION_LENGTH},
-                location=str(skill.path / "SKILL.md"),
+                location=self._skill_md_location(skill),
             )
 
         return self._pass(
             f"Description length OK ({length}/{MAX_DESCRIPTION_LENGTH})",
-            location=str(skill.path / "SKILL.md"),
+            location=self._skill_md_location(skill),
         )
 
 
@@ -140,7 +134,7 @@ class DescriptionThirdPersonCheck(StaticCheck):
         if skill.metadata is None or not skill.metadata.description:
             return self._fail(
                 "No description to check",
-                location=str(skill.path / "SKILL.md"),
+                location=self._skill_md_location(skill),
             )
 
         desc = skill.metadata.description
@@ -157,12 +151,12 @@ class DescriptionThirdPersonCheck(StaticCheck):
                     "found": found_first_person[:5],  # Limit to first 5 matches
                     "suggestion": "Use third-person voice (e.g., 'Creates files...' instead of 'I create files...')",
                 },
-                location=str(skill.path / "SKILL.md"),
+                location=self._skill_md_location(skill),
             )
 
         return self._pass(
             "Description uses appropriate voice",
-            location=str(skill.path / "SKILL.md"),
+            location=self._skill_md_location(skill),
         )
 
 
@@ -180,7 +174,7 @@ class DescriptionIncludesTriggersCheck(StaticCheck):
         if skill.metadata is None or not skill.metadata.description:
             return self._fail(
                 "No description to check",
-                location=str(skill.path / "SKILL.md"),
+                location=self._skill_md_location(skill),
             )
 
         desc = skill.metadata.description.lower()
@@ -189,7 +183,7 @@ class DescriptionIncludesTriggersCheck(StaticCheck):
             if re.search(pattern, desc, re.IGNORECASE):
                 return self._pass(
                     "Description includes trigger information",
-                    location=str(skill.path / "SKILL.md"),
+                    location=self._skill_md_location(skill),
                 )
 
         return self._fail(
@@ -197,5 +191,5 @@ class DescriptionIncludesTriggersCheck(StaticCheck):
             details={
                 "suggestion": "Add context about when this skill should be triggered (e.g., 'Use when...', 'Activates if...')"
             },
-            location=str(skill.path / "SKILL.md"),
+            location=self._skill_md_location(skill),
         )

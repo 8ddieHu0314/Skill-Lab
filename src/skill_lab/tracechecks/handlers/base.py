@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import Any
 
 from skill_lab.core.models import TraceCheckDefinition, TraceCheckResult
 from skill_lab.triggers.trace_analyzer import TraceAnalyzer
@@ -33,6 +34,23 @@ class TraceCheckHandler(ABC):
             TraceCheckResult indicating pass/fail and details.
         """
         pass
+
+    def _require_field(
+        self, check: TraceCheckDefinition, field_name: str
+    ) -> TraceCheckResult | Any:
+        """Get a required field from the check definition, or return failure result.
+
+        Args:
+            check: The check definition.
+            field_name: Name of the required field.
+
+        Returns:
+            The field value if present and non-empty, or a failing TraceCheckResult.
+        """
+        value = getattr(check, field_name, None)
+        if not value:
+            return self._fail(check, f"Missing required '{field_name}' field")
+        return value
 
     def _pass(self, check: TraceCheckDefinition, message: str, details: dict[str, object] | None = None) -> TraceCheckResult:
         """Create a passing result.

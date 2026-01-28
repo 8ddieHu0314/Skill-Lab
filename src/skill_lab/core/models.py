@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 
 class Severity(str, Enum):
@@ -47,7 +47,7 @@ class Skill:
     """Parsed skill representation."""
 
     path: Path
-    metadata: Optional[SkillMetadata]
+    metadata: SkillMetadata | None
     body: str
     has_scripts: bool
     has_references: bool
@@ -65,8 +65,8 @@ class CheckResult:
     severity: Severity
     dimension: EvalDimension
     message: str
-    details: Optional[dict[str, Any]] = None
-    location: Optional[str] = None
+    details: dict[str, Any] | None = None
+    location: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -90,7 +90,7 @@ class EvaluationReport:
     """Complete evaluation report for a skill."""
 
     skill_path: str
-    skill_name: Optional[str]
+    skill_name: str | None
     timestamp: str
     duration_ms: float
     quality_score: float
@@ -132,10 +132,10 @@ class TraceEvent:
     """
 
     type: str  # e.g., "item.started", "item.completed"
-    item_type: Optional[str] = None  # e.g., "command_execution", "skill_invocation"
-    command: Optional[str] = None  # The command that was run
-    output: Optional[str] = None  # Command output/result
-    timestamp: Optional[str] = None  # When it occurred
+    item_type: str | None = None  # e.g., "command_execution", "skill_invocation"
+    command: str | None = None  # The command that was run
+    output: str | None = None  # Command output/result
+    timestamp: str | None = None  # When it occurred
     raw: dict[str, Any] = field(default_factory=dict)  # Original event for debugging
 
     def to_dict(self) -> dict[str, Any]:
@@ -157,7 +157,7 @@ class TriggerExpectation:
     """Expected outcomes for a trigger test."""
 
     skill_triggered: bool
-    exit_code: Optional[int] = None
+    exit_code: int | None = None
     commands_include: tuple[str, ...] = field(default_factory=tuple)
     files_created: tuple[str, ...] = field(default_factory=tuple)
     no_loops: bool = False
@@ -176,7 +176,7 @@ class TriggerTestCase:
     prompt: str
     trigger_type: TriggerType
     expected: TriggerExpectation
-    runtime: Optional[str] = None  # Override default runtime
+    runtime: str | None = None  # Override default runtime
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -208,10 +208,10 @@ class TriggerResult:
     skill_triggered: bool
     expected_trigger: bool
     message: str
-    trace_path: Optional[Path] = None
+    trace_path: Path | None = None
     events_count: int = 0
-    exit_code: Optional[int] = None
-    details: Optional[dict[str, Any]] = None
+    exit_code: int | None = None
+    details: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -284,12 +284,12 @@ class TraceCheckDefinition:
 
     id: str
     type: str  # command_presence, file_creation, event_sequence, loop_detection, efficiency
-    description: Optional[str] = None
-    pattern: Optional[str] = None  # for command_presence
-    path: Optional[str] = None  # for file_creation
+    description: str | None = None
+    pattern: str | None = None  # for command_presence
+    path: str | None = None  # for file_creation
     sequence: tuple[str, ...] = field(default_factory=tuple)  # for event_sequence
     max_retries: int = 3  # for loop_detection
-    max_commands: Optional[int] = None  # for efficiency
+    max_commands: int | None = None  # for efficiency
 
 
 @dataclass(frozen=True)
@@ -300,7 +300,7 @@ class TraceCheckResult:
     check_type: str
     passed: bool
     message: str
-    details: Optional[dict[str, Any]] = None
+    details: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""

@@ -34,10 +34,10 @@ class EfficiencyHandler(TraceCheckHandler):
         Returns:
             TraceCheckResult indicating if limits were exceeded.
         """
-        max_commands = check.max_commands
-
-        if max_commands is None:
+        # Note: max_commands can be 0, so we check for None explicitly
+        if check.max_commands is None:
             return self._fail(check, "Missing required 'max_commands' field")
+        max_commands = check.max_commands
 
         commands = analyzer.get_command_sequence()
         command_count = len(commands)

@@ -38,9 +38,9 @@ class EventSequenceHandler(TraceCheckHandler):
         Returns:
             TraceCheckResult indicating if sequence was found.
         """
-        sequence = check.sequence
-        if not sequence:
-            return self._fail(check, "Missing required 'sequence' field")
+        sequence = self._require_field(check, "sequence")
+        if isinstance(sequence, TraceCheckResult):
+            return sequence
 
         commands = analyzer.get_command_sequence()
 

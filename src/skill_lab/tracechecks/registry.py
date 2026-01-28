@@ -2,6 +2,8 @@
 
 from typing import TYPE_CHECKING, Callable, TypeVar
 
+from skill_lab.core.utils import Registry
+
 if TYPE_CHECKING:
     from skill_lab.tracechecks.handlers.base import TraceCheckHandler
 
@@ -14,6 +16,9 @@ class TraceCheckRegistry:
     Handlers register themselves using the @register_trace_handler decorator
     with a check type name. The evaluator looks up handlers by type to
     execute the appropriate check logic.
+
+    Note: This uses composition with Registry rather than inheritance
+    because handlers are registered by check_type string, not by class attribute.
     """
 
     def __init__(self) -> None:
@@ -63,6 +68,18 @@ class TraceCheckRegistry:
             True if a handler is registered.
         """
         return check_type in self._handlers
+
+    def list_types(self) -> list[str]:
+        """Get all registered check types.
+
+        Returns:
+            List of check type names.
+        """
+        return list(self._handlers.keys())
+
+    def clear(self) -> None:
+        """Clear all registered handlers. Useful for testing."""
+        self._handlers.clear()
 
 
 # Global registry instance

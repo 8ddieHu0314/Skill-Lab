@@ -65,21 +65,19 @@ class NameRequiredCheck(StaticCheck):
     spec_required: ClassVar[bool] = True
 
     def run(self, skill: Skill) -> CheckResult:
-        if skill.metadata is None:
-            return self._fail(
-                "No frontmatter found, cannot check name",
-                location=str(skill.path / "SKILL.md"),
-            )
+        if fail := self._require_metadata(skill, "check name"):
+            return fail
+        assert skill.metadata is not None
 
         if not skill.metadata.name:
             return self._fail(
                 "Name field is missing or empty in frontmatter",
-                location=str(skill.path / "SKILL.md"),
+                location=self._skill_md_location(skill),
             )
 
         return self._pass(
             f"Name field present: '{skill.metadata.name}'",
-            location=str(skill.path / "SKILL.md"),
+            location=self._skill_md_location(skill),
         )
 
 
@@ -98,7 +96,7 @@ class NameFormatCheck(StaticCheck):
         if skill.metadata is None or not skill.metadata.name:
             return self._fail(
                 "No name to validate",
-                location=str(skill.path / "SKILL.md"),
+                location=self._skill_md_location(skill),
             )
 
         name = skill.metadata.name
@@ -123,12 +121,12 @@ class NameFormatCheck(StaticCheck):
             return self._fail(
                 "; ".join(errors),
                 details={"name": name, "errors": errors},
-                location=str(skill.path / "SKILL.md"),
+                location=self._skill_md_location(skill),
             )
 
         return self._pass(
             f"Name '{name}' follows format rules",
-            location=str(skill.path / "SKILL.md"),
+            location=self._skill_md_location(skill),
         )
 
 
@@ -147,7 +145,7 @@ class NameMatchesDirectoryCheck(StaticCheck):
         if skill.metadata is None or not skill.metadata.name:
             return self._fail(
                 "No name to validate",
-                location=str(skill.path / "SKILL.md"),
+                location=self._skill_md_location(skill),
             )
 
         name = skill.metadata.name
@@ -157,12 +155,12 @@ class NameMatchesDirectoryCheck(StaticCheck):
             return self._fail(
                 f"Name '{name}' does not match directory name '{directory_name}'",
                 details={"name": name, "directory": directory_name},
-                location=str(skill.path / "SKILL.md"),
+                location=self._skill_md_location(skill),
             )
 
         return self._pass(
             f"Name '{name}' matches directory name",
-            location=str(skill.path / "SKILL.md"),
+            location=self._skill_md_location(skill),
         )
 
 
@@ -180,7 +178,7 @@ class NoReservedWordsCheck(StaticCheck):
         if skill.metadata is None or not skill.metadata.name:
             return self._fail(
                 "No name to validate",
-                location=str(skill.path / "SKILL.md"),
+                location=self._skill_md_location(skill),
             )
 
         name = skill.metadata.name.lower()
@@ -194,12 +192,12 @@ class NoReservedWordsCheck(StaticCheck):
             return self._fail(
                 f"Name contains reserved words: {', '.join(found_reserved)}",
                 details={"name": skill.metadata.name, "reserved_words": found_reserved},
-                location=str(skill.path / "SKILL.md"),
+                location=self._skill_md_location(skill),
             )
 
         return self._pass(
             "Name does not contain reserved words",
-            location=str(skill.path / "SKILL.md"),
+            location=self._skill_md_location(skill),
         )
 
 
@@ -217,7 +215,7 @@ class GerundConventionCheck(StaticCheck):
         if skill.metadata is None or not skill.metadata.name:
             return self._fail(
                 "No name to validate",
-                location=str(skill.path / "SKILL.md"),
+                location=self._skill_md_location(skill),
             )
 
         name = skill.metadata.name.lower()
@@ -227,7 +225,7 @@ class GerundConventionCheck(StaticCheck):
             if name.startswith(prefix):
                 return self._pass(
                     f"Name uses gerund form (starts with '{prefix}')",
-                    location=str(skill.path / "SKILL.md"),
+                    location=self._skill_md_location(skill),
                 )
 
         # Check if first word ends in -ing
@@ -235,11 +233,11 @@ class GerundConventionCheck(StaticCheck):
         if first_word.endswith("ing"):
             return self._pass(
                 f"Name uses gerund form ('{first_word}' ends in -ing)",
-                location=str(skill.path / "SKILL.md"),
+                location=self._skill_md_location(skill),
             )
 
         return self._fail(
             "Skill name should use gerund form (e.g., 'creating-docs', 'managing-tasks')",
             details={"name": skill.metadata.name, "suggestion": "Consider renaming to start with a verb ending in -ing"},
-            location=str(skill.path / "SKILL.md"),
+            location=self._skill_md_location(skill),
         )

@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from skill_lab.core.models import TraceCheckResult, TraceReport
+from skill_lab.core.scoring import build_summary_by_attribute, calculate_metrics
 from skill_lab.parsers.trace_parser import parse_trace_file
 from skill_lab.tracechecks.handlers import (
     CommandPresenceHandler,
@@ -95,47 +96,22 @@ class TraceEvaluator:
 
         # Calculate metrics
         duration_ms = (time.perf_counter() - start_time) * 1000
-        checks_passed = sum(1 for r in results if r.passed)
-        checks_failed = len(results) - checks_passed
-        pass_rate = (checks_passed / len(results) * 100) if results else 0.0
-        overall_pass = checks_failed == 0
+        metrics = calculate_metrics(results)
+        overall_pass = metrics.failed == 0
 
         # Build summary
-        summary = self._build_summary(results)
+        summary = {"by_type": build_summary_by_attribute(results, "check_type")}
 
         return TraceReport(
             trace_path=str(trace_path),
             project_dir=str(skill_path),
             timestamp=timestamp,
             duration_ms=duration_ms,
-            checks_run=len(results),
-            checks_passed=checks_passed,
-            checks_failed=checks_failed,
+            checks_run=metrics.total,
+            checks_passed=metrics.passed,
+            checks_failed=metrics.failed,
             overall_pass=overall_pass,
-            pass_rate=pass_rate,
+            pass_rate=metrics.pass_rate,
             results=results,
             summary=summary,
         )
-
-    def _build_summary(self, results: list[TraceCheckResult]) -> dict[str, object]:
-        """Build a summary of results by check type.
-
-        Args:
-            results: List of check results.
-
-        Returns:
-            Summary dictionary with breakdown by type.
-        """
-        by_type: dict[str, dict[str, int]] = {}
-
-        for result in results:
-            if result.check_type not in by_type:
-                by_type[result.check_type] = {"passed": 0, "failed": 0, "total": 0}
-
-            by_type[result.check_type]["total"] += 1
-            if result.passed:
-                by_type[result.check_type]["passed"] += 1
-            else:
-                by_type[result.check_type]["failed"] += 1
-
-        return {"by_type": by_type}

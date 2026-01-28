@@ -7,7 +7,7 @@ from pathlib import Path
 from skill_lab.checks.base import StaticCheck
 from skill_lab.core.models import CheckResult, EvaluationReport, Severity, Skill
 from skill_lab.core.registry import registry
-from skill_lab.core.scoring import build_summary, calculate_score
+from skill_lab.core.scoring import build_summary, calculate_metrics, calculate_score
 from skill_lab.parsers.skill_parser import parse_skill
 
 # Import static checks to trigger registration
@@ -96,8 +96,7 @@ class StaticEvaluator:
         end_time = time.perf_counter()
         duration_ms = (end_time - start_time) * 1000
 
-        checks_passed = sum(1 for r in results if r.passed)
-        checks_failed = len(results) - checks_passed
+        metrics = calculate_metrics(results)
 
         # Determine overall pass (no ERROR-level failures)
         error_failures = [
@@ -118,9 +117,9 @@ class StaticEvaluator:
             duration_ms=round(duration_ms, 2),
             quality_score=quality_score,
             overall_pass=overall_pass,
-            checks_run=len(results),
-            checks_passed=checks_passed,
-            checks_failed=checks_failed,
+            checks_run=metrics.total,
+            checks_passed=metrics.passed,
+            checks_failed=metrics.failed,
             results=results,
             summary=summary,
         )

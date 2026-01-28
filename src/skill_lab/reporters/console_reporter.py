@@ -90,8 +90,15 @@ class ConsoleReporter:
                 )
 
             self.console.print(table)
-        elif not self.verbose:
-            self.console.print("[green]All checks passed![/green]")
+
+        # Show verbose hint when not in verbose mode
+        if not self.verbose:
+            hidden_count = len(report.results) - len(results_to_show)
+            if hidden_count > 0:
+                self.console.print(f"[dim]({hidden_count} passing checks hidden, run with --verbose to see all)[/dim]")
+            elif not results_to_show:
+                self.console.print("[green]All checks passed![/green]")
+                self.console.print("[dim](run with --verbose to see details)[/dim]")
 
         # Summary by dimension
         self.console.print()
@@ -154,8 +161,15 @@ class ConsoleReporter:
                 )
 
             self.console.print(table)
-        elif not self.verbose:
-            self.console.print("[green]All checks passed![/green]")
+
+        # Show verbose hint when not in verbose mode
+        if not self.verbose:
+            hidden_count = len(report.results) - len(results_to_show)
+            if hidden_count > 0:
+                self.console.print(f"[dim]({hidden_count} passing checks hidden, run with --verbose to see all)[/dim]")
+            elif not results_to_show:
+                self.console.print("[green]All checks passed![/green]")
+                self.console.print("[dim](run with --verbose to see details)[/dim]")
         self.console.print()
 
         # Summary by type

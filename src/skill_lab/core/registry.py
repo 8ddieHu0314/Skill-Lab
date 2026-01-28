@@ -2,51 +2,22 @@
 
 from typing import TYPE_CHECKING
 
+from skill_lab.core.utils import Registry
+
 if TYPE_CHECKING:
     from skill_lab.checks.base import StaticCheck
 
 
-class CheckRegistry:
-    """Registry for managing and discovering available checks."""
+class CheckRegistry(Registry["StaticCheck"]):
+    """Registry for managing and discovering available static checks.
+
+    Extends the generic Registry with check-specific functionality like
+    filtering by dimension and spec requirements.
+    """
 
     def __init__(self) -> None:
-        self._checks: dict[str, type["StaticCheck"]] = {}
-
-    def register(
-        self, check_class: type["StaticCheck"]
-    ) -> type["StaticCheck"]:
-        """Register a check class.
-
-        Args:
-            check_class: The check class to register.
-
-        Returns:
-            The check class (for use as decorator).
-        """
-        check_id = check_class.check_id
-        if check_id in self._checks:
-            raise ValueError(f"Check with ID '{check_id}' is already registered")
-        self._checks[check_id] = check_class
-        return check_class
-
-    def get(self, check_id: str) -> type["StaticCheck"] | None:
-        """Get a check class by ID.
-
-        Args:
-            check_id: The check ID to look up.
-
-        Returns:
-            The check class or None if not found.
-        """
-        return self._checks.get(check_id)
-
-    def get_all(self) -> list[type["StaticCheck"]]:
-        """Get all registered check classes.
-
-        Returns:
-            List of all registered check classes.
-        """
-        return list(self._checks.values())
+        """Initialize the check registry."""
+        super().__init__(id_extractor=lambda cls: cls.check_id)
 
     def get_by_dimension(self, dimension: str) -> list[type["StaticCheck"]]:
         """Get all checks for a specific dimension.
@@ -57,7 +28,7 @@ class CheckRegistry:
         Returns:
             List of check classes for the dimension.
         """
-        return [c for c in self._checks.values() if c.dimension.value == dimension]
+        return [c for c in self.get_all() if c.dimension.value == dimension]
 
     def get_spec_required(self) -> list[type["StaticCheck"]]:
         """Get all checks that are required by the Agent Skills spec.
@@ -65,7 +36,7 @@ class CheckRegistry:
         Returns:
             List of spec-required check classes.
         """
-        return [c for c in self._checks.values() if c.spec_required]
+        return [c for c in self.get_all() if c.spec_required]
 
     def get_quality_suggestions(self) -> list[type["StaticCheck"]]:
         """Get all checks that are quality suggestions (not spec-required).
@@ -73,19 +44,7 @@ class CheckRegistry:
         Returns:
             List of quality suggestion check classes.
         """
-        return [c for c in self._checks.values() if not c.spec_required]
-
-    def list_ids(self) -> list[str]:
-        """Get all registered check IDs.
-
-        Returns:
-            List of check IDs.
-        """
-        return list(self._checks.keys())
-
-    def clear(self) -> None:
-        """Clear all registered checks. Useful for testing."""
-        self._checks.clear()
+        return [c for c in self.get_all() if not c.spec_required]
 
 
 # Global registry instance

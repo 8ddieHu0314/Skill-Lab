@@ -3,7 +3,6 @@
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
 from skill_lab.core.models import (
     TriggerReport,
@@ -11,6 +10,7 @@ from skill_lab.core.models import (
     TriggerTestCase,
     TriggerType,
 )
+from skill_lab.core.scoring import build_summary_by_attribute, calculate_metrics
 from skill_lab.runtimes.base import RuntimeAdapter
 from skill_lab.runtimes.claude_runtime import ClaudeRuntime
 from skill_lab.runtimes.codex_runtime import CodexRuntime
@@ -30,8 +30,8 @@ class TriggerEvaluator:
 
     def __init__(
         self,
-        runtime: Optional[str] = None,
-        trace_dir: Optional[Path] = None,
+        runtime: str | None = None,
+        trace_dir: Path | None = None,
     ) -> None:
         """Initialize the trigger evaluator.
 
@@ -45,7 +45,7 @@ class TriggerEvaluator:
     def evaluate(
         self,
         skill_path: Path | str,
-        type_filter: Optional[TriggerType] = None,
+        type_filter: TriggerType | None = None,
     ) -> TriggerReport:
         """Run trigger tests for a skill.
 
@@ -96,11 +96,10 @@ class TriggerEvaluator:
 
         # Calculate metrics
         duration_ms = (time.time() - start_time) * 1000
-        tests_passed = sum(1 for r in results if r.passed)
-        tests_failed = len(results) - tests_passed
+        metrics = calculate_metrics(results)
 
         # Build summary by trigger type
-        summary_by_type = self._build_summary_by_type(results)
+        summary_by_type = build_summary_by_attribute(results, "trigger_type")
 
         return TriggerReport(
             skill_path=str(skill_path),
@@ -108,11 +107,11 @@ class TriggerEvaluator:
             timestamp=datetime.now(timezone.utc).isoformat(),
             duration_ms=duration_ms,
             runtime=runtime.name,
-            tests_run=len(results),
-            tests_passed=tests_passed,
-            tests_failed=tests_failed,
-            overall_pass=tests_failed == 0,
-            pass_rate=tests_passed / len(results) if results else 0.0,
+            tests_run=metrics.total,
+            tests_passed=metrics.passed,
+            tests_failed=metrics.failed,
+            overall_pass=metrics.failed == 0,
+            pass_rate=metrics.pass_rate / 100 if results else 0.0,  # Convert to 0-1 range
             results=results,
             summary_by_type=summary_by_type,
         )
@@ -263,20 +262,3 @@ class TriggerEvaluator:
 
         return True
 
-    def _build_summary_by_type(
-        self, results: list[TriggerResult]
-    ) -> dict[str, dict[str, int]]:
-        """Build summary statistics grouped by trigger type."""
-        summary: dict[str, dict[str, int]] = {}
-
-        for trigger_type in TriggerType:
-            type_results = [r for r in results if r.trigger_type == trigger_type]
-            if type_results:
-                passed = sum(1 for r in type_results if r.passed)
-                summary[trigger_type.value] = {
-                    "total": len(type_results),
-                    "passed": passed,
-                    "failed": len(type_results) - passed,
-                }
-
-        return summary
