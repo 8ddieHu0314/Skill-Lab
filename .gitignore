@@ -79,3 +79,5 @@ Thumbs.db
 # Project specific
 *.json
 !tests/fixtures/**/*.json
+downloaded-skills/
+tests/fixtures/skills/downloaded/

@@ -62,13 +62,15 @@ class TestStaticEvaluator:
         evaluator = StaticEvaluator(spec_only=True)
         report = evaluator.evaluate(valid_skill_path)
 
-        # Should only run 8 spec-required checks
-        assert report.checks_run == 8
+        # Should only run 10 spec-required checks
+        assert report.checks_run == 10
 
         # All results should be from spec-required checks
         spec_required_ids = {
             "structure.skill-md-exists",
             "structure.valid-frontmatter",
+            "frontmatter.compatibility-length",
+            "frontmatter.metadata-format",
             "naming.required",
             "naming.format",
             "naming.matches-directory",
@@ -84,5 +86,5 @@ class TestStaticEvaluator:
         evaluator = StaticEvaluator(spec_only=False)
         report = evaluator.evaluate(valid_skill_path)
 
-        # Should run all 21 checks
-        assert report.checks_run == 21
+        # Should run all 24 checks
+        assert report.checks_run == 24

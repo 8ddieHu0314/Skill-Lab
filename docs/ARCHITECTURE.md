@@ -45,6 +45,7 @@ src/skill_lab/
 │   ├── base.py               # StaticCheck abstract base class
 │   └── static/               # Check implementations
 │       ├── structure.py      # 5 checks
+│       ├── frontmatter.py    # 3 checks
 │       ├── naming.py         # 5 checks
 │       ├── description.py    # 5 checks
 │       └── content.py        # 6 checks
@@ -285,10 +286,10 @@ def run(self, skill: Skill) -> CheckResult:
 
 ```python
 # evaluators/static_evaluator.py
-from skill_lab.checks.static import content, description, naming, structure
+from skill_lab.checks.static import content, description, frontmatter, naming, structure
 
 # This import executes the module code, which runs @register_check decorators
-# Now registry.get_all() returns all 21 check classes
+# Now registry.get_all() returns all 24 check classes
 ```
 
 #### Why This Pattern?
@@ -400,8 +401,8 @@ skill-lab eval-trace ./my-skill --trace ./execution.jsonl [--format console|json
 ```
 
 **Spec Filtering:**
-- `--spec-only` / `-s`: Only run checks required by the Agent Skills spec (8 checks)
-- `--suggestions-only`: List only quality suggestion checks (13 checks)
+- `--spec-only` / `-s`: Only run checks required by the Agent Skills spec (10 checks)
+- `--suggestions-only`: List only quality suggestion checks (14 checks)
 
 **Trigger Testing:**
 - `--runtime` / `-r`: Select runtime adapter (codex, claude, or auto-detect)
@@ -643,8 +644,8 @@ class MyNewCheck(StaticCheck):
 ```
 
 **Check Categories:**
-- **Spec-required checks** (8): Must pass to be valid per the Agent Skills spec. Use `spec_required = True` and `Severity.ERROR`.
-- **Quality suggestions** (13): Best practices that improve skill quality. Use `spec_required = False` (default) with `Severity.WARNING` or `Severity.INFO`.
+- **Spec-required checks** (10): Must pass to be valid per the Agent Skills spec. Use `spec_required = True` and `Severity.ERROR`.
+- **Quality suggestions** (14): Best practices that improve skill quality. Use `spec_required = False` (default) with `Severity.WARNING` or `Severity.INFO`.
 
 ---
 

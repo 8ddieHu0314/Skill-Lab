@@ -1,6 +1,6 @@
 # Skill-Lab Quality Checks
 
-This document lists all 21 static checks used to evaluate agent skills, aligned with the [Agent Skills Specification](https://agentskills.io/specification).
+This document lists all 24 static checks used to evaluate agent skills, aligned with the [Agent Skills Specification](https://agentskills.io/specification).
 
 ## Filtering Checks
 
@@ -20,9 +20,9 @@ skill-lab list-checks --spec-only
 skill-lab list-checks --suggestions-only
 ```
 
-**Spec-required checks (8):** Must pass to be considered a valid Agent Skill per the specification.
+**Spec-required checks (10):** Must pass to be considered a valid Agent Skill per the specification.
 
-**Quality suggestions (13):** Additional checks for best practices that improve skill quality but aren't required by the spec.
+**Quality suggestions (14):** Additional checks for best practices that improve skill quality but aren't required by the spec.
 
 ---
 
@@ -41,12 +41,15 @@ skill-lab list-checks --suggestions-only
 
 ---
 
-## Structure Checks (5)
+## Structure Checks (8)
 
 | Check ID | Severity | Spec | Description |
 |----------|----------|------|-------------|
 | `structure.skill-md-exists` | ERROR | Required | SKILL.md file exists in the skill directory |
 | `structure.valid-frontmatter` | ERROR | Required | YAML frontmatter is parseable and valid |
+| `frontmatter.compatibility-length` | ERROR | Required | Compatibility field is under 500 characters if provided |
+| `frontmatter.metadata-format` | ERROR | Required | Metadata field is a string-to-string mapping if provided |
+| `frontmatter.allowed-tools-format` | WARNING | - | Allowed-tools field is a space-delimited string if provided |
 | `structure.scripts-valid` | WARNING | - | /scripts contains only valid script files |
 | `structure.references-valid` | WARNING | - | /references contains only valid reference files |
 | `structure.no-unexpected-files` | INFO | - | No unexpected files in skill root directory |
@@ -60,6 +63,23 @@ skill-lab list-checks --suggestions-only
 **structure.valid-frontmatter** (Spec: Required)
 - Verifies YAML frontmatter can be parsed
 - Fails if frontmatter is missing or malformed
+
+**frontmatter.compatibility-length** (Spec: Required)
+- Validates the optional `compatibility` field if present
+- Maximum 500 characters per spec
+- Passes if field is not present (optional field)
+
+**frontmatter.metadata-format** (Spec: Required)
+- Validates the optional `metadata` field if present
+- Must be a string-to-string mapping (key-value pairs)
+- All keys must be strings, all values must be strings
+- Passes if field is not present (optional field)
+
+**frontmatter.allowed-tools-format** (Quality suggestion - experimental)
+- Validates the optional `allowed-tools` field if present
+- Must be a space-delimited string (e.g., `"Read Write Bash"`)
+- Common mistake: using YAML list syntax instead of string
+- Passes if field is not present (optional field)
 
 **structure.scripts-valid** (Quality suggestion)
 - Optional folder - passes if not present

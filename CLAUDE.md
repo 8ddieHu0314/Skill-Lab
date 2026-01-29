@@ -38,6 +38,6 @@ For full CLI options, see [ARCHITECTURE.md - CLI Commands](docs/ARCHITECTURE.md#
 
 ## Useful Sources for References
 
-- [OpenAI: How to Evaluate Agent Skills](https://developers.openai.com/blog/eval-skills/) - Criteria for skill evaluation (focus on 1-5 for deterministic checks)
-- [Medium: How to Evaluate AI Agent Skills Without Relying on Vibes](https://jpcaparas.medium.com/how-to-evaluate-ai-agent-skills-without-relying-on-vibes-9a5764ad18c4) - Refined version of OpenAI's approach
+- [OpenAI: How to Evaluate Agent Skills](https://developers.openai.com/blog/eval-skills/) - Criteria for skill evaluation (focus on 1-5 for deterministic checks), treat is as a concrete blueprint for how to implement those checks
+- [Medium: How to Evaluate AI Agent Skills Without Relying on Vibes](https://jpcaparas.medium.com/how-to-evaluate-ai-agent-skills-without-relying-on-vibes-9a5764ad18c4) - Refined version of OpenAI's approach, treat is as a high-level framing of what to check deterministically
 - [Agent Skills Specification](https://agentskills.io/specification) - Official specification for SKILL.md format
