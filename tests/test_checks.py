@@ -18,7 +18,6 @@ from skill_lab.checks.static.description import (
     DescriptionThirdPersonCheck,
 )
 from skill_lab.checks.static.naming import (
-    GerundConventionCheck,
     NameFormatCheck,
     NameMatchesDirectoryCheck,
     NameRequiredCheck,
@@ -129,20 +128,6 @@ class TestNamingChecks:
             result = check.run(skill)
             assert not result.passed, f"Expected '{reserved}' to fail"
             assert result.severity == Severity.WARNING  # Quality suggestion, not in spec
-
-    def test_gerund_convention_pass(self):
-        check = GerundConventionCheck()
-        for gerund_name in ["creating-reports", "managing-files", "building-apps"]:
-            skill = make_skill(name=gerund_name)
-            result = check.run(skill)
-            assert result.passed, f"Expected '{gerund_name}' to pass"
-
-    def test_gerund_convention_fail(self):
-        check = GerundConventionCheck()
-        skill = make_skill(name="report-maker")
-        result = check.run(skill)
-        assert not result.passed
-        assert result.severity == Severity.INFO  # Quality suggestion, not in spec
 
     def test_name_matches_directory_pass(self):
         check = NameMatchesDirectoryCheck()

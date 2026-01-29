@@ -75,7 +75,6 @@ skill-lab list-checks --dimension structure
 | `naming.required` | ERROR | Name field is present |
 | `naming.format` | ERROR | Lowercase, hyphens only, max 64 chars |
 | `naming.no-reserved` | ERROR | No reserved words (anthropic, claude) |
-| `naming.gerund-convention` | WARNING | Uses gerund form (e.g., "creating-") |
 
 ### Description Checks
 | Check ID | Severity | Description |

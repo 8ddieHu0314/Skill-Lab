@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Quick reference for Claude Code when working in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
 
@@ -22,12 +22,27 @@ Python CLI tool that evaluates agent skills (SKILL.md files) through static anal
 ## Quick Start
 
 ```bash
-pip install -e ".[dev]"                 # Install
+pip install -e ".[dev]"                 # Install with dev dependencies
 skill-lab evaluate ./my-skill           # Run evaluation
-pytest tests/ -v && mypy src/           # Run tests + type check
+pytest tests/ -v                        # Run all tests
+pytest tests/test_naming.py -v          # Run single test file
+pytest tests/test_naming.py::test_name -v  # Run single test
+mypy src/                               # Type check (strict mode)
+ruff check src/                         # Lint
 ```
 
 For full CLI options, see [ARCHITECTURE.md - CLI Commands](docs/ARCHITECTURE.md#cli-commands-clipy).
+
+## Key Architecture
+
+The codebase uses a **decorator-based auto-discovery pattern** for checks:
+
+1. Checks are defined in `src/skill_lab/checks/static/*.py` with `@register_check` decorator
+2. Importing the module registers the check to the global `CheckRegistry` singleton
+3. `StaticEvaluator` imports all check modules, triggering registration
+4. `registry.get_all()` returns all registered checks for execution
+
+Same pattern applies to trace handlers (`@register_trace_handler` in `tracechecks/handlers/`).
 
 ## Common Tasks
 

@@ -95,7 +95,7 @@ skill-lab list-checks --suggestions-only
 
 ---
 
-## Naming Checks (5)
+## Naming Checks (4)
 
 | Check ID | Severity | Spec | Description |
 |----------|----------|------|-------------|
@@ -103,7 +103,6 @@ skill-lab list-checks --suggestions-only
 | `naming.format` | ERROR | Required | Name is lowercase, hyphen-separated, max 64 chars |
 | `naming.matches-directory` | ERROR | Required | Name must match the parent directory name |
 | `naming.no-reserved` | WARNING | - | Name does not contain 'anthropic', 'claude', etc. |
-| `naming.gerund-convention` | INFO | - | Name uses gerund form (e.g., 'creating-docs') |
 
 ### Details
 
@@ -123,10 +122,6 @@ skill-lab list-checks --suggestions-only
 **naming.no-reserved** (Quality suggestion)
 - Reserved words: `anthropic`, `claude`, `openai`, `gpt`
 - Case-insensitive matching
-
-**naming.gerund-convention** (Quality suggestion)
-- Name should start with a gerund verb (ending in `-ing`)
-- Common prefixes: `creating`, `building`, `managing`, `processing`, etc.
 
 ---
 

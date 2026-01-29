@@ -16,43 +16,6 @@ MAX_NAME_LENGTH = 64
 # Reserved words that should not appear in skill names (quality suggestion, not in spec)
 RESERVED_WORDS = {"anthropic", "claude", "openai", "gpt"}
 
-# Common gerund prefixes
-GERUND_PREFIXES = {
-    "creating",
-    "building",
-    "managing",
-    "handling",
-    "processing",
-    "generating",
-    "analyzing",
-    "converting",
-    "formatting",
-    "validating",
-    "testing",
-    "deploying",
-    "configuring",
-    "monitoring",
-    "debugging",
-    "optimizing",
-    "implementing",
-    "developing",
-    "writing",
-    "reading",
-    "updating",
-    "deleting",
-    "searching",
-    "filtering",
-    "sorting",
-    "parsing",
-    "rendering",
-    "fetching",
-    "sending",
-    "receiving",
-    "authenticating",
-    "authorizing",
-}
-
-
 @register_check
 class NameRequiredCheck(StaticCheck):
     """Check that name field is present."""
@@ -201,43 +164,3 @@ class NoReservedWordsCheck(StaticCheck):
         )
 
 
-@register_check
-class GerundConventionCheck(StaticCheck):
-    """Check that name uses gerund form (quality suggestion, not in spec)."""
-
-    check_id: ClassVar[str] = "naming.gerund-convention"
-    check_name: ClassVar[str] = "Gerund Naming"
-    description: ClassVar[str] = "Name uses gerund form (e.g., 'creating-docs')"
-    severity: ClassVar[Severity] = Severity.INFO
-    dimension: ClassVar[EvalDimension] = EvalDimension.NAMING
-
-    def run(self, skill: Skill) -> CheckResult:
-        if skill.metadata is None or not skill.metadata.name:
-            return self._fail(
-                "No name to validate",
-                location=self._skill_md_location(skill),
-            )
-
-        name = skill.metadata.name.lower()
-
-        # Check if name starts with a gerund prefix
-        for prefix in GERUND_PREFIXES:
-            if name.startswith(prefix):
-                return self._pass(
-                    f"Name uses gerund form (starts with '{prefix}')",
-                    location=self._skill_md_location(skill),
-                )
-
-        # Check if first word ends in -ing
-        first_word = name.split("-")[0]
-        if first_word.endswith("ing"):
-            return self._pass(
-                f"Name uses gerund form ('{first_word}' ends in -ing)",
-                location=self._skill_md_location(skill),
-            )
-
-        return self._fail(
-            "Skill name should use gerund form (e.g., 'creating-docs', 'managing-tasks')",
-            details={"name": skill.metadata.name, "suggestion": "Consider renaming to start with a verb ending in -ing"},
-            location=self._skill_md_location(skill),
-        )
