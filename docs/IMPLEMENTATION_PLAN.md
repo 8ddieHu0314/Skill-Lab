@@ -77,7 +77,7 @@ Build **infrastructure for skill testing at scale** - tooling that enables autom
 │  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │   │
 │  │  │ Static      │  │ Trigger     │  │ Trace       │  │ Rubric      │  │   │
 │  │  │ Evaluator   │  │ Evaluator   │  │ Evaluator   │  │ Evaluator   │  │   │
-│  │  │ (23 checks) │  │ (4 types)   │  │ (determin.) │  │ (LLM judge) │  │   │
+│  │  │ (21 checks) │  │ (4 types)   │  │ (determin.) │  │ (LLM judge) │  │   │
 │  │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘  │   │
 │  │                    │                        │                │       │   │
 │  │                    └────────────┬───────────┴────────────────┘       │   │
@@ -160,7 +160,7 @@ scoring:
 
 | Phase | Focus | Status | Deliverables |
 |-------|-------|--------|--------------|
-| **Phase 1** | Static Analysis (MVP) | **DONE** | SKILL.md parsing, 23 static checks, JSON output, CLI |
+| **Phase 1** | Static Analysis (MVP) | **DONE** | SKILL.md parsing, 21 static checks, JSON output, CLI |
 | **Phase 2** | Trigger Testing | **DONE** | Given/When/Then DSL, runtime adapters, 4-type trigger tests, CLI |
 | **Phase 3** | Trace Analysis | **DONE** | JSONL parsing, command/file/sequence checks, efficiency metrics |
 | **Phase 4** | Rubric Grading | Planned | LLM-as-judge pipeline, structured output |
@@ -187,7 +187,7 @@ scoring:
 
 A Python CLI tool that:
 1. Parses SKILL.md files and validates folder structure
-2. Runs 23 static checks across 4 dimensions
+2. Runs 21 static checks across 4 dimensions
 3. Outputs JSON/Console evaluation reports
 4. Provides a weighted quality score (0-100)
 
@@ -220,7 +220,7 @@ src/skill_lab/
 ## Deliverables (Complete)
 
 - [x] SKILL.md parser with YAML frontmatter extraction
-- [x] 23 static checks across 4 dimensions
+- [x] 21 static checks across 4 dimensions
 - [x] CheckRegistry with @register_check decorator
 - [x] Weighted quality score calculation
 - [x] CLI: `evaluate`, `validate`, `list-checks` commands

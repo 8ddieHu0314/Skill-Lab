@@ -9,7 +9,6 @@ from skill_lab.checks.static.content import (
     HasExamplesCheck,
     LineBudgetCheck,
     NoTimeSensitiveCheck,
-    NoWindowsPathsCheck,
 )
 from skill_lab.checks.static.description import (
     DescriptionMaxLengthCheck,
@@ -24,7 +23,6 @@ from skill_lab.checks.static.naming import (
     NoReservedWordsCheck,
 )
 from skill_lab.checks.static.structure import (
-    NoUnexpectedFilesCheck,
     SkillMdExistsCheck,
     ValidFrontmatterCheck,
 )
@@ -235,19 +233,6 @@ class TestContentChecks:
         skill = make_skill(body="Just text without any code examples.")
         result = check.run(skill)
         assert not result.passed
-
-    def test_no_windows_paths_pass(self):
-        check = NoWindowsPathsCheck()
-        skill = make_skill(body="Use path /usr/local/bin")
-        result = check.run(skill)
-        assert result.passed
-
-    def test_no_windows_paths_fail(self):
-        check = NoWindowsPathsCheck()
-        skill = make_skill(body="Use path C:\\Users\\test")
-        result = check.run(skill)
-        assert not result.passed
-        assert result.severity == Severity.INFO  # Quality suggestion, not in spec
 
     def test_no_time_sensitive_pass(self):
         check = NoTimeSensitiveCheck()

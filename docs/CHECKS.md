@@ -1,6 +1,6 @@
 # Skill-Lab Quality Checks
 
-This document lists all 23 static checks used to evaluate agent skills, aligned with the [Agent Skills Specification](https://agentskills.io/specification).
+This document lists all 21 static checks used to evaluate agent skills, aligned with the [Agent Skills Specification](https://agentskills.io/specification).
 
 ## Filtering Checks
 
@@ -22,7 +22,7 @@ sklab list-checks --suggestions-only
 
 **Spec-required checks (10):** Must pass to be considered a valid Agent Skill per the specification.
 
-**Quality suggestions (13):** Additional checks for best practices that improve skill quality but aren't required by the spec.
+**Quality suggestions (11):** Additional checks for best practices that improve skill quality but aren't required by the spec.
 
 ---
 
@@ -41,7 +41,7 @@ sklab list-checks --suggestions-only
 
 ---
 
-## Structure Checks (8)
+## Structure Checks (7)
 
 | Check ID | Severity | Spec | Description |
 |----------|----------|------|-------------|
@@ -52,7 +52,6 @@ sklab list-checks --suggestions-only
 | `frontmatter.allowed-tools-format` | WARNING | - | Allowed-tools field is a space-delimited string if provided |
 | `structure.scripts-valid` | WARNING | - | /scripts contains only valid script files |
 | `structure.references-valid` | WARNING | - | /references contains only valid reference files |
-| `structure.no-unexpected-files` | INFO | - | No unexpected files in skill root directory |
 
 ### Details
 
@@ -88,10 +87,6 @@ sklab list-checks --suggestions-only
 **structure.references-valid** (Quality suggestion)
 - Optional folder - passes if not present
 - Valid extensions: `.md`, `.txt`, `.rst`
-
-**structure.no-unexpected-files** (Quality suggestion)
-- Expected items: `SKILL.md`, `skill.md`, `scripts`, `references`, `assets`
-- Hidden files (starting with `.`) are ignored
 
 ---
 
@@ -156,14 +151,13 @@ sklab list-checks --suggestions-only
 
 ---
 
-## Content Checks (6)
+## Content Checks (5)
 
 | Check ID | Severity | Spec | Description |
 |----------|----------|------|-------------|
 | `content.body-not-empty` | WARNING | - | SKILL.md body has meaningful content (min 50 chars) |
 | `content.line-budget` | WARNING | Recommended | Body is under 500 lines |
 | `content.has-examples` | INFO | Recommended | Content contains code examples |
-| `content.no-windows-paths` | INFO | - | Content does not contain Windows-style paths |
 | `content.no-time-sensitive` | INFO | - | Content does not contain hardcoded dates |
 | `content.reference-depth` | WARNING | Recommended | References are max 1 level deep |
 
@@ -180,10 +174,6 @@ sklab list-checks --suggestions-only
 **content.has-examples** (Spec: Recommended)
 - Per spec: "Examples of inputs and outputs" are recommended
 - Looks for fenced code blocks (` ``` `), indented code (4+ spaces), or `<example>` tags
-
-**content.no-windows-paths** (Quality suggestion)
-- Detects patterns like `C:\` or `\\`
-- Use forward slashes for cross-platform compatibility
 
 **content.no-time-sensitive** (Quality suggestion)
 - Detects hardcoded dates: `2024-01-15`, `1/15/2024`, `January 15, 2024`

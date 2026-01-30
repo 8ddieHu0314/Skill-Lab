@@ -289,7 +289,7 @@ def run(self, skill: Skill) -> CheckResult:
 from skill_lab.checks.static import content, description, frontmatter, naming, structure
 
 # This import executes the module code, which runs @register_check decorators
-# Now registry.get_all() returns all 23 check classes
+# Now registry.get_all() returns all 21 check classes
 ```
 
 #### Why This Pattern?

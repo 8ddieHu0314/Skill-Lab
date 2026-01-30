@@ -12,9 +12,6 @@ VALID_SCRIPT_EXTENSIONS = {".py", ".sh", ".js", ".ts", ".bash"}
 # Valid file extensions for references folder
 VALID_REFERENCE_EXTENSIONS = {".md", ".txt", ".rst"}
 
-# Expected files/folders at skill root
-EXPECTED_ROOT_ITEMS = {"SKILL.md", "skill.md", "scripts", "references", "assets"}
-
 
 @register_check
 class SkillMdExistsCheck(StaticCheck):
@@ -174,38 +171,3 @@ class ReferencesValidCheck(StaticCheck):
         )
 
 
-@register_check
-class NoUnexpectedFilesCheck(StaticCheck):
-    """Check for unexpected files in skill root."""
-
-    check_id: ClassVar[str] = "structure.no-unexpected-files"
-    check_name: ClassVar[str] = "No Unexpected Files"
-    description: ClassVar[str] = "No unexpected files in skill root directory"
-    severity: ClassVar[Severity] = Severity.INFO
-    dimension: ClassVar[EvalDimension] = EvalDimension.STRUCTURE
-
-    def run(self, skill: Skill) -> CheckResult:
-        unexpected: list[str] = []
-
-        for item in skill.path.iterdir():
-            name = item.name
-
-            # Skip hidden files
-            if name.startswith("."):
-                continue
-
-            # Check if it's an expected item
-            if name not in EXPECTED_ROOT_ITEMS:
-                unexpected.append(name)
-
-        if unexpected:
-            return self._fail(
-                f"Unexpected files/folders in skill root: {', '.join(unexpected)}",
-                details={"unexpected": unexpected, "expected": list(EXPECTED_ROOT_ITEMS)},
-                location=str(skill.path),
-            )
-
-        return self._pass(
-            "No unexpected files in skill root",
-            location=str(skill.path),
-        )

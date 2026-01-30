@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Python CLI tool that evaluates agent skills (SKILL.md files) through static analysis and trigger testing. Produces a 0-100 quality score based on 23 checks across 4 dimensions.
+Python CLI tool that evaluates agent skills (SKILL.md files) through static analysis and trigger testing. Produces a 0-100 quality score based on 21 checks across 4 dimensions.
 
 ## Naming Convention
 
@@ -23,7 +23,7 @@ Python CLI tool that evaluates agent skills (SKILL.md files) through static anal
 | Document | Contents |
 |----------|----------|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Tech stack, data flow, CLI commands, design patterns |
-| [docs/CHECKS.md](docs/CHECKS.md) | All 23 checks with descriptions and scoring weights |
+| [docs/CHECKS.md](docs/CHECKS.md) | All 21 checks with descriptions and scoring weights |
 | [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) | Roadmap and phase status |
 
 **After code changes**, update relevant docs:

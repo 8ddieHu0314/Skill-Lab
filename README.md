@@ -10,7 +10,7 @@ A Python CLI tool for evaluating agent skills through static analysis and qualit
 ## Features
 
 - **SKILL.md Parsing**: Parse YAML frontmatter and markdown body from skill definitions
-- **23 Static Checks**: Comprehensive checks across 4 dimensions
+- **21 Static Checks**: Comprehensive checks across 4 dimensions
   - Structure: File existence, folder organization, frontmatter validation
   - Naming: Format, reserved words, directory matching
   - Description: Length, voice, trigger information
@@ -115,7 +115,6 @@ sklab eval-trace ./my-skill --trace ./trace.jsonl
 | `frontmatter.metadata-format` | ERROR | Metadata is string-to-string map |
 | `structure.scripts-valid` | WARNING | /scripts contains valid files |
 | `structure.references-valid` | WARNING | /references contains valid files |
-| `structure.no-unexpected-files` | INFO | No unexpected files in root |
 
 ### Naming Checks
 | Check ID | Severity | Description |
@@ -140,7 +139,6 @@ sklab eval-trace ./my-skill --trace ./trace.jsonl
 | `content.body-not-empty` | WARNING | Body has content (min 50 chars) |
 | `content.line-budget` | WARNING | Under 500 lines |
 | `content.has-examples` | INFO | Contains code examples |
-| `content.no-windows-paths` | INFO | No backslash paths |
 | `content.no-time-sensitive` | INFO | No hardcoded dates |
 | `content.reference-depth` | WARNING | References max 1 level deep |
 

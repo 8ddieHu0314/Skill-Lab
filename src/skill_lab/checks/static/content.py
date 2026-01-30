@@ -11,9 +11,6 @@ from skill_lab.core.registry import register_check
 # Maximum line count for skill body
 MAX_LINE_COUNT = 500
 
-# Pattern for Windows-style paths
-WINDOWS_PATH_PATTERN = re.compile(r"[A-Za-z]:\\|\\\\")
-
 # Pattern for hardcoded dates (common formats)
 DATE_PATTERNS = [
     r"\b\d{4}-\d{2}-\d{2}\b",  # 2024-01-15
@@ -118,35 +115,6 @@ class HasExamplesCheck(StaticCheck):
             location=self._skill_md_location(skill),
         )
 
-
-@register_check
-class NoWindowsPathsCheck(StaticCheck):
-    """Check for Windows-style paths (quality suggestion, not in spec)."""
-
-    check_id: ClassVar[str] = "content.no-windows-paths"
-    check_name: ClassVar[str] = "No Windows Paths"
-    description: ClassVar[str] = "Content does not contain Windows-style paths"
-    severity: ClassVar[Severity] = Severity.INFO
-    dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
-
-    def run(self, skill: Skill) -> CheckResult:
-        body = skill.body
-        matches = WINDOWS_PATH_PATTERN.findall(body)
-
-        if matches:
-            return self._fail(
-                "Content contains Windows-style paths",
-                details={
-                    "found": matches[:5],
-                    "suggestion": "Use forward slashes (/) for cross-platform compatibility",
-                },
-                location=self._skill_md_location(skill),
-            )
-
-        return self._pass(
-            "No Windows-style paths found",
-            location=self._skill_md_location(skill),
-        )
 
 
 @register_check
