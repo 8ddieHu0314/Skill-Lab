@@ -1,26 +1,49 @@
 # Skill Lab
 
+[![PyPI version](https://badge.fury.io/py/sklab.svg)](https://badge.fury.io/py/sklab)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Tests](https://github.com/8ddieHu0314/Skill-Lab/actions/workflows/test.yml/badge.svg)](https://github.com/8ddieHu0314/Skill-Lab/actions/workflows/test.yml)
+
 A Python CLI tool for evaluating agent skills through static analysis and quality checks.
 
 ## Features
 
 - **SKILL.md Parsing**: Parse YAML frontmatter and markdown body from skill definitions
-- **20 Static Checks**: Comprehensive checks across 4 dimensions
-  - Structure: File existence, folder organization
-  - Naming: Format, reserved words, conventions
+- **21 Static Checks**: Comprehensive checks across 4 dimensions
+  - Structure: File existence, folder organization, frontmatter validation
+  - Naming: Format, reserved words, directory matching
   - Description: Length, voice, trigger information
   - Content: Examples, line budget, cross-platform compatibility
 - **Quality Scoring**: Weighted 0-100 score based on check results
 - **Multiple Output Formats**: Console (rich formatting) and JSON
+- **Trace Evaluation**: Analyze execution traces against defined checks
+- **Trigger Testing**: Verify skill activation with different prompt types
 
 ## Installation
 
 ```bash
+# From PyPI
+pip install sklab
+
 # From source
 pip install -e .
 
 # With development dependencies
 pip install -e ".[dev]"
+```
+
+## Quick Start
+
+```bash
+# Evaluate a skill
+sklab evaluate ./my-skill
+
+# Quick validation (pass/fail)
+sklab validate ./my-skill
+
+# List available checks
+sklab list-checks
 ```
 
 ## Usage
@@ -29,33 +52,56 @@ pip install -e ".[dev]"
 
 ```bash
 # Console output (default)
-skill-lab evaluate ./my-skill
+sklab evaluate ./my-skill
 
 # JSON output
-skill-lab evaluate ./my-skill --format json
+sklab evaluate ./my-skill --format json
 
 # Save to file
-skill-lab evaluate ./my-skill --output report.json
+sklab evaluate ./my-skill --output report.json
 
 # Verbose (show all checks, not just failures)
-skill-lab evaluate ./my-skill --verbose
+sklab evaluate ./my-skill --verbose
+
+# Spec-only (skip quality suggestions)
+sklab evaluate ./my-skill --spec-only
 ```
 
 ### Quick Validation
 
 ```bash
 # Returns exit code 0 if valid, 1 if invalid
-skill-lab validate ./my-skill
+sklab validate ./my-skill
 ```
 
 ### List Available Checks
 
 ```bash
 # List all checks
-skill-lab list-checks
+sklab list-checks
 
 # Filter by dimension
-skill-lab list-checks --dimension structure
+sklab list-checks --dimension structure
+
+# Show only spec-required checks
+sklab list-checks --spec-only
+```
+
+### Test Triggers
+
+```bash
+# Run trigger tests
+sklab test-triggers ./my-skill
+
+# Filter by trigger type
+sklab test-triggers ./my-skill --type explicit
+```
+
+### Evaluate Traces
+
+```bash
+# Evaluate an execution trace
+sklab eval-trace ./my-skill --trace ./trace.jsonl
 ```
 
 ## Check Categories
@@ -65,6 +111,8 @@ skill-lab list-checks --dimension structure
 |----------|----------|-------------|
 | `structure.skill-md-exists` | ERROR | SKILL.md file exists |
 | `structure.valid-frontmatter` | ERROR | YAML frontmatter is parseable |
+| `frontmatter.compatibility-length` | ERROR | Compatibility under 500 chars |
+| `frontmatter.metadata-format` | ERROR | Metadata is string-to-string map |
 | `structure.scripts-valid` | WARNING | /scripts contains valid files |
 | `structure.references-valid` | WARNING | /references contains valid files |
 | `structure.no-unexpected-files` | INFO | No unexpected files in root |
@@ -74,7 +122,8 @@ skill-lab list-checks --dimension structure
 |----------|----------|-------------|
 | `naming.required` | ERROR | Name field is present |
 | `naming.format` | ERROR | Lowercase, hyphens only, max 64 chars |
-| `naming.no-reserved` | ERROR | No reserved words (anthropic, claude) |
+| `naming.matches-directory` | ERROR | Name matches parent directory |
+| `naming.no-reserved` | WARNING | No reserved words (anthropic, claude) |
 
 ### Description Checks
 | Check ID | Severity | Description |
@@ -82,17 +131,17 @@ skill-lab list-checks --dimension structure
 | `description.required` | ERROR | Description field is present |
 | `description.not-empty` | ERROR | Description is not empty |
 | `description.max-length` | ERROR | Max 1024 characters |
-| `description.third-person` | WARNING | Uses third-person voice |
-| `description.includes-triggers` | WARNING | Describes when to use |
+| `description.third-person` | INFO | Uses third-person voice |
+| `description.includes-triggers` | INFO | Describes when to use |
 
 ### Content Checks
 | Check ID | Severity | Description |
 |----------|----------|-------------|
-| `content.body-not-empty` | ERROR | Body has content (min 50 chars) |
+| `content.body-not-empty` | WARNING | Body has content (min 50 chars) |
 | `content.line-budget` | WARNING | Under 500 lines |
 | `content.has-examples` | INFO | Contains code examples |
-| `content.no-windows-paths` | WARNING | No backslash paths |
-| `content.no-time-sensitive` | WARNING | No hardcoded dates |
+| `content.no-windows-paths` | INFO | No backslash paths |
+| `content.no-time-sensitive` | INFO | No hardcoded dates |
 | `content.reference-depth` | WARNING | References max 1 level deep |
 
 ## Output Format (JSON)
@@ -105,8 +154,8 @@ skill-lab list-checks --dimension structure
   "duration_ms": 45.3,
   "quality_score": 87.5,
   "overall_pass": true,
-  "checks_run": 20,
-  "checks_passed": 18,
+  "checks_run": 21,
+  "checks_passed": 19,
   "checks_failed": 2,
   "results": [...],
   "summary": {
@@ -133,14 +182,17 @@ mypy src/
 
 # Linting
 ruff check src/
+
+# Format code
+ruff format src/
 ```
 
 ## Project Structure
 
 ```
-skill-lab/
+sklab/
 ├── src/skill_lab/
-│   ├── cli.py                    # CLI interface
+│   ├── cli.py                    # CLI interface (Typer)
 │   ├── core/
 │   │   ├── models.py             # Data models
 │   │   ├── registry.py           # Check registration
@@ -151,13 +203,22 @@ skill-lab/
 │   │   ├── base.py               # Base check class
 │   │   └── static/               # Static checks
 │   ├── evaluators/
-│   │   └── static_evaluator.py   # Orchestration
+│   │   ├── static_evaluator.py   # Static analysis
+│   │   └── trace_evaluator.py    # Trace evaluation
+│   ├── triggers/
+│   │   └── trigger_evaluator.py  # Trigger testing
 │   └── reporters/
 │       ├── json_reporter.py
 │       └── console_reporter.py
 ├── tests/
+├── docs/
 └── examples/
 ```
+
+## Related
+
+- [Agent Skills Specification](https://agentskills.io/specification) - The specification this tool validates against
+- [SkillsMP](https://skillsmp.com) - Marketplace for agent skills
 
 ## License
 

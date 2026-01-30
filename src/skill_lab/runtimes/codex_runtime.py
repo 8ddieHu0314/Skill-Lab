@@ -3,8 +3,9 @@
 import json
 import shutil
 import subprocess
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from skill_lab.core.models import TraceEvent
 from skill_lab.runtimes.base import RuntimeAdapter

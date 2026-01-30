@@ -1,9 +1,10 @@
 """Shared utilities for the skill-lab framework."""
 
+from collections.abc import Callable
 from dataclasses import fields, is_dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 T = TypeVar("T")
 
@@ -110,29 +111,6 @@ class Registry(Generic[T]):
         self._items.clear()
 
 
-def calculate_metrics(
-    results: list[Any],
-    passed_attr: str = "passed",
-) -> tuple[int, int, float]:
-    """Calculate common metrics from a list of results.
-
-    Args:
-        results: List of result objects with a passed attribute.
-        passed_attr: Name of the boolean attribute indicating pass/fail.
-
-    Returns:
-        Tuple of (passed_count, failed_count, pass_rate).
-    """
-    if not results:
-        return 0, 0, 0.0
-
-    passed = sum(1 for r in results if getattr(r, passed_attr, False))
-    failed = len(results) - passed
-    pass_rate = (passed / len(results)) * 100
-
-    return passed, failed, pass_rate
-
-
 def serialize_value(value: Any) -> Any:
     """Serialize a value for JSON output.
 
@@ -160,44 +138,3 @@ def serialize_value(value: Any) -> Any:
             return value.to_dict()
         return {f.name: serialize_value(getattr(value, f.name)) for f in fields(value)}
     return value
-
-
-class SerializableMixin:
-    """Mixin to add JSON serialization to dataclasses.
-
-    Provides a default to_dict() implementation that handles:
-    - Enum values (converted to .value)
-    - Path objects (converted to string)
-    - Nested dataclasses (recursively serialized)
-    - Optional fields (omitted if None, configurable)
-    """
-
-    # Fields to always include even if None
-    _include_none_fields: tuple[str, ...] = ()
-
-    # Fields to always exclude from serialization
-    _exclude_fields: tuple[str, ...] = ()
-
-    def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for JSON serialization.
-
-        Returns:
-            Dictionary with serialized values.
-        """
-        if not is_dataclass(self):
-            raise TypeError(f"{self.__class__.__name__} must be a dataclass")
-
-        result: dict[str, Any] = {}
-        for f in fields(self):
-            if f.name in self._exclude_fields:
-                continue
-
-            value = getattr(self, f.name)
-
-            # Skip None values unless in include list
-            if value is None and f.name not in self._include_none_fields:
-                continue
-
-            result[f.name] = serialize_value(value)
-
-        return result

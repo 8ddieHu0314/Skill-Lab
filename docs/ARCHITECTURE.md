@@ -36,7 +36,7 @@ src/skill_lab/
 │   ├── models.py             # Data classes (Skill, CheckResult, TriggerResult, etc.)
 │   ├── registry.py           # Check auto-discovery system (extends generic Registry[T])
 │   ├── scoring.py            # Quality score calculation and shared metrics
-│   ├── utils.py              # Shared utilities (generic Registry[T], calculate_metrics)
+│   ├── utils.py              # Shared utilities (generic Registry[T], serialize_value)
 │   └── exceptions.py         # Custom exception hierarchy (SkillLabError, ParseError, etc.)
 ├── parsers/
 │   ├── skill_parser.py       # SKILL.md parser (YAML + markdown)
@@ -80,7 +80,7 @@ src/skill_lab/
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                    USER: skill-lab evaluate ./my-skill                  │
+│                    USER: sklab evaluate ./my-skill                  │
 └─────────────────────────────────────────────────────────────────────────┘
                                       │
                                       ▼
@@ -122,8 +122,8 @@ src/skill_lab/
                     ┌───────────────────────────────┴────────────────────────┐
                     │                    │                    │              │
             ┌───────────────┐    ┌───────────────┐    ┌───────────────┐ ┌──────────┐
-            │ structure.py  │    │  naming.py    │    │description.py │ │content.py│
-            │ (5 checks)    │    │  (5 checks)   │    │ (5 checks)    │ │(6 checks)│
+            │ structure.py  │ │frontmatter.py│ │  naming.py  │ │description.py│ │content.py│
+            │ (5 checks)    │ │  (3 checks)  │ │ (4 checks)  │ │  (5 checks)  │ │(6 checks)│
             └───────────────┘    └───────────────┘    └───────────────┘ └──────────┘
 ```
 
@@ -289,7 +289,7 @@ def run(self, skill: Skill) -> CheckResult:
 from skill_lab.checks.static import content, description, frontmatter, naming, structure
 
 # This import executes the module code, which runs @register_check decorators
-# Now registry.get_all() returns all 24 check classes
+# Now registry.get_all() returns all 23 check classes
 ```
 
 #### Why This Pattern?
@@ -340,7 +340,7 @@ Final Score: 93.5
 All evaluators (static, trace, trigger) use shared utilities for consistent metric calculation:
 
 ```python
-# core/utils.py
+# core/scoring.py
 @dataclass
 class EvaluationMetrics:
     total: int
@@ -352,7 +352,6 @@ def calculate_metrics(results: list[T]) -> EvaluationMetrics:
     """Calculate pass/fail metrics from any list of results with a 'passed' attribute."""
     ...
 
-# core/scoring.py
 def build_summary_by_attribute(
     results: list[T],
     attribute: str,
@@ -385,19 +384,19 @@ Built with **Typer** which provides:
 
 ```bash
 # Main evaluation command
-skill-lab evaluate ./my-skill [--format console|json] [--output file.json] [--verbose] [--spec-only]
+sklab evaluate ./my-skill [--format console|json] [--output file.json] [--verbose] [--spec-only]
 
 # Quick validation (exit 0 or 1)
-skill-lab validate ./my-skill [--spec-only]
+sklab validate ./my-skill [--spec-only]
 
 # List available checks
-skill-lab list-checks [--dimension structure|naming|description|content] [--spec-only] [--suggestions-only]
+sklab list-checks [--dimension structure|naming|description|content] [--spec-only] [--suggestions-only]
 
 # Trigger testing (Phase 2)
-skill-lab test-triggers ./my-skill [--runtime codex|claude] [--type explicit|implicit|contextual|negative] [--format console|json]
+sklab test-triggers ./my-skill [--runtime codex|claude] [--type explicit|implicit|contextual|negative] [--format console|json]
 
 # Trace evaluation (Phase 3)
-skill-lab eval-trace ./my-skill --trace ./execution.jsonl [--format console|json] [--output file.json]
+sklab eval-trace ./my-skill --trace ./execution.jsonl [--format console|json] [--output file.json]
 ```
 
 **Spec Filtering:**
@@ -583,7 +582,7 @@ All custom exceptions extend `SkillLabError` which provides structured error han
 
 ```python
 class SkillLabError(Exception):
-    """Base exception for skill-lab with context and suggestions."""
+    """Base exception for sklab with context and suggestions."""
     def __init__(
         self,
         message: str,

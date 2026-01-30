@@ -1,8 +1,7 @@
 """Registry for trace check handlers."""
 
-from typing import TYPE_CHECKING, Callable, TypeVar
-
-from skill_lab.core.utils import Registry
+from collections.abc import Callable
+from typing import TYPE_CHECKING, TypeVar
 
 if TYPE_CHECKING:
     from skill_lab.tracechecks.handlers.base import TraceCheckHandler
@@ -23,7 +22,7 @@ class TraceCheckRegistry:
 
     def __init__(self) -> None:
         """Initialize an empty registry."""
-        self._handlers: dict[str, type["TraceCheckHandler"]] = {}
+        self._handlers: dict[str, type[TraceCheckHandler]] = {}
 
     def register(self, check_type: str, handler_class: type["TraceCheckHandler"]) -> None:
         """Register a handler class for a check type.

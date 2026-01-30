@@ -257,8 +257,5 @@ class TriggerEvaluator:
                 return False
 
         # Check for loops
-        if expected.no_loops and analyzer.detect_loops():
-            return False
-
-        return True
+        return not (expected.no_loops and analyzer.detect_loops())
 

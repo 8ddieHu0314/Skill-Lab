@@ -6,6 +6,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Python CLI tool that evaluates agent skills (SKILL.md files) through static analysis and trigger testing. Produces a 0-100 quality score based on 21 checks across 4 dimensions.
 
+## Naming Convention
+
+| Name | Usage |
+|------|-------|
+| **Skill-Lab** | GitHub repo name, project name |
+| **sklab** | PyPI package name, CLI command |
+
+- GitHub URLs use `Skill-Lab`: `github.com/8ddieHu0314/Skill-Lab`
+- PyPI/pip uses `sklab`: `pip install sklab`
+- CLI command is `sklab`: `sklab evaluate ./my-skill`
+
 ## Documentation
 
 | Document | Contents |
@@ -23,7 +34,7 @@ Python CLI tool that evaluates agent skills (SKILL.md files) through static anal
 
 ```bash
 pip install -e ".[dev]"                 # Install with dev dependencies
-skill-lab evaluate ./my-skill           # Run evaluation
+sklab evaluate ./my-skill               # Run evaluation
 pytest tests/ -v                        # Run all tests
 pytest tests/test_naming.py -v          # Run single test file
 pytest tests/test_naming.py::test_name -v  # Run single test

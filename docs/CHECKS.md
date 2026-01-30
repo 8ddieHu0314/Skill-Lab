@@ -1,6 +1,6 @@
 # Skill-Lab Quality Checks
 
-This document lists all 24 static checks used to evaluate agent skills, aligned with the [Agent Skills Specification](https://agentskills.io/specification).
+This document lists all 23 static checks used to evaluate agent skills, aligned with the [Agent Skills Specification](https://agentskills.io/specification).
 
 ## Filtering Checks
 
@@ -8,21 +8,21 @@ You can choose to run only spec-required checks (skipping quality suggestions):
 
 ```bash
 # Evaluate with spec-required checks only
-skill-lab evaluate ./my-skill --spec-only
+sklab evaluate ./my-skill --spec-only
 
 # Validate with spec-required checks only
-skill-lab validate ./my-skill --spec-only
+sklab validate ./my-skill --spec-only
 
 # List only spec-required checks
-skill-lab list-checks --spec-only
+sklab list-checks --spec-only
 
 # List only quality suggestion checks
-skill-lab list-checks --suggestions-only
+sklab list-checks --suggestions-only
 ```
 
 **Spec-required checks (10):** Must pass to be considered a valid Agent Skill per the specification.
 
-**Quality suggestions (14):** Additional checks for best practices that improve skill quality but aren't required by the spec.
+**Quality suggestions (13):** Additional checks for best practices that improve skill quality but aren't required by the spec.
 
 ---
 

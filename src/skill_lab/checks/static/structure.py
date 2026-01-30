@@ -1,6 +1,5 @@
 """Structure checks for skill folder organization."""
 
-from pathlib import Path
 from typing import ClassVar
 
 from skill_lab.checks.base import StaticCheck

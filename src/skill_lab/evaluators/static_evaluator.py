@@ -5,15 +5,21 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from skill_lab.checks.base import StaticCheck
-from skill_lab.core.models import CheckResult, EvaluationReport, Severity, Skill
+
+# Side-effect imports: importing these modules triggers @register_check decorators,
+# which register all check classes with the global CheckRegistry singleton.
+# The imports appear unused but are required for the auto-discovery pattern.
+from skill_lab.checks.static import (  # noqa: F401
+    content,
+    description,
+    frontmatter,
+    naming,
+    structure,
+)
+from skill_lab.core.models import CheckResult, EvaluationReport, Severity
 from skill_lab.core.registry import registry
 from skill_lab.core.scoring import build_summary, calculate_metrics, calculate_score
 from skill_lab.parsers.skill_parser import parse_skill
-
-# Import static checks to trigger registration
-from skill_lab.checks.static import content, description, frontmatter, naming, structure  # noqa: F401
-
-from rich import print
 
 
 class StaticEvaluator:

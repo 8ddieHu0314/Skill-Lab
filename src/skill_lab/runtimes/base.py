@@ -1,8 +1,8 @@
 """Abstract base class for runtime adapters."""
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 from skill_lab.core.models import TraceEvent
 

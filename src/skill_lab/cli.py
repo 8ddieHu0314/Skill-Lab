@@ -2,7 +2,7 @@
 
 from enum import Enum
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 from rich.console import Console
@@ -17,7 +17,7 @@ from skill_lab.reporters.json_reporter import JsonReporter
 from skill_lab.triggers.trigger_evaluator import TriggerEvaluator
 
 app = typer.Typer(
-    name="skill-lab",
+    name="sklab",
     help="Evaluate agent skills through static analysis and quality checks.",
     add_completion=False,
 )
@@ -44,7 +44,7 @@ def evaluate(
         ),
     ],
     output: Annotated[
-        Optional[Path],
+        Path | None,
         typer.Option(
             "--output",
             "-o",
@@ -77,8 +77,12 @@ def evaluate(
     ] = False,
 ) -> None:
     """Evaluate a skill and generate a quality report."""
-    evaluator = StaticEvaluator(spec_only=spec_only)
-    report = evaluator.evaluate(skill_path)
+    try:
+        evaluator = StaticEvaluator(spec_only=spec_only)
+        report = evaluator.evaluate(skill_path)
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(code=1) from None
 
     if format == OutputFormat.json:
         json_reporter = JsonReporter()
@@ -118,8 +122,12 @@ def validate(
     ] = False,
 ) -> None:
     """Quick validation that reports only errors."""
-    evaluator = StaticEvaluator(spec_only=spec_only)
-    passed, errors = evaluator.validate(skill_path)
+    try:
+        evaluator = StaticEvaluator(spec_only=spec_only)
+        passed, errors = evaluator.validate(skill_path)
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(code=1) from None
 
     if passed:
         console.print("[green]Validation passed![/green]")
@@ -135,7 +143,7 @@ def validate(
 @app.command("list-checks")
 def list_checks(
     dimension: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             "--dimension",
             "-d",
@@ -167,7 +175,7 @@ def list_checks(
         except ValueError:
             console.print(f"[red]Invalid dimension: {dimension}[/red]")
             console.print(f"Valid dimensions: {', '.join(d.value for d in EvalDimension)}")
-            raise typer.Exit(code=1)
+            raise typer.Exit(code=1) from None
     elif spec_only:
         checks = registry.get_spec_required()
     elif suggestions_only:
@@ -224,7 +232,7 @@ def test_triggers(
         ),
     ],
     runtime: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             "--runtime",
             "-r",
@@ -232,7 +240,7 @@ def test_triggers(
         ),
     ] = None,
     type_filter: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             "--type",
             "-t",
@@ -240,7 +248,7 @@ def test_triggers(
         ),
     ] = None,
     output: Annotated[
-        Optional[Path],
+        Path | None,
         typer.Option(
             "--output",
             "-o",
@@ -267,14 +275,14 @@ def test_triggers(
     Requires test definitions in tests/scenarios.yaml or tests/triggers.yaml.
     """
     # Parse type filter
-    trigger_type: Optional[TriggerType] = None
+    trigger_type: TriggerType | None = None
     if type_filter:
         try:
             trigger_type = TriggerType(type_filter.lower())
         except ValueError:
             console.print(f"[red]Invalid trigger type: {type_filter}[/red]")
             console.print(f"Valid types: {', '.join(t.value for t in TriggerType)}")
-            raise typer.Exit(code=1)
+            raise typer.Exit(code=1) from None
 
     # Run evaluation
     evaluator = TriggerEvaluator(runtime=runtime)
@@ -372,7 +380,7 @@ def eval_trace(
         ),
     ],
     output: Annotated[
-        Optional[Path],
+        Path | None,
         typer.Option(
             "--output",
             "-o",
@@ -403,10 +411,10 @@ def eval_trace(
         report = evaluator.evaluate(skill_path, trace)
     except FileNotFoundError as e:
         console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
     except ValueError as e:
         console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     # Output results
     if format == OutputFormat.json:

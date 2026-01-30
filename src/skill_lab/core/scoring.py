@@ -1,5 +1,6 @@
 """Quality score calculation for evaluation results."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol, TypeVar
 
@@ -161,7 +162,7 @@ def build_summary(results: list[CheckResult]) -> dict[str, Any]:
 def build_summary_by_attribute(
     results: list[T],
     attribute: str,
-    value_extractor: Any = None,
+    value_extractor: Callable[[Any], str] | None = None,
 ) -> dict[str, dict[str, int]]:
     """Build a summary of results grouped by an attribute.
 

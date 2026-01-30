@@ -38,9 +38,8 @@ class TraceAnalyzer:
         """
         for event in self.events:
             # Check for explicit skill invocation events
-            if event.item_type == "skill_invocation":
-                if skill_name in (event.command or ""):
-                    return True
+            if event.item_type == "skill_invocation" and skill_name in (event.command or ""):
+                return True
 
             # Check for skill references in commands
             if event.command and skill_name in event.command:

@@ -4,3 +4,5 @@ A Python CLI tool for evaluating agent skills through static analysis and qualit
 """
 
 __version__ = "0.1.0"
+
+__all__ = ["__version__"]

@@ -18,7 +18,9 @@ from skill_lab.tracechecks.registry import trace_registry
 from skill_lab.tracechecks.trace_check_loader import load_trace_checks
 from skill_lab.triggers.trace_analyzer import TraceAnalyzer
 
-# Ensure handlers are registered by importing them
+# Side-effect references: These handlers are imported above but the references below
+# ensure they are not removed by linters/dead-code analyzers. The @register_trace_handler
+# decorator on each class registers it with trace_registry when the module is imported.
 _ = (
     CommandPresenceHandler,
     FileCreationHandler,

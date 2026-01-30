@@ -161,6 +161,6 @@ class AllowedToolsFormatCheck(StaticCheck):
             )
 
         return self._pass(
-            f"Allowed-tools field is valid (space-delimited string)",
+            "Allowed-tools field is valid (space-delimited string)",
             location=self._skill_md_location(skill),
         )

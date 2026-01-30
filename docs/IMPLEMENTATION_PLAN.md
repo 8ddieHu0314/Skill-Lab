@@ -77,7 +77,7 @@ Build **infrastructure for skill testing at scale** - tooling that enables autom
 │  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │   │
 │  │  │ Static      │  │ Trigger     │  │ Trace       │  │ Rubric      │  │   │
 │  │  │ Evaluator   │  │ Evaluator   │  │ Evaluator   │  │ Evaluator   │  │   │
-│  │  │ (20 checks) │  │ (4 types)   │  │ (determin.) │  │ (LLM judge) │  │   │
+│  │  │ (23 checks) │  │ (4 types)   │  │ (determin.) │  │ (LLM judge) │  │   │
 │  │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘  │   │
 │  │                    │                        │                │       │   │
 │  │                    └────────────┬───────────┴────────────────┘       │   │
@@ -138,8 +138,8 @@ The final score combines all evaluation dimensions:
 │  Bronze (60-74)   - Functional, needs improvement          │
 │  Unrated (<60)    - Not recommended for production         │
 ├────────────────────────────────────────────────────────────┤
-│  Badge URL: skill-lab.dev/badge/{skill-name}.svg           │
-│  Example:   ![Quality](skill-lab.dev/badge/my-skill.svg)   │
+│  Badge URL: sklab.dev/badge/{skill-name}.svg           │
+│  Example:   ![Quality](sklab.dev/badge/my-skill.svg)   │
 └────────────────────────────────────────────────────────────┘
 ```
 
@@ -160,7 +160,7 @@ scoring:
 
 | Phase | Focus | Status | Deliverables |
 |-------|-------|--------|--------------|
-| **Phase 1** | Static Analysis (MVP) | **DONE** | SKILL.md parsing, 21 static checks, JSON output, CLI |
+| **Phase 1** | Static Analysis (MVP) | **DONE** | SKILL.md parsing, 23 static checks, JSON output, CLI |
 | **Phase 2** | Trigger Testing | **DONE** | Given/When/Then DSL, runtime adapters, 4-type trigger tests, CLI |
 | **Phase 3** | Trace Analysis | **DONE** | JSONL parsing, command/file/sequence checks, efficiency metrics |
 | **Phase 4** | Rubric Grading | Planned | LLM-as-judge pipeline, structured output |
@@ -187,7 +187,7 @@ scoring:
 
 A Python CLI tool that:
 1. Parses SKILL.md files and validates folder structure
-2. Runs 20 static checks across 4 dimensions
+2. Runs 23 static checks across 4 dimensions
 3. Outputs JSON/Console evaluation reports
 4. Provides a weighted quality score (0-100)
 
@@ -205,7 +205,8 @@ src/skill_lab/
 ├── checks/
 │   ├── base.py               # StaticCheck base class
 │   └── static/
-│       ├── structure.py      # 5 checks (30% weight)
+│       ├── structure.py      # 5 checks
+│       ├── frontmatter.py    # 3 checks (30% weight combined with structure)
 │       ├── naming.py         # 4 checks (20% weight)
 │       ├── description.py    # 5 checks (25% weight)
 │       └── content.py        # 6 checks (25% weight)
@@ -219,7 +220,7 @@ src/skill_lab/
 ## Deliverables (Complete)
 
 - [x] SKILL.md parser with YAML frontmatter extraction
-- [x] 20 static checks across 4 dimensions
+- [x] 23 static checks across 4 dimensions
 - [x] CheckRegistry with @register_check decorator
 - [x] Weighted quality score calculation
 - [x] CLI: `evaluate`, `validate`, `list-checks` commands
@@ -387,7 +388,7 @@ test_cases:
 ## Runtime Configuration
 
 ```yaml
-# skill-lab.yaml (project config)
+# sklab.yaml (project config)
 runtime:
   provider: codex  # or 'claude'
 
@@ -649,15 +650,15 @@ def run_trigger_test(scenario: Scenario, runtime: RuntimeAdapter) -> TriggerResu
 
 ```bash
 # Run trigger tests with default runtime
-skill-lab test-triggers ./my-skill
+sklab test-triggers ./my-skill
 
 # Specify runtime
-skill-lab test-triggers ./my-skill --runtime codex
-skill-lab test-triggers ./my-skill --runtime claude
+sklab test-triggers ./my-skill --runtime codex
+sklab test-triggers ./my-skill --runtime claude
 
 # Run specific test type only
-skill-lab test-triggers ./my-skill --type explicit
-skill-lab test-triggers ./my-skill --type negative
+sklab test-triggers ./my-skill --type explicit
+sklab test-triggers ./my-skill --type negative
 ```
 
 ## Deliverables
@@ -669,7 +670,7 @@ skill-lab test-triggers ./my-skill --type negative
 - [x] Claude/MCP runtime adapter
 - [x] Trace analyzer (detect skill invocations from traces)
 - [x] `TriggerEvaluator` orchestrator class
-- [x] CLI command: `skill-lab test-triggers`
+- [x] CLI command: `sklab test-triggers`
 - [x] Trigger metrics in evaluation report
 
 ---
@@ -764,7 +765,7 @@ checks:
 ## CLI Commands
 
 ```bash
-skill-lab eval-trace ./my-skill --trace ./execution.jsonl
+sklab eval-trace ./my-skill --trace ./execution.jsonl
 ```
 
 ## Deliverables
@@ -778,7 +779,7 @@ skill-lab eval-trace ./my-skill --trace ./execution.jsonl
 - [x] Loop/thrashing detection check handler
 - [x] Efficiency (command count) check handler
 - [x] `TraceEvaluator` orchestrator class
-- [x] CLI command: `skill-lab eval-trace`
+- [x] CLI command: `sklab eval-trace`
 - [x] Console reporter for trace reports
 - [x] Test fixtures and unit tests
 
@@ -833,7 +834,7 @@ rubric:
 ## CLI Commands
 
 ```bash
-skill-lab eval-rubric ./my-skill --artifacts ./output/
+sklab eval-rubric ./my-skill --artifacts ./output/
 ```
 
 ## Deliverables
@@ -842,7 +843,7 @@ skill-lab eval-rubric ./my-skill --artifacts ./output/
 - [ ] LLM provider abstraction (OpenAI + Anthropic)
 - [ ] Rubric YAML loader
 - [ ] `RubricEvaluator` with structured output
-- [ ] CLI command: `skill-lab eval-rubric`
+- [ ] CLI command: `sklab eval-rubric`
 
 ---
 
@@ -880,10 +881,10 @@ Generate embeddable SVG badges:
 
 ```bash
 # Generate badge
-skill-lab badge ./my-skill --output badge.svg
+sklab badge ./my-skill --output badge.svg
 
 # Badge URL (if hosted)
-https://skill-lab.dev/badge/my-skill.svg
+https://sklab.dev/badge/my-skill.svg
 ```
 
 Badge displays: `Skill-Lab | Silver 87`
@@ -894,7 +895,7 @@ Push quality metrics to skill directories:
 
 ```bash
 # Publish to marketplace
-skill-lab publish ./my-skill --marketplace skillsmp.com
+sklab publish ./my-skill --marketplace skillsmp.com
 
 # What this does:
 # 1. Runs full evaluation (static + triggers + traces + rubric)
@@ -920,11 +921,11 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Skill-Lab
-        run: pip install skill-lab
+        run: pip install sklab
 
       - name: Run Quality Gate
         run: |
-          skill-lab evaluate ./my-skill \
+          sklab evaluate ./my-skill \
             --min-score 80 \
             --fail-on-regression \
             --output report.json
@@ -941,7 +942,7 @@ jobs:
 Compare skills within categories:
 
 ```yaml
-# skill-lab-benchmarks/react-scaffolding/benchmark.yaml
+# sklab-benchmarks/react-scaffolding/benchmark.yaml
 category: react-scaffolding
 description: "Skills that scaffold React applications"
 
@@ -965,7 +966,7 @@ leaderboard:
 
 ```bash
 # Run benchmark comparison
-skill-lab benchmark ./my-skill --category react-scaffolding
+sklab benchmark ./my-skill --category react-scaffolding
 
 # Output:
 # Your skill: 85 (Silver)
@@ -978,7 +979,7 @@ skill-lab benchmark ./my-skill --category react-scaffolding
 Optional transparency for skill consumers:
 
 ```
-https://skill-lab.dev/skills/create-react-app/history
+https://sklab.dev/skills/create-react-app/history
 
 ┌─────────────────────────────────────────────────────────────┐
 │  create-react-app - Quality History                         │
@@ -993,7 +994,7 @@ https://skill-lab.dev/skills/create-react-app/history
 ## History Format (YAML)
 
 ```yaml
-# .skill-lab/history/my-skill.yaml
+# .sklab/history/my-skill.yaml
 skill: my-skill
 category: react-scaffolding
 evaluations:
@@ -1020,19 +1021,19 @@ evaluations:
 
 ```bash
 # History and comparison
-skill-lab history ./my-skill
-skill-lab compare ./my-skill --from v1.2.0 --to v1.3.0
+sklab history ./my-skill
+sklab compare ./my-skill --from v1.2.0 --to v1.3.0
 
 # Benchmarks
-skill-lab benchmark ./my-skill --category react-scaffolding
-skill-lab leaderboard --category react-scaffolding
+sklab benchmark ./my-skill --category react-scaffolding
+sklab leaderboard --category react-scaffolding
 
 # Publishing
-skill-lab publish ./my-skill --marketplace skillsmp.com
-skill-lab badge ./my-skill --output badge.svg
+sklab publish ./my-skill --marketplace skillsmp.com
+sklab badge ./my-skill --output badge.svg
 
 # CI/CD
-skill-lab evaluate ./my-skill --min-score 80 --fail-on-regression
+sklab evaluate ./my-skill --min-score 80 --fail-on-regression
 ```
 
 ## Deliverables
@@ -1063,12 +1064,12 @@ pytest tests/test_runtimes.py -v
 pytest tests/test_trigger_integration.py -v
 
 # Manual testing
-skill-lab test-triggers ./examples/sample-skill --runtime codex
+sklab test-triggers ./examples/sample-skill --runtime codex
 ```
 
 **End-to-End Test Flow:**
 1. Create skill with `scenarios.yaml` using Given/When/Then DSL
-2. Run `skill-lab test-triggers ./my-skill --runtime codex`
+2. Run `sklab test-triggers ./my-skill --runtime codex`
 3. Verify trigger pass rates by type (explicit/implicit/contextual/negative)
 4. Add a failing negative test case
 5. Verify it's detected as a false positive
@@ -1081,7 +1082,7 @@ pytest tests/test_trace_parser.py -v
 pytest tests/test_execution_checks.py -v
 
 # Manual testing with real trace
-skill-lab eval-trace ./my-skill --trace ./execution.jsonl
+sklab eval-trace ./my-skill --trace ./execution.jsonl
 ```
 
 ### Phase 4: Rubric Grading
@@ -1092,7 +1093,7 @@ pytest tests/test_rubric_evaluator.py -v
 pytest tests/test_llm_providers.py -v
 
 # Manual testing
-skill-lab eval-rubric ./my-skill --artifacts ./output/
+sklab eval-rubric ./my-skill --artifacts ./output/
 ```
 
 ### Phase 5: Ecosystem Integration
@@ -1104,19 +1105,19 @@ pytest tests/test_publisher.py -v
 pytest tests/test_benchmarks.py -v
 
 # Manual testing
-skill-lab badge ./my-skill --output badge.svg
-skill-lab history ./my-skill
-skill-lab benchmark ./my-skill --category react-scaffolding
+sklab badge ./my-skill --output badge.svg
+sklab history ./my-skill
+sklab benchmark ./my-skill --category react-scaffolding
 
 # CI/CD gate testing
-skill-lab evaluate ./my-skill --min-score 80 --fail-on-regression
+sklab evaluate ./my-skill --min-score 80 --fail-on-regression
 ```
 
 ### Full Pipeline Test
 
 ```bash
 # Run complete evaluation
-skill-lab evaluate ./my-skill --full
+sklab evaluate ./my-skill --full
 
 # Expected output:
 # ┌─────────────────────────────────────────┐
@@ -1144,7 +1145,7 @@ The more skills evaluated on Skill-Lab, the more valuable benchmarks and compari
 
 **For Adoption:**
 - Free tier for open-source skills (drives volume)
-- Easy onboarding: `skill-lab init` generates test scaffolding
+- Easy onboarding: `sklab init` generates test scaffolding
 - Integration with popular skill repositories
 
 **For Network Effects:**
@@ -1164,6 +1165,6 @@ The more skills evaluated on Skill-Lab, the more valuable benchmarks and compari
 
 ## Open Questions
 
-1. **Hosted Service**: Should Skill-Lab offer a hosted version (skill-lab.dev) for badge hosting and public history, or stay CLI-only initially?
+1. **Hosted Service**: Should Skill-Lab offer a hosted version (sklab.dev) for badge hosting and public history, or stay CLI-only initially?
 
 2. **Marketplace API**: What's the API contract for publishing to skillsmp.com?
