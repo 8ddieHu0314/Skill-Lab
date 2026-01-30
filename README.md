@@ -1,6 +1,6 @@
 # Skill Lab
 
-[![PyPI version](https://badge.fury.io/py/sklab.svg)](https://badge.fury.io/py/sklab)
+[![PyPI version](https://badge.fury.io/py/skill-lab.svg)](https://badge.fury.io/py/skill-lab)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Tests](https://github.com/8ddieHu0314/Skill-Lab/actions/workflows/test.yml/badge.svg)](https://github.com/8ddieHu0314/Skill-Lab/actions/workflows/test.yml)
@@ -10,7 +10,7 @@ A Python CLI tool for evaluating agent skills through static analysis and qualit
 ## Features
 
 - **SKILL.md Parsing**: Parse YAML frontmatter and markdown body from skill definitions
-- **21 Static Checks**: Comprehensive checks across 4 dimensions
+- **23 Static Checks**: Comprehensive checks across 4 dimensions
   - Structure: File existence, folder organization, frontmatter validation
   - Naming: Format, reserved words, directory matching
   - Description: Length, voice, trigger information
@@ -24,7 +24,7 @@ A Python CLI tool for evaluating agent skills through static analysis and qualit
 
 ```bash
 # From PyPI
-pip install sklab
+pip install skill-lab
 
 # From source
 pip install -e .

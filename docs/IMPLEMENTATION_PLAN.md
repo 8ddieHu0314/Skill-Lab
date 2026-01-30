@@ -921,7 +921,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Skill-Lab
-        run: pip install sklab
+        run: pip install skill-lab
 
       - name: Run Quality Gate
         run: |
