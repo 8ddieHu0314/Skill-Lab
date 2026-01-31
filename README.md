@@ -3,7 +3,6 @@
 [![PyPI version](https://badge.fury.io/py/skill-lab.svg)](https://badge.fury.io/py/skill-lab)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://github.com/8ddieHu0314/Skill-Lab/actions/workflows/test.yml/badge.svg)](https://github.com/8ddieHu0314/Skill-Lab/actions/workflows/test.yml)
 
 A Python CLI tool for evaluating agent skills through static analysis and quality checks.
 
@@ -17,8 +16,6 @@ A Python CLI tool for evaluating agent skills through static analysis and qualit
   - Content: Examples, line budget, reference depth
 - **Quality Scoring**: Weighted 0-100 score based on check results
 - **Multiple Output Formats**: Console (rich formatting) and JSON
-- **Trace Evaluation**: Analyze execution traces against defined checks
-- **Trigger Testing**: Verify skill activation with different prompt types
 
 ## Installation
 
@@ -87,58 +84,6 @@ sklab list-checks --dimension structure
 sklab list-checks --spec-only
 ```
 
-### Test Triggers
-
-```bash
-# Run trigger tests
-sklab test-triggers ./my-skill
-
-# Filter by trigger type
-sklab test-triggers ./my-skill --type explicit
-```
-
-### Evaluate Traces
-
-```bash
-# Evaluate an execution trace
-sklab eval-trace ./my-skill --trace ./trace.jsonl
-```
-
-## Check Categories
-
-### Structure Checks
-| Check ID | Severity | Description |
-|----------|----------|-------------|
-| `structure.skill-md-exists` | ERROR | SKILL.md file exists |
-| `structure.valid-frontmatter` | ERROR | YAML frontmatter is parseable |
-| `frontmatter.compatibility-length` | ERROR | Compatibility under 500 chars |
-| `frontmatter.metadata-format` | ERROR | Metadata is string-to-string map |
-| `structure.scripts-valid` | WARNING | /scripts contains valid files |
-| `structure.references-valid` | WARNING | /references contains valid files |
-
-### Naming Checks
-| Check ID | Severity | Description |
-|----------|----------|-------------|
-| `naming.required` | ERROR | Name field is present |
-| `naming.format` | ERROR | Lowercase, hyphens only, max 64 chars |
-| `naming.matches-directory` | ERROR | Name matches parent directory |
-
-### Description Checks
-| Check ID | Severity | Description |
-|----------|----------|-------------|
-| `description.required` | ERROR | Description field is present |
-| `description.not-empty` | ERROR | Description is not empty |
-| `description.max-length` | ERROR | Max 1024 characters |
-| `description.includes-triggers` | INFO | Describes when to use |
-
-### Content Checks
-| Check ID | Severity | Description |
-|----------|----------|-------------|
-| `content.body-not-empty` | WARNING | Body has content (min 50 chars) |
-| `content.line-budget` | WARNING | Under 500 lines |
-| `content.has-examples` | INFO | Contains code examples |
-| `content.reference-depth` | WARNING | References max 1 level deep |
-
 ## Output Format (JSON)
 
 ```json
@@ -181,39 +126,6 @@ ruff check src/
 # Format code
 ruff format src/
 ```
-
-## Project Structure
-
-```
-sklab/
-├── src/skill_lab/
-│   ├── cli.py                    # CLI interface (Typer)
-│   ├── core/
-│   │   ├── models.py             # Data models
-│   │   ├── registry.py           # Check registration
-│   │   └── scoring.py            # Quality scoring
-│   ├── parsers/
-│   │   └── skill_parser.py       # SKILL.md parsing
-│   ├── checks/
-│   │   ├── base.py               # Base check class
-│   │   └── static/               # Static checks
-│   ├── evaluators/
-│   │   ├── static_evaluator.py   # Static analysis
-│   │   └── trace_evaluator.py    # Trace evaluation
-│   ├── triggers/
-│   │   └── trigger_evaluator.py  # Trigger testing
-│   └── reporters/
-│       ├── json_reporter.py
-│       └── console_reporter.py
-├── tests/
-├── docs/
-└── examples/
-```
-
-## Related
-
-- [Agent Skills Specification](https://agentskills.io/specification) - The specification this tool validates against
-- [SkillsMP](https://skillsmp.com) - Marketplace for agent skills
 
 ## License
 
