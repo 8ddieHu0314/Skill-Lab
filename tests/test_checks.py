@@ -8,19 +8,16 @@ from skill_lab.checks.static.content import (
     BodyNotEmptyCheck,
     HasExamplesCheck,
     LineBudgetCheck,
-    NoTimeSensitiveCheck,
 )
 from skill_lab.checks.static.description import (
     DescriptionMaxLengthCheck,
     DescriptionNotEmptyCheck,
     DescriptionRequiredCheck,
-    DescriptionThirdPersonCheck,
 )
 from skill_lab.checks.static.naming import (
     NameFormatCheck,
     NameMatchesDirectoryCheck,
     NameRequiredCheck,
-    NoReservedWordsCheck,
 )
 from skill_lab.checks.static.structure import (
     SkillMdExistsCheck,
@@ -113,20 +110,6 @@ class TestNamingChecks:
             result = check.run(skill)
             assert not result.passed, f"Expected '{invalid_name}' to fail"
 
-    def test_no_reserved_words_pass(self):
-        check = NoReservedWordsCheck()
-        skill = make_skill(name="my-awesome-skill")
-        result = check.run(skill)
-        assert result.passed
-
-    def test_no_reserved_words_fail(self):
-        check = NoReservedWordsCheck()
-        for reserved in ["claude-helper", "anthropic-tool", "my-gpt-skill"]:
-            skill = make_skill(name=reserved)
-            result = check.run(skill)
-            assert not result.passed, f"Expected '{reserved}' to fail"
-            assert result.severity == Severity.WARNING  # Quality suggestion, not in spec
-
     def test_name_matches_directory_pass(self):
         check = NameMatchesDirectoryCheck()
         skill = make_skill(name="my-skill", path=Path("/test/my-skill"))
@@ -174,18 +157,6 @@ class TestDescriptionChecks:
         result = check.run(skill)
         assert not result.passed
 
-    def test_description_third_person_pass(self):
-        check = DescriptionThirdPersonCheck()
-        skill = make_skill(description="Creates reports for users when requested.")
-        result = check.run(skill)
-        assert result.passed
-
-    def test_description_third_person_fail(self):
-        check = DescriptionThirdPersonCheck()
-        skill = make_skill(description="I will help you create reports.")
-        result = check.run(skill)
-        assert not result.passed
-        assert result.severity == Severity.INFO  # Quality suggestion, not in spec
 
 
 class TestContentChecks:
@@ -233,16 +204,3 @@ class TestContentChecks:
         skill = make_skill(body="Just text without any code examples.")
         result = check.run(skill)
         assert not result.passed
-
-    def test_no_time_sensitive_pass(self):
-        check = NoTimeSensitiveCheck()
-        skill = make_skill(body="This works with version 1.0.0")
-        result = check.run(skill)
-        assert result.passed
-
-    def test_no_time_sensitive_fail(self):
-        check = NoTimeSensitiveCheck()
-        skill = make_skill(body="Updated on 2024-01-15")
-        result = check.run(skill)
-        assert not result.passed
-        assert result.severity == Severity.INFO  # Quality suggestion, not in spec

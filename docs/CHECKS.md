@@ -1,6 +1,6 @@
 # Skill-Lab Quality Checks
 
-This document lists all 21 static checks used to evaluate agent skills, aligned with the [Agent Skills Specification](https://agentskills.io/specification).
+This document lists all 18 static checks used to evaluate agent skills, aligned with the [Agent Skills Specification](https://agentskills.io/specification).
 
 ## Filtering Checks
 
@@ -22,7 +22,7 @@ sklab list-checks --suggestions-only
 
 **Spec-required checks (10):** Must pass to be considered a valid Agent Skill per the specification.
 
-**Quality suggestions (11):** Additional checks for best practices that improve skill quality but aren't required by the spec.
+**Quality suggestions (8):** Additional checks for best practices that improve skill quality but aren't required by the spec.
 
 ---
 
@@ -90,14 +90,13 @@ sklab list-checks --suggestions-only
 
 ---
 
-## Naming Checks (4)
+## Naming Checks (3)
 
 | Check ID | Severity | Spec | Description |
 |----------|----------|------|-------------|
 | `naming.required` | ERROR | Required | Name field is present in frontmatter |
 | `naming.format` | ERROR | Required | Name is lowercase, hyphen-separated, max 64 chars |
 | `naming.matches-directory` | ERROR | Required | Name must match the parent directory name |
-| `naming.no-reserved` | WARNING | - | Name does not contain 'anthropic', 'claude', etc. |
 
 ### Details
 
@@ -114,20 +113,15 @@ sklab list-checks --suggestions-only
 - The `name` field must exactly match the parent directory name
 - Example: If directory is `pdf-processing/`, name must be `pdf-processing`
 
-**naming.no-reserved** (Quality suggestion)
-- Reserved words: `anthropic`, `claude`, `openai`, `gpt`
-- Case-insensitive matching
-
 ---
 
-## Description Checks (5)
+## Description Checks (4)
 
 | Check ID | Severity | Spec | Description |
 |----------|----------|------|-------------|
 | `description.required` | ERROR | Required | Description field is present in frontmatter |
 | `description.not-empty` | ERROR | Required | Description is not empty (1-1024 chars) |
 | `description.max-length` | ERROR | Required | Description is under 1024 characters |
-| `description.third-person` | INFO | - | Description uses third-person voice |
 | `description.includes-triggers` | INFO | Recommended | Description describes when to use the skill |
 
 ### Details
@@ -141,24 +135,19 @@ sklab list-checks --suggestions-only
 **description.max-length** (Spec: Required)
 - Maximum 1024 characters
 
-**description.third-person** (Quality suggestion)
-- Fails if first-person patterns detected: `I will`, `I can`, `I am`, `I'm`, `I've`, `my`, `me`
-- Should use third-person (e.g., "Creates files..." not "I create files...")
-
 **description.includes-triggers** (Spec: Recommended)
 - Per spec: description "should describe when to use it"
 - Looks for trigger keywords: `when`, `if`, `trigger`, `activate`, `invoke`, `use when/for/to`
 
 ---
 
-## Content Checks (5)
+## Content Checks (4)
 
 | Check ID | Severity | Spec | Description |
 |----------|----------|------|-------------|
 | `content.body-not-empty` | WARNING | - | SKILL.md body has meaningful content (min 50 chars) |
 | `content.line-budget` | WARNING | Recommended | Body is under 500 lines |
 | `content.has-examples` | INFO | Recommended | Content contains code examples |
-| `content.no-time-sensitive` | INFO | - | Content does not contain hardcoded dates |
 | `content.reference-depth` | WARNING | Recommended | References are max 1 level deep |
 
 ### Details
@@ -174,10 +163,6 @@ sklab list-checks --suggestions-only
 **content.has-examples** (Spec: Recommended)
 - Per spec: "Examples of inputs and outputs" are recommended
 - Looks for fenced code blocks (` ``` `), indented code (4+ spaces), or `<example>` tags
-
-**content.no-time-sensitive** (Quality suggestion)
-- Detects hardcoded dates: `2024-01-15`, `1/15/2024`, `January 15, 2024`
-- Filters out version numbers (e.g., `1.0.0`)
 
 **content.reference-depth** (Spec: Recommended)
 - Per spec: "Keep file references one level deep from SKILL.md"

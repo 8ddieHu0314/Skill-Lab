@@ -86,5 +86,5 @@ class TestStaticEvaluator:
         evaluator = StaticEvaluator(spec_only=False)
         report = evaluator.evaluate(valid_skill_path)
 
-        # Should run all 21 checks
-        assert report.checks_run == 21
+        # Should run all 18 checks
+        assert report.checks_run == 18

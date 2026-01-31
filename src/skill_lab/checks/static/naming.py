@@ -13,9 +13,6 @@ NAME_PATTERN = re.compile(r"^[a-z][a-z0-9-]*[a-z0-9]$|^[a-z]$")
 # Maximum name length
 MAX_NAME_LENGTH = 64
 
-# Reserved words that should not appear in skill names (quality suggestion, not in spec)
-RESERVED_WORDS = {"anthropic", "claude", "openai", "gpt"}
-
 @register_check
 class NameRequiredCheck(StaticCheck):
     """Check that name field is present."""
@@ -123,43 +120,6 @@ class NameMatchesDirectoryCheck(StaticCheck):
 
         return self._pass(
             f"Name '{name}' matches directory name",
-            location=self._skill_md_location(skill),
-        )
-
-
-@register_check
-class NoReservedWordsCheck(StaticCheck):
-    """Check that name doesn't contain reserved words (quality suggestion)."""
-
-    check_id: ClassVar[str] = "naming.no-reserved"
-    check_name: ClassVar[str] = "No Reserved Words"
-    description: ClassVar[str] = "Name does not contain 'anthropic', 'claude', etc."
-    severity: ClassVar[Severity] = Severity.WARNING
-    dimension: ClassVar[EvalDimension] = EvalDimension.NAMING
-
-    def run(self, skill: Skill) -> CheckResult:
-        if skill.metadata is None or not skill.metadata.name:
-            return self._fail(
-                "No name to validate",
-                location=self._skill_md_location(skill),
-            )
-
-        name = skill.metadata.name.lower()
-        found_reserved: list[str] = []
-
-        for word in RESERVED_WORDS:
-            if word in name:
-                found_reserved.append(word)
-
-        if found_reserved:
-            return self._fail(
-                f"Name contains reserved words: {', '.join(found_reserved)}",
-                details={"name": skill.metadata.name, "reserved_words": found_reserved},
-                location=self._skill_md_location(skill),
-            )
-
-        return self._pass(
-            "Name does not contain reserved words",
             location=self._skill_md_location(skill),
         )
 

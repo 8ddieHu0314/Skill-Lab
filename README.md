@@ -10,11 +10,11 @@ A Python CLI tool for evaluating agent skills through static analysis and qualit
 ## Features
 
 - **SKILL.md Parsing**: Parse YAML frontmatter and markdown body from skill definitions
-- **21 Static Checks**: Comprehensive checks across 4 dimensions
+- **18 Static Checks**: Comprehensive checks across 4 dimensions
   - Structure: File existence, folder organization, frontmatter validation
-  - Naming: Format, reserved words, directory matching
-  - Description: Length, voice, trigger information
-  - Content: Examples, line budget, cross-platform compatibility
+  - Naming: Format, directory matching
+  - Description: Length, trigger information
+  - Content: Examples, line budget, reference depth
 - **Quality Scoring**: Weighted 0-100 score based on check results
 - **Multiple Output Formats**: Console (rich formatting) and JSON
 - **Trace Evaluation**: Analyze execution traces against defined checks
@@ -122,7 +122,6 @@ sklab eval-trace ./my-skill --trace ./trace.jsonl
 | `naming.required` | ERROR | Name field is present |
 | `naming.format` | ERROR | Lowercase, hyphens only, max 64 chars |
 | `naming.matches-directory` | ERROR | Name matches parent directory |
-| `naming.no-reserved` | WARNING | No reserved words (anthropic, claude) |
 
 ### Description Checks
 | Check ID | Severity | Description |
@@ -130,7 +129,6 @@ sklab eval-trace ./my-skill --trace ./trace.jsonl
 | `description.required` | ERROR | Description field is present |
 | `description.not-empty` | ERROR | Description is not empty |
 | `description.max-length` | ERROR | Max 1024 characters |
-| `description.third-person` | INFO | Uses third-person voice |
 | `description.includes-triggers` | INFO | Describes when to use |
 
 ### Content Checks
@@ -139,7 +137,6 @@ sklab eval-trace ./my-skill --trace ./trace.jsonl
 | `content.body-not-empty` | WARNING | Body has content (min 50 chars) |
 | `content.line-budget` | WARNING | Under 500 lines |
 | `content.has-examples` | INFO | Contains code examples |
-| `content.no-time-sensitive` | INFO | No hardcoded dates |
 | `content.reference-depth` | WARNING | References max 1 level deep |
 
 ## Output Format (JSON)
@@ -152,7 +149,7 @@ sklab eval-trace ./my-skill --trace ./trace.jsonl
   "duration_ms": 45.3,
   "quality_score": 87.5,
   "overall_pass": true,
-  "checks_run": 21,
+  "checks_run": 18,
   "checks_passed": 19,
   "checks_failed": 2,
   "results": [...],

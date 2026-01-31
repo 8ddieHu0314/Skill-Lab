@@ -10,15 +10,6 @@ from skill_lab.core.registry import register_check
 # Maximum description length
 MAX_DESCRIPTION_LENGTH = 1024
 
-# Patterns that suggest first-person voice
-FIRST_PERSON_PATTERNS = [
-    r"\bI\s+(?:will|can|am|do|have)\b",
-    r"\bI'm\b",
-    r"\bI've\b",
-    r"\bmy\b",
-    r"\bme\b",
-]
-
 # Patterns that suggest trigger words are present
 TRIGGER_PATTERNS = [
     r"\bwhen\b",
@@ -116,46 +107,6 @@ class DescriptionMaxLengthCheck(StaticCheck):
 
         return self._pass(
             f"Description length OK ({length}/{MAX_DESCRIPTION_LENGTH})",
-            location=self._skill_md_location(skill),
-        )
-
-
-@register_check
-class DescriptionThirdPersonCheck(StaticCheck):
-    """Check that description uses third-person voice (quality suggestion, not in spec)."""
-
-    check_id: ClassVar[str] = "description.third-person"
-    check_name: ClassVar[str] = "Third-Person Voice"
-    description: ClassVar[str] = "Description uses third-person voice"
-    severity: ClassVar[Severity] = Severity.INFO
-    dimension: ClassVar[EvalDimension] = EvalDimension.DESCRIPTION
-
-    def run(self, skill: Skill) -> CheckResult:
-        if skill.metadata is None or not skill.metadata.description:
-            return self._fail(
-                "No description to check",
-                location=self._skill_md_location(skill),
-            )
-
-        desc = skill.metadata.description
-        found_first_person: list[str] = []
-
-        for pattern in FIRST_PERSON_PATTERNS:
-            matches = re.findall(pattern, desc, re.IGNORECASE)
-            found_first_person.extend(matches)
-
-        if found_first_person:
-            return self._fail(
-                "Description uses first-person voice",
-                details={
-                    "found": found_first_person[:5],  # Limit to first 5 matches
-                    "suggestion": "Use third-person voice (e.g., 'Creates files...' instead of 'I create files...')",
-                },
-                location=self._skill_md_location(skill),
-            )
-
-        return self._pass(
-            "Description uses appropriate voice",
             location=self._skill_md_location(skill),
         )
 

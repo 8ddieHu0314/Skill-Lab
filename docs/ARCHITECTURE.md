@@ -44,11 +44,11 @@ src/skill_lab/
 ├── checks/
 │   ├── base.py               # StaticCheck abstract base class
 │   └── static/               # Check implementations
-│       ├── structure.py      # 5 checks
+│       ├── structure.py      # 4 checks
 │       ├── frontmatter.py    # 3 checks
-│       ├── naming.py         # 5 checks
-│       ├── description.py    # 5 checks
-│       └── content.py        # 6 checks
+│       ├── naming.py         # 3 checks
+│       ├── description.py    # 4 checks
+│       └── content.py        # 4 checks
 ├── evaluators/
 │   ├── static_evaluator.py   # Orchestrates static check execution
 │   └── trace_evaluator.py    # Orchestrates trace check execution
@@ -123,7 +123,7 @@ src/skill_lab/
                     │                    │                    │              │
             ┌───────────────┐    ┌───────────────┐    ┌───────────────┐ ┌──────────┐
             │ structure.py  │ │frontmatter.py│ │  naming.py  │ │description.py│ │content.py│
-            │ (5 checks)    │ │  (3 checks)  │ │ (4 checks)  │ │  (5 checks)  │ │(6 checks)│
+            │ (4 checks)    │ │  (3 checks)  │ │ (3 checks)  │ │  (4 checks)  │ │(4 checks)│
             └───────────────┘    └───────────────┘    └───────────────┘ └──────────┘
 ```
 
@@ -289,7 +289,7 @@ def run(self, skill: Skill) -> CheckResult:
 from skill_lab.checks.static import content, description, frontmatter, naming, structure
 
 # This import executes the module code, which runs @register_check decorators
-# Now registry.get_all() returns all 21 check classes
+# Now registry.get_all() returns all 18 check classes
 ```
 
 #### Why This Pattern?
@@ -401,7 +401,7 @@ sklab eval-trace ./my-skill --trace ./execution.jsonl [--format console|json] [-
 
 **Spec Filtering:**
 - `--spec-only` / `-s`: Only run checks required by the Agent Skills spec (10 checks)
-- `--suggestions-only`: List only quality suggestion checks (14 checks)
+- `--suggestions-only`: List only quality suggestion checks (8 checks)
 
 **Trigger Testing:**
 - `--runtime` / `-r`: Select runtime adapter (codex, claude, or auto-detect)
@@ -644,7 +644,7 @@ class MyNewCheck(StaticCheck):
 
 **Check Categories:**
 - **Spec-required checks** (10): Must pass to be valid per the Agent Skills spec. Use `spec_required = True` and `Severity.ERROR`.
-- **Quality suggestions** (14): Best practices that improve skill quality. Use `spec_required = False` (default) with `Severity.WARNING` or `Severity.INFO`.
+- **Quality suggestions** (8): Best practices that improve skill quality. Use `spec_required = False` (default) with `Severity.WARNING` or `Severity.INFO`.
 
 ---
 

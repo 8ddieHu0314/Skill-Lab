@@ -11,13 +11,6 @@ from skill_lab.core.registry import register_check
 # Maximum line count for skill body
 MAX_LINE_COUNT = 500
 
-# Pattern for hardcoded dates (common formats)
-DATE_PATTERNS = [
-    r"\b\d{4}-\d{2}-\d{2}\b",  # 2024-01-15
-    r"\b\d{1,2}/\d{1,2}/\d{2,4}\b",  # 1/15/2024 or 01/15/24
-    r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{4}\b",  # January 15, 2024
-]
-
 # Patterns that indicate code examples
 CODE_EXAMPLE_PATTERNS = [
     r"```",  # Fenced code blocks
@@ -112,45 +105,6 @@ class HasExamplesCheck(StaticCheck):
         return self._fail(
             "Content does not contain code examples",
             details={"suggestion": "Add code examples using fenced code blocks (```)"},
-            location=self._skill_md_location(skill),
-        )
-
-
-
-@register_check
-class NoTimeSensitiveCheck(StaticCheck):
-    """Check for hardcoded dates (quality suggestion, not in spec)."""
-
-    check_id: ClassVar[str] = "content.no-time-sensitive"
-    check_name: ClassVar[str] = "No Time-Sensitive Content"
-    description: ClassVar[str] = "Content does not contain hardcoded dates"
-    severity: ClassVar[Severity] = Severity.INFO
-    dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
-
-    def run(self, skill: Skill) -> CheckResult:
-        body = skill.body
-        found_dates: list[str] = []
-
-        for pattern in DATE_PATTERNS:
-            matches = re.findall(pattern, body)
-            found_dates.extend(matches)
-
-        if found_dates:
-            # Filter out common false positives (version numbers like 1.0.0)
-            real_dates = [d for d in found_dates if not re.match(r"^\d+\.\d+\.\d+$", d)]
-
-            if real_dates:
-                return self._fail(
-                    "Content contains hardcoded dates",
-                    details={
-                        "found": real_dates[:5],
-                        "suggestion": "Avoid hardcoded dates that may become stale",
-                    },
-                    location=self._skill_md_location(skill),
-                )
-
-        return self._pass(
-            "No hardcoded dates found",
             location=self._skill_md_location(skill),
         )
 
