@@ -1,7 +1,7 @@
 [project]
 name = "skill-lab"
 version = "0.1.0"
-description = "A Python CLI tool for evaluating agent skills through static analysis and quality checks"
+description = "A Python CLI tool for evaluating agent skills through static analysis, trigger testing, and trace analysis"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
@@ -44,6 +44,7 @@ dev = [
     "pytest-cov>=4.0",
     "mypy>=1.0",
     "ruff>=0.1.0",
+    "types-PyYAML>=6.0",
 ]
 
 [project.scripts]

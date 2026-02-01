@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Python CLI tool that evaluates agent skills (SKILL.md files) through static analysis and trigger testing. Produces a 0-100 quality score based on 18 checks across 4 dimensions.
 
+**Current Release:** v0.1.0 on PyPI includes static analysis (18 checks). See [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) for the version roadmap.
+
 ## Naming Convention
 
 | Name | Usage |
@@ -24,23 +26,29 @@ Python CLI tool that evaluates agent skills (SKILL.md files) through static anal
 |----------|----------|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Tech stack, data flow, CLI commands, design patterns |
 | [docs/CHECKS.md](docs/CHECKS.md) | All 18 checks with descriptions and scoring weights |
-| [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) | Roadmap and phase status |
+| [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) | Vision, roadmap overview, design decisions |
+| [docs/versions/](docs/versions/) | Detailed specs for each version (v0.1.0 - v1.0.0) |
 
 **After code changes**, update relevant docs:
 - `ARCHITECTURE.md` - New modules, directory changes, CLI commands
 - `CHECKS.md` - Check additions/modifications
-- `IMPLEMENTATION_PLAN.md` - Phase status updates
+- `docs/versions/vX.X.X-*.md` - Version-specific deliverables and status
 
 ## Quick Start
 
 ```bash
-pip install -e ".[dev]"                 # Install with dev dependencies
-sklab evaluate ./my-skill               # Run evaluation
-pytest tests/ -v                        # Run all tests
-pytest tests/test_naming.py -v          # Run single test file
+pip install -e ".[dev]"                    # Install with dev dependencies
+sklab evaluate ./my-skill                  # Run static analysis
+sklab evaluate ./my-skill --spec-only      # Spec-required checks only
+sklab test-triggers ./my-skill             # Run trigger tests (requires Codex/Claude CLI)
+sklab eval-trace ./my-skill --trace x.jsonl # Analyze execution trace
+pytest tests/ -v                           # Run all tests
+pytest tests/test_naming.py -v             # Run single test file
 pytest tests/test_naming.py::test_name -v  # Run single test
-mypy src/                               # Type check (strict mode)
-ruff check src/                         # Lint
+pytest tests/ --cov=skill_lab              # Run with coverage
+mypy src/                                  # Type check (strict mode)
+ruff check src/                            # Lint
+ruff format src/                           # Format code
 ```
 
 For full CLI options, see [ARCHITECTURE.md - CLI Commands](docs/ARCHITECTURE.md#cli-commands-clipy).

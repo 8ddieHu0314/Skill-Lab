@@ -1,10 +1,10 @@
 # Skill Lab
 
-[![PyPI version](https://badge.fury.io/py/skill-lab.svg?v=0.1.0)](https://badge.fury.io/py/skill-lab)
+[![PyPI version](https://badge.fury.io/py/skill-lab.svg?v=0.2.0)](https://badge.fury.io/py/skill-lab)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A Python CLI tool for evaluating agent skills through static analysis and quality checks.
+A Python CLI tool for evaluating agent skills through static analysis, trigger testing, and trace analysis.
 
 ## Features
 
@@ -14,6 +14,8 @@ A Python CLI tool for evaluating agent skills through static analysis and qualit
   - Naming: Format, directory matching
   - Description: Length, trigger information
   - Content: Examples, line budget, reference depth
+- **Trigger Testing**: Test skill activation with 4 trigger types (explicit, implicit, contextual, negative)
+- **Trace Analysis**: Validate execution traces with 5 check types (command presence, file creation, event sequence, loop detection, efficiency)
 - **Quality Scoring**: Weighted 0-100 score based on check results
 - **Multiple Output Formats**: Console (rich formatting) and JSON
 
@@ -84,6 +86,61 @@ sklab list-checks --dimension structure
 sklab list-checks --spec-only
 ```
 
+### Trigger Testing
+
+Test whether skills activate correctly with real LLM execution:
+
+```bash
+# Run trigger tests (requires Codex or Claude CLI installed)
+sklab test-triggers ./my-skill
+
+# Specify runtime
+sklab test-triggers ./my-skill --runtime codex
+sklab test-triggers ./my-skill --runtime claude
+
+# Filter by trigger type
+sklab test-triggers ./my-skill --type explicit
+sklab test-triggers ./my-skill --type negative
+```
+
+**Prerequisites:** Trigger testing requires one of:
+- **Codex CLI**: Install and configure per [OpenAI Codex docs](https://github.com/openai/codex)
+- **Claude CLI**: Install via `npm install -g @anthropic-ai/claude-code`
+
+**Test Definition** (`tests/triggers.yaml`):
+
+```yaml
+skill: my-skill
+test_cases:
+  - id: explicit-1
+    type: explicit
+    prompt: "$my-skill do something"
+    expected: trigger
+  - id: negative-1
+    type: negative
+    prompt: "unrelated question"
+    expected: no_trigger
+```
+
+### Trace Analysis
+
+Analyze execution traces with custom checks:
+
+```bash
+sklab eval-trace ./my-skill --trace ./execution.jsonl
+```
+
+**Check Definition** (`tests/trace_checks.yaml`):
+
+```yaml
+checks:
+  - id: npm-install-ran
+    type: command_presence
+    pattern: "npm install"
+  - id: package-json-created
+    type: file_creation
+    path: "package.json"
+```
 
 ## Output Format (JSON)
 

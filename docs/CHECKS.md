@@ -1,6 +1,10 @@
 # Skill-Lab Quality Checks
 
-This document lists all 18 static checks used to evaluate agent skills, aligned with the [Agent Skills Specification](https://agentskills.io/specification).
+This document lists all checks used to evaluate agent skills:
+- **18 Static Checks**: Validate SKILL.md structure, naming, description, and content
+- **5 Trace Check Types**: Validate execution traces (command presence, file creation, sequences, loops, efficiency)
+
+Static checks are aligned with the [Agent Skills Specification](https://agentskills.io/specification).
 
 ## Filtering Checks
 
@@ -196,3 +200,69 @@ skill-name/
 ├── references/       # Optional - additional documentation
 └── assets/           # Optional - static resources
 ```
+
+---
+
+## Trace Checks (5 Types)
+
+Trace checks analyze execution traces (JSONL) to validate skill behavior. Define checks in `tests/trace_checks.yaml`.
+
+```bash
+sklab eval-trace ./my-skill --trace ./execution.jsonl
+```
+
+| Check Type | Description | Required Fields |
+|------------|-------------|-----------------|
+| `command_presence` | Verify a command was executed | `pattern` |
+| `file_creation` | Verify a file was created | `path` |
+| `event_sequence` | Verify commands ran in order | `sequence` |
+| `loop_detection` | Detect excessive command repetition | `max_retries` (default: 3) |
+| `efficiency` | Check command count limits | `max_commands` |
+
+### Example Definition
+
+```yaml
+# tests/trace_checks.yaml
+checks:
+  - id: npm-install-ran
+    type: command_presence
+    pattern: "npm install"
+
+  - id: package-json-created
+    type: file_creation
+    path: "package.json"
+
+  - id: correct-sequence
+    type: event_sequence
+    sequence: ["npm init", "npm install", "npm run build"]
+
+  - id: no-excessive-retries
+    type: loop_detection
+    max_retries: 3
+
+  - id: command-count-limit
+    type: efficiency
+    max_commands: 20
+```
+
+### Check Details
+
+**command_presence**
+- Searches trace for commands matching the `pattern` (substring match)
+- Passes if at least one matching command was executed
+
+**file_creation**
+- Checks if the specified `path` exists after execution
+- Path is relative to the skill directory
+
+**event_sequence**
+- Verifies commands were executed in the specified order
+- All commands in `sequence` must appear, in order (not necessarily consecutive)
+
+**loop_detection**
+- Detects if any command was repeated more than `max_retries` times
+- Helps catch thrashing or infinite retry loops
+
+**efficiency**
+- Fails if total command count exceeds `max_commands`
+- Useful for ensuring skills don't run excessive operations
