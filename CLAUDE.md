@@ -38,10 +38,10 @@ Python CLI tool that evaluates agent skills (SKILL.md files) through static anal
 
 ```bash
 pip install -e ".[dev]"                    # Install with dev dependencies
+sklab -v                                   # Show version
 sklab evaluate ./my-skill                  # Run static analysis
-sklab evaluate ./my-skill --spec-only      # Spec-required checks only
-sklab trigger ./my-skill                   # Run trigger tests (requires Codex/Claude CLI)
-sklab eval-trace ./my-skill --trace x.jsonl # Analyze execution trace
+sklab evaluate ./my-skill -s               # Spec-required checks only
+sklab trigger ./my-skill                   # Run trigger tests (requires Claude CLI)
 pytest tests/ -v                           # Run all tests
 pytest tests/test_naming.py -v             # Run single test file
 pytest tests/test_naming.py::test_name -v  # Run single test

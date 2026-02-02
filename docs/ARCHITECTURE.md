@@ -383,29 +383,38 @@ Built with **Typer** which provides:
 - Path validation (`exists=True`, `dir_okay=True`)
 
 ```bash
+# Global options
+sklab -v, --version              # Show version
+sklab -h, --help                 # Show help
+
 # Main evaluation command
-sklab evaluate ./my-skill [--format console|json] [--output file.json] [--verbose] [--spec-only]
+sklab evaluate ./my-skill [-f console|json] [-o file.json] [-V] [-s]
 
 # Quick validation (exit 0 or 1)
-sklab validate ./my-skill [--spec-only]
+sklab validate ./my-skill [-s]
 
 # List available checks
-sklab list-checks [--dimension structure|naming|description|content] [--spec-only] [--suggestions-only]
+sklab list-checks [-d structure|naming|description|content] [-s] [--suggestions-only]
 
-# Trigger testing (Phase 2)
-sklab trigger ./my-skill [--runtime codex|claude] [--type explicit|implicit|contextual|negative] [--format console|json]
+# Trigger testing
+sklab trigger ./my-skill [-t explicit|implicit|contextual|negative] [-f console|json] [-o file.json]
 
-# Trace evaluation (Phase 3)
-sklab eval-trace ./my-skill --trace ./execution.jsonl [--format console|json] [--output file.json]
+# Trace evaluation (hidden, coming in v0.3.0)
+sklab eval-trace ./my-skill --trace ./execution.jsonl [-f console|json] [-o file.json]
 ```
 
-**Spec Filtering:**
-- `--spec-only` / `-s`: Only run checks required by the Agent Skills spec (10 checks)
+**Global Flags:**
+- `-v` / `--version`: Show package version
+- `-h` / `--help`: Show help (works on all commands)
+
+**Evaluation Flags:**
+- `-V` / `--verbose`: Show all checks, not just failures
+- `-s` / `--spec-only`: Only run checks required by the Agent Skills spec (10 checks)
 - `--suggestions-only`: List only quality suggestion checks (8 checks)
 
 **Trigger Testing:**
-- `--runtime` / `-r`: Select runtime adapter (codex, claude, or auto-detect)
-- `--type` / `-t`: Filter by trigger type (explicit, implicit, contextual, negative)
+- `-t` / `--type`: Filter by trigger type (explicit, implicit, contextual, negative)
+- Runtime defaults to Claude CLI (Codex support coming in v0.3.0)
 
 ---
 
@@ -429,7 +438,7 @@ Structured output for programmatic use:
 
 ---
 
-## Trigger Testing (Phase 2)
+## Trigger Testing (v0.2.0)
 
 Trigger testing verifies that skills activate correctly for different prompt types.
 
@@ -450,11 +459,11 @@ Trigger testing verifies that skills activate correctly for different prompt typ
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
 │  1. Load test cases from YAML                                           │
-│     tests/scenarios.yaml → Given/When/Then DSL                          │
-│     tests/triggers.yaml  → Simple flat format                           │
+│     tests/triggers.yaml → Simple flat format                            │
+│     (tests/scenarios.yaml → GWT DSL, coming in v0.3.0)                  │
 │                              │                                          │
 │  2. Execute prompts via Runtime Adapter                                 │
-│     RuntimeAdapter (Codex CLI or Claude CLI)                            │
+│     RuntimeAdapter (Claude CLI; Codex CLI in v0.3.0)                    │
 │     → Skill metadata injected into context                              │
 │     → Prompt sent to LLM                                                │
 │     → Execution trace captured as JSONL                                 │
@@ -464,6 +473,7 @@ Trigger testing verifies that skills activate correctly for different prompt typ
 │                              │                                          │
 │  4. Report trigger success/failure                                      │
 │     TriggerReport → pass rate by type, failures list                    │
+│     Progress spinner shows current test during execution                │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -526,12 +536,29 @@ class RuntimeAdapter(ABC):
     def parse_trace(self, trace_path: Path) -> Iterator[TraceEvent]: ...
 ```
 
-**CodexRuntime**: Executes via `codex exec --json --full-auto`
 **ClaudeRuntime**: Executes via `claude --print --output-format stream-json`
+**CodexRuntime**: Executes via `codex exec --json --full-auto` (v0.3.0)
 
-### Test Definition Formats
+### Test Definition Format
 
-**Given/When/Then DSL** (`tests/scenarios.yaml`):
+**Simple Format** (`tests/triggers.yaml`) - v0.2.0:
+```yaml
+skill: my-skill
+test_cases:
+  - id: explicit-1
+    name: "Direct skill invocation"
+    type: explicit
+    prompt: "$my-skill do something"
+    expected: trigger
+
+  - id: negative-1
+    name: "Should not trigger"
+    type: negative
+    prompt: "How do I fix this useState hook?"
+    expected: no_trigger
+```
+
+**Given/When/Then DSL** (`tests/scenarios.yaml`) - coming in v0.3.0:
 ```yaml
 skill: my-skill
 scenarios:
@@ -545,16 +572,6 @@ scenarios:
     then:
       - skill_triggered: true
       - exit_code: 0
-```
-
-**Simple Format** (`tests/triggers.yaml`):
-```yaml
-skill: my-skill
-test_cases:
-  - id: explicit-1
-    type: explicit
-    prompt: "$my-skill do something"
-    expected: trigger
 ```
 
 ---
@@ -648,7 +665,9 @@ class MyNewCheck(StaticCheck):
 
 ---
 
-## Trace Analysis (Phase 3)
+## Trace Analysis (v0.3.0)
+
+> **Note:** The `sklab eval-trace` command is hidden in v0.2.0 and will be fully available in v0.3.0.
 
 Trace analysis validates execution traces against YAML-defined checks. This enables skill authors to define custom checks for command presence, file creation, event sequences, and loop detection.
 
