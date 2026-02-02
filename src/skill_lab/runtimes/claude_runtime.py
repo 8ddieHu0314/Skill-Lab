@@ -84,15 +84,18 @@ class ClaudeRuntime(RuntimeAdapter):
                 captured_lines.append(line)
 
                 # Check if we should stop early
-                if stop_on_skill and not skill_triggered:
-                    if self._check_skill_trigger(line, stop_on_skill):
-                        skill_triggered = True
-                        proc.terminate()
-                        try:
-                            proc.wait(timeout=5)
-                        except subprocess.TimeoutExpired:
-                            proc.kill()
-                        break
+                if (
+                    stop_on_skill
+                    and not skill_triggered
+                    and self._check_skill_trigger(line, stop_on_skill)
+                ):
+                    skill_triggered = True
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                    break
 
             # Wait for process to complete if not terminated
             if proc.poll() is None:
@@ -200,12 +203,11 @@ class ClaudeRuntime(RuntimeAdapter):
 
         # Split by double newline (formatted) or single newline (compact JSONL)
         # For formatted traces, objects are separated by blank lines
-        if "\n\n" in content:
-            # Formatted trace: split by blank lines
-            chunks = content.split("\n\n")
-        else:
-            # Compact JSONL: split by single newlines
-            chunks = content.strip().split("\n")
+        chunks = (
+            content.split("\n\n")
+            if "\n\n" in content
+            else content.strip().split("\n")
+        )
 
         for chunk in chunks:
             chunk = chunk.strip()

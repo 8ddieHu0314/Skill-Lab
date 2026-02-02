@@ -86,15 +86,18 @@ class CodexRuntime(RuntimeAdapter):
                 captured_lines.append(line)
 
                 # Check if we should stop early
-                if stop_on_skill and not skill_triggered:
-                    if self._check_skill_trigger(line, stop_on_skill):
-                        skill_triggered = True
-                        proc.terminate()
-                        try:
-                            proc.wait(timeout=5)
-                        except subprocess.TimeoutExpired:
-                            proc.kill()
-                        break
+                if (
+                    stop_on_skill
+                    and not skill_triggered
+                    and self._check_skill_trigger(line, stop_on_skill)
+                ):
+                    skill_triggered = True
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                    break
 
             # Wait for process to complete if not terminated
             if proc.poll() is None:
@@ -139,16 +142,14 @@ class CodexRuntime(RuntimeAdapter):
 
         # Check for skill_invocation item type (Codex format)
         item = event.get("item", {})
-        if item.get("type") == "skill_invocation":
-            if skill_name in (item.get("command") or ""):
-                return True
+        if item.get("type") == "skill_invocation" and skill_name in (
+            item.get("command") or ""
+        ):
+            return True
 
         # Check for explicit $skill-name or skill:skill-name patterns
         raw_str = str(event)
-        if f"${skill_name}" in raw_str or f"skill:{skill_name}" in raw_str:
-            return True
-
-        return False
+        return f"${skill_name}" in raw_str or f"skill:{skill_name}" in raw_str
 
     def _format_trace(self, raw_output: str) -> str:
         """Format raw JSONL output for human readability.
@@ -187,12 +188,11 @@ class CodexRuntime(RuntimeAdapter):
         content = trace_path.read_text()
 
         # Split by double newline (formatted) or single newline (compact JSONL)
-        if "\n\n" in content:
-            # Formatted trace: split by blank lines
-            chunks = content.split("\n\n")
-        else:
-            # Compact JSONL: split by single newlines
-            chunks = content.strip().split("\n")
+        chunks = (
+            content.split("\n\n")
+            if "\n\n" in content
+            else content.strip().split("\n")
+        )
 
         for chunk in chunks:
             chunk = chunk.strip()
