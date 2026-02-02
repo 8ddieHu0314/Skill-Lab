@@ -151,59 +151,10 @@ class CodexRuntime(RuntimeAdapter):
         raw_str = str(event)
         return f"${skill_name}" in raw_str or f"skill:{skill_name}" in raw_str
 
-    def _format_trace(self, raw_output: str) -> str:
-        """Format raw JSONL output for human readability.
-
-        Converts compact single-line JSON objects to pretty-printed format
-        with blank lines between objects.
-
-        Args:
-            raw_output: Raw JSONL string from Codex CLI.
-
-        Returns:
-            Formatted trace string with pretty-printed JSON objects.
-        """
-        formatted_objects: list[str] = []
-        for line in raw_output.strip().split("\n"):
-            if not line:
-                continue
-            try:
-                obj = json.loads(line)
-                formatted_objects.append(json.dumps(obj, indent=2))
-            except json.JSONDecodeError:
-                # Keep malformed lines as-is
-                formatted_objects.append(line)
-
-        return "\n\n".join(formatted_objects) + "\n" if formatted_objects else ""
-
     def parse_trace(self, trace_path: Path) -> Iterator[TraceEvent]:
-        """Parse trace into normalized TraceEvent objects.
-
-        Handles both compact JSONL (one object per line) and formatted
-        traces (multi-line pretty-printed JSON with blank line separators).
-        """
-        if not trace_path.exists():
-            return
-
-        content = trace_path.read_text()
-
-        # Split by double newline (formatted) or single newline (compact JSONL)
-        chunks = (
-            content.split("\n\n")
-            if "\n\n" in content
-            else content.strip().split("\n")
-        )
-
-        for chunk in chunks:
-            chunk = chunk.strip()
-            if not chunk:
-                continue
-            try:
-                raw = json.loads(chunk)
-                yield self._normalize_event(raw)
-            except json.JSONDecodeError:
-                # Skip malformed lines
-                continue
+        """Parse Codex trace into normalized TraceEvent objects."""
+        for raw in self._parse_trace_chunks(trace_path):
+            yield self._normalize_event(raw)
 
     def _normalize_event(self, raw: dict[str, Any]) -> TraceEvent:
         """Convert Codex event to normalized TraceEvent."""

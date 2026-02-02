@@ -1,8 +1,10 @@
 """Abstract base class for runtime adapters."""
 
+import json
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 from skill_lab.core.models import TraceEvent
 
@@ -68,3 +70,61 @@ class RuntimeAdapter(ABC):
         Default implementation returns True.
         """
         return True
+
+    def _format_trace(self, raw_output: str) -> str:
+        """Format raw JSONL output for human readability.
+
+        Converts compact single-line JSON objects to pretty-printed format
+        with blank lines between objects.
+
+        Args:
+            raw_output: Raw JSONL string from CLI.
+
+        Returns:
+            Formatted trace string with pretty-printed JSON objects.
+        """
+        formatted_objects: list[str] = []
+        for line in raw_output.strip().split("\n"):
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+                formatted_objects.append(json.dumps(obj, indent=2))
+            except json.JSONDecodeError:
+                # Keep malformed lines as-is
+                formatted_objects.append(line)
+
+        return "\n\n".join(formatted_objects) + "\n" if formatted_objects else ""
+
+    def _parse_trace_chunks(self, trace_path: Path) -> Iterator[dict[str, Any]]:
+        """Parse trace file into raw JSON objects.
+
+        Handles both compact JSONL (one object per line) and formatted
+        traces (multi-line pretty-printed JSON with blank line separators).
+
+        Args:
+            trace_path: Path to the trace file.
+
+        Yields:
+            Parsed JSON objects from the trace.
+        """
+        if not trace_path.exists():
+            return
+
+        content = trace_path.read_text()
+
+        # Split by double newline (formatted) or single newline (compact JSONL)
+        chunks = (
+            content.split("\n\n")
+            if "\n\n" in content
+            else content.strip().split("\n")
+        )
+
+        for chunk in chunks:
+            chunk = chunk.strip()
+            if not chunk:
+                continue
+            try:
+                yield json.loads(chunk)
+            except json.JSONDecodeError:
+                continue
