@@ -258,13 +258,14 @@ def trigger(
         ),
     ],
     runtime: Annotated[
-        str | None,
+        str,
         typer.Option(
             "--runtime",
             "-r",
-            help="Runtime to use (codex, claude, or auto-detect)",
+            help="Runtime to use (claude only, codex coming in v0.3.0)",
+            hidden=True,
         ),
-    ] = None,
+    ] = "claude",
     type_filter: Annotated[
         str | None,
         typer.Option(
@@ -310,9 +311,19 @@ def trigger(
             console.print(f"Valid types: {', '.join(t.value for t in TriggerType)}")
             raise typer.Exit(code=1) from None
 
-    # Run evaluation
+    # Run evaluation with progress display
     evaluator = TriggerEvaluator(runtime=runtime)
-    report = evaluator.evaluate(skill_path, type_filter=trigger_type)
+
+    with console.status("", spinner="dots") as status:
+        def update_progress(current: int, total: int, test_name: str) -> None:
+            status.update(f"[cyan]Running trigger tests[/cyan] [{current}/{total}]: {test_name}")
+
+        status.update("[cyan]Loading trigger tests...[/cyan]")
+        report = evaluator.evaluate(
+            skill_path,
+            type_filter=trigger_type,
+            progress_callback=update_progress,
+        )
 
     # Output results
     if format == OutputFormat.json:
@@ -336,7 +347,8 @@ def _print_trigger_report(report: TriggerReport) -> None:
     # Header
     console.print()
     console.print(f"[bold]Trigger Test Report: {report.skill_name}[/bold]")
-    console.print(f"Runtime: {report.runtime}")
+    console.print(f"[bold]Runtime: {report.runtime}[/bold]")
+    console.print(f"[bold]Duration: {report.duration_ms:.1f}ms[/bold]")
     console.print()
 
     # Summary
@@ -378,10 +390,8 @@ def _print_trigger_report(report: TriggerReport) -> None:
             console.print(f"  {type_name}: [{color}]{passed}/{total} ({pct:.0f}%)[/{color}]")
         console.print()
 
-    console.print(f"Duration: {report.duration_ms:.1f}ms")
 
-
-@app.command("eval-trace")
+@app.command("eval-trace", hidden=True)
 def eval_trace(
     skill_path: Annotated[
         Path,

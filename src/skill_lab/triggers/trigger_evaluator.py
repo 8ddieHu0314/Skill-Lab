@@ -1,6 +1,7 @@
 """Orchestrate trigger test execution."""
 
 import time
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -46,12 +47,14 @@ class TriggerEvaluator:
         self,
         skill_path: Path | str,
         type_filter: TriggerType | None = None,
+        progress_callback: Callable[[int, int, str], None] | None = None,
     ) -> TriggerReport:
         """Run trigger tests for a skill.
 
         Args:
             skill_path: Path to the skill directory.
             type_filter: Optional filter to run only tests of a specific type.
+            progress_callback: Optional callback(current, total, test_name) for progress updates.
 
         Returns:
             TriggerReport with all test results.
@@ -90,7 +93,10 @@ class TriggerEvaluator:
                     )
                 )
         else:
-            for test_case in test_cases:
+            total = len(test_cases)
+            for i, test_case in enumerate(test_cases):
+                if progress_callback:
+                    progress_callback(i + 1, total, test_case.name)
                 result = self._run_single_test(test_case, skill_path, runtime)
                 results.append(result)
 
