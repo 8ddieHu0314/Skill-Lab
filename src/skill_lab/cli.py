@@ -8,6 +8,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from skill_lab import __version__
 from skill_lab.core.models import EvalDimension, TraceReport, TriggerReport, TriggerType
 from skill_lab.core.registry import registry
 from skill_lab.evaluators.static_evaluator import StaticEvaluator
@@ -22,6 +23,30 @@ app = typer.Typer(
     add_completion=False,
 )
 console = Console()
+
+
+def version_callback(value: bool) -> None:
+    """Print version and exit."""
+    if value:
+        console.print(f"sklab {__version__}")
+        raise typer.Exit()
+
+
+@app.callback(invoke_without_command=True)
+def app_callback(
+    version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            "-V",
+            help="Show version and exit.",
+            callback=version_callback,
+            is_eager=True,
+        ),
+    ] = False,
+) -> None:
+    """Evaluate agent skills through static analysis and quality checks."""
+    pass
 
 
 class OutputFormat(str, Enum):
