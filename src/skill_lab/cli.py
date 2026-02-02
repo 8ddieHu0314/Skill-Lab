@@ -60,15 +60,11 @@ class OutputFormat(str, Enum):
 @app.command()
 def evaluate(
     skill_path: Annotated[
-        Path,
+        Path | None,
         typer.Argument(
-            help="Path to the skill directory",
-            exists=True,
-            file_okay=False,
-            dir_okay=True,
-            resolve_path=True,
+            help="Path to the skill directory (defaults to current directory)",
         ),
-    ],
+    ] = None,
     output: Annotated[
         Path | None,
         typer.Option(
@@ -103,6 +99,23 @@ def evaluate(
     ] = False,
 ) -> None:
     """Evaluate a skill and generate a quality report."""
+    # Resolve default path and validate
+    if skill_path is None:
+        skill_path = Path.cwd()
+    else:
+        skill_path = skill_path.resolve()
+
+    if not skill_path.exists():
+        console.print(f"[red]Error: Path does not exist: {skill_path}[/red]")
+        raise typer.Exit(code=1)
+    if not skill_path.is_dir():
+        console.print(f"[red]Error: Path is not a directory: {skill_path}[/red]")
+        raise typer.Exit(code=1)
+    if not (skill_path / "SKILL.md").exists():
+        console.print(f"[red]Error: No SKILL.md found in {skill_path}[/red]")
+        console.print("[dim]This directory does not appear to be a skill folder.[/dim]")
+        raise typer.Exit(code=1)
+
     try:
         evaluator = StaticEvaluator(spec_only=spec_only)
         report = evaluator.evaluate(skill_path)
@@ -129,15 +142,11 @@ def evaluate(
 @app.command()
 def validate(
     skill_path: Annotated[
-        Path,
+        Path | None,
         typer.Argument(
-            help="Path to the skill directory",
-            exists=True,
-            file_okay=False,
-            dir_okay=True,
-            resolve_path=True,
+            help="Path to the skill directory (defaults to current directory)",
         ),
-    ],
+    ] = None,
     spec_only: Annotated[
         bool,
         typer.Option(
@@ -148,6 +157,23 @@ def validate(
     ] = False,
 ) -> None:
     """Quick validation that reports only errors."""
+    # Resolve default path and validate
+    if skill_path is None:
+        skill_path = Path.cwd()
+    else:
+        skill_path = skill_path.resolve()
+
+    if not skill_path.exists():
+        console.print(f"[red]Error: Path does not exist: {skill_path}[/red]")
+        raise typer.Exit(code=1)
+    if not skill_path.is_dir():
+        console.print(f"[red]Error: Path is not a directory: {skill_path}[/red]")
+        raise typer.Exit(code=1)
+    if not (skill_path / "SKILL.md").exists():
+        console.print(f"[red]Error: No SKILL.md found in {skill_path}[/red]")
+        console.print("[dim]This directory does not appear to be a skill folder.[/dim]")
+        raise typer.Exit(code=1)
+
     try:
         evaluator = StaticEvaluator(spec_only=spec_only)
         passed, errors = evaluator.validate(skill_path)

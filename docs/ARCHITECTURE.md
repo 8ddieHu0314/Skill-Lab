@@ -387,21 +387,23 @@ Built with **Typer** which provides:
 sklab -v, --version              # Show version
 sklab -h, --help                 # Show help
 
-# Main evaluation command
-sklab evaluate ./my-skill [-f console|json] [-o file.json] [-V] [-s]
+# Main evaluation command (defaults to current directory if path omitted)
+sklab evaluate [./my-skill] [-f console|json] [-o file.json] [-V] [-s]
 
-# Quick validation (exit 0 or 1)
-sklab validate ./my-skill [-s]
+# Quick validation (exit 0 or 1, defaults to current directory)
+sklab validate [./my-skill] [-s]
 
 # List available checks
 sklab list-checks [-d structure|naming|description|content] [-s] [--suggestions-only]
 
-# Trigger testing
-sklab trigger ./my-skill [-t explicit|implicit|contextual|negative] [-f console|json] [-o file.json]
+# Trigger testing (defaults to current directory if path omitted)
+sklab trigger [./my-skill] [-t explicit|implicit|contextual|negative] [-f console|json] [-o file.json]
 
 # Trace evaluation (hidden, coming in v0.3.0)
 sklab eval-trace ./my-skill --trace ./execution.jsonl [-f console|json] [-o file.json]
 ```
+
+**Path Defaults:** The `evaluate`, `validate`, and `trigger` commands default to the current directory when no skill path is provided. They validate that `SKILL.md` exists in the target directory.
 
 **Global Flags:**
 - `-v` / `--version`: Show package version

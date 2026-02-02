@@ -35,11 +35,13 @@ pip install -e ".[dev]"
 ## Quick Start
 
 ```bash
-# Evaluate a skill
+# Evaluate a skill (path defaults to current directory)
 sklab evaluate ./my-skill
+sklab evaluate                    # Uses current directory
 
 # Quick validation (pass/fail)
 sklab validate ./my-skill
+sklab validate                    # Uses current directory
 
 # List available checks
 sklab list-checks
@@ -91,21 +93,19 @@ sklab list-checks --spec-only
 Test whether skills activate correctly with real LLM execution:
 
 ```bash
-# Run trigger tests (requires Codex or Claude CLI installed)
+# Run trigger tests (path defaults to current directory)
 sklab trigger ./my-skill
-
-# Specify runtime
-sklab trigger ./my-skill --runtime codex
-sklab trigger ./my-skill --runtime claude
+sklab trigger                     # Uses current directory
 
 # Filter by trigger type
-sklab trigger ./my-skill --type explicit
-sklab trigger ./my-skill --type negative
+sklab trigger --type explicit
+sklab trigger --type negative
 ```
 
-**Prerequisites:** Trigger testing requires one of:
-- **Codex CLI**: Install and configure per [OpenAI Codex docs](https://github.com/openai/codex)
+**Prerequisites:** Trigger testing requires:
 - **Claude CLI**: Install via `npm install -g @anthropic-ai/claude-code`
+
+> **Note:** Codex CLI support is coming in v0.3.0.
 
 **Test Definition** (`tests/triggers.yaml`):
 
