@@ -163,11 +163,18 @@ class TriggerEvaluator:
         trace_path.parent.mkdir(parents=True, exist_ok=True)
 
         try:
+            # For positive tests (expecting trigger), enable early termination
+            # to save time and cost once the skill is detected
+            stop_on_skill = None
+            if test_case.expected.skill_triggered:
+                stop_on_skill = test_case.skill_name
+
             # Execute the prompt
             exit_code = runtime.execute(
                 prompt=test_case.prompt,
                 skill_path=skill_path,
                 trace_path=trace_path,
+                stop_on_skill=stop_on_skill,
             )
 
             # Parse and analyze the trace

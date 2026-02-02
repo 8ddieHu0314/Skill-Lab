@@ -27,8 +27,12 @@ class TraceAnalyzer:
     def skill_was_triggered(self, skill_name: str) -> bool:
         """Check if a specific skill was invoked.
 
-        Looks for skill invocation events or commands that reference
-        the skill name.
+        Detects skill invocation by looking for:
+        1. Claude Code's Skill tool invocation with the skill name
+        2. Explicit $skill-name prefix in user prompts
+        3. Codex-style skill invocation events
+
+        Does NOT match incidental references like file paths or system init.
 
         Args:
             skill_name: Name of the skill to check for.
@@ -37,18 +41,44 @@ class TraceAnalyzer:
             True if the skill appears to have been triggered.
         """
         for event in self.events:
-            # Check for explicit skill invocation events
+            raw = event.raw
+            if not isinstance(raw, dict):
+                continue
+
+            # Skip system init events (contain skill lists, not invocations)
+            if raw.get("type") == "system":
+                continue
+
+            # Check for Claude Code Skill tool invocation
+            # Format: {"type":"tool_use","name":"Skill","input":{"skill":"skill-name",...}}
+            if raw.get("name") == "Skill":
+                tool_input = raw.get("input", {})
+                if isinstance(tool_input, dict) and tool_input.get("skill") == skill_name:
+                    return True
+
+            # Nested in message content (Claude stream-json format)
+            # Format: {"type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill",...}]}}
+            message = raw.get("message", {})
+            if isinstance(message, dict):
+                content = message.get("content", [])
+                if isinstance(content, list):
+                    for item in content:
+                        if isinstance(item, dict) and item.get("name") == "Skill":
+                            tool_input = item.get("input", {})
+                            if isinstance(tool_input, dict) and tool_input.get("skill") == skill_name:
+                                return True
+
+            # Check for Codex-style skill invocation events
             if event.item_type == "skill_invocation" and skill_name in (event.command or ""):
                 return True
 
-            # Check for skill references in commands
-            if event.command and skill_name in event.command:
-                return True
-
-            # Check raw event data for skill references
-            raw_str = str(event.raw)
-            if f"${skill_name}" in raw_str or f"skill:{skill_name}" in raw_str:
-                return True
+            # Check for explicit $skill-name in user prompt (explicit trigger pattern)
+            if raw.get("type") == "user":
+                user_message = raw.get("message", {})
+                if isinstance(user_message, dict):
+                    user_content = user_message.get("content", "")
+                    if isinstance(user_content, str) and f"${skill_name}" in user_content:
+                        return True
 
         return False
 

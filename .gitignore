@@ -84,3 +84,4 @@ Thumbs.db
 !tests/fixtures/**/*.json
 downloaded-skills/
 tests/fixtures/skills/downloaded/
+.skill-lab/

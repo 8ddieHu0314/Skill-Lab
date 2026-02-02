@@ -32,6 +32,7 @@ class RuntimeAdapter(ABC):
         prompt: str,
         skill_path: Path,
         trace_path: Path,
+        stop_on_skill: str | None = None,
     ) -> int:
         """Execute a skill with the given prompt and capture the trace.
 
@@ -39,6 +40,9 @@ class RuntimeAdapter(ABC):
             prompt: The user prompt to send to the LLM.
             skill_path: Path to the skill directory.
             trace_path: Where to write the execution trace.
+            stop_on_skill: If provided, terminate execution early when
+                this skill is triggered. Used to optimize positive trigger
+                tests by avoiding unnecessary API calls after detection.
 
         Returns:
             Exit code from the runtime (0 for success).

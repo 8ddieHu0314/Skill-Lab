@@ -31,6 +31,7 @@ class ClaudeRuntime(RuntimeAdapter):
         prompt: str,
         skill_path: Path,
         trace_path: Path,
+        stop_on_skill: str | None = None,
     ) -> int:
         """Run Claude Code with the given prompt.
 
@@ -38,43 +39,155 @@ class ClaudeRuntime(RuntimeAdapter):
             prompt: The user prompt to send.
             skill_path: Path to the skill directory.
             trace_path: Where to write the trace.
+            stop_on_skill: If provided, terminate early when this skill
+                is triggered. Optimizes positive trigger tests.
 
         Returns:
             Exit code from Claude Code.
         """
         trace_path.parent.mkdir(parents=True, exist_ok=True)
 
-        try:
-            result = subprocess.run(
-                [
-                    "claude",
-                    "--print",  # Output mode
-                    "--output-format",
-                    "stream-json",
-                    "-p",
-                    prompt,
-                ],
-                capture_output=True,
-                text=True,
-                cwd=skill_path,
-                timeout=300,  # 5 minute timeout
-            )
-
-            trace_path.write_text(result.stdout)
-            return result.returncode
-
-        except subprocess.TimeoutExpired:
-            trace_path.write_text('{"type": "error", "message": "Execution timed out"}\n')
-            return 124
-
-        except FileNotFoundError:
+        # Get full path to handle Windows .CMD files
+        claude_path = shutil.which("claude")
+        if claude_path is None:
             trace_path.write_text(
                 '{"type": "error", "message": "Claude CLI not found"}\n'
             )
             return 127
 
+        try:
+            # Use streaming with Popen for early termination support
+            proc = subprocess.Popen(
+                [
+                    claude_path,
+                    "--print",  # Output mode
+                    "--verbose",  # Required for stream-json output
+                    "--output-format",
+                    "stream-json",
+                    "-p",
+                    prompt,
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                cwd=skill_path,
+            )
+
+            captured_lines: list[str] = []
+            skill_triggered = False
+
+            # Stream stdout and check for skill trigger
+            for line in proc.stdout or []:
+                line = line.rstrip("\n")
+                if not line:
+                    continue
+                captured_lines.append(line)
+
+                # Check if we should stop early
+                if stop_on_skill and not skill_triggered:
+                    if self._check_skill_trigger(line, stop_on_skill):
+                        skill_triggered = True
+                        proc.terminate()
+                        try:
+                            proc.wait(timeout=5)
+                        except subprocess.TimeoutExpired:
+                            proc.kill()
+                        break
+
+            # Wait for process to complete if not terminated
+            if proc.poll() is None:
+                try:
+                    proc.wait(timeout=300)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    captured_lines.append('{"type": "error", "message": "Execution timed out"}')
+
+            # Format trace for readability
+            formatted_trace = self._format_trace("\n".join(captured_lines))
+            trace_path.write_text(formatted_trace)
+
+            # Return 0 if we terminated early due to skill trigger (success)
+            if skill_triggered:
+                return 0
+            return proc.returncode or 0
+
+        except Exception as e:
+            trace_path.write_text(
+                f'{{\n  "type": "error",\n  "message": "Execution failed: {e}"\n}}\n'
+            )
+            return 1
+
+    def _check_skill_trigger(self, line: str, skill_name: str) -> bool:
+        """Check if a JSONL line indicates the skill was triggered.
+
+        Looks for Skill tool invocations with the specified skill name.
+
+        Args:
+            line: A single line of JSONL output.
+            skill_name: The skill name to look for.
+
+        Returns:
+            True if the skill was triggered in this event.
+        """
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            return False
+
+        # Skip system init events
+        if event.get("type") == "system":
+            return False
+
+        # Check for direct Skill tool_use (shouldn't happen at top level, but check)
+        if event.get("name") == "Skill":
+            tool_input = event.get("input", {})
+            if isinstance(tool_input, dict) and tool_input.get("skill") == skill_name:
+                return True
+
+        # Check nested in assistant message content
+        # Format: {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Skill", ...}]}}
+        message = event.get("message", {})
+        if isinstance(message, dict):
+            content = message.get("content", [])
+            if isinstance(content, list):
+                for item in content:
+                    if isinstance(item, dict) and item.get("name") == "Skill":
+                        tool_input = item.get("input", {})
+                        if isinstance(tool_input, dict) and tool_input.get("skill") == skill_name:
+                            return True
+
+        return False
+
+    def _format_trace(self, raw_output: str) -> str:
+        """Format raw JSONL output for human readability.
+
+        Converts compact single-line JSON objects to pretty-printed format
+        with blank lines between objects.
+
+        Args:
+            raw_output: Raw JSONL string from Claude CLI.
+
+        Returns:
+            Formatted trace string with pretty-printed JSON objects.
+        """
+        formatted_objects: list[str] = []
+        for line in raw_output.strip().split("\n"):
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+                formatted_objects.append(json.dumps(obj, indent=2))
+            except json.JSONDecodeError:
+                # Keep malformed lines as-is
+                formatted_objects.append(line)
+
+        return "\n\n".join(formatted_objects) + "\n" if formatted_objects else ""
+
     def parse_trace(self, trace_path: Path) -> Iterator[TraceEvent]:
         """Parse Claude trace into normalized TraceEvent objects.
+
+        Handles both compact JSONL (one object per line) and formatted
+        traces (multi-line pretty-printed JSON with blank line separators).
 
         Filters out stream_event types (text streaming deltas) as they
         are not useful for trace analysis - we only care about tool
@@ -84,11 +197,22 @@ class ClaudeRuntime(RuntimeAdapter):
             return
 
         content = trace_path.read_text()
-        for line in content.strip().split("\n"):
-            if not line:
+
+        # Split by double newline (formatted) or single newline (compact JSONL)
+        # For formatted traces, objects are separated by blank lines
+        if "\n\n" in content:
+            # Formatted trace: split by blank lines
+            chunks = content.split("\n\n")
+        else:
+            # Compact JSONL: split by single newlines
+            chunks = content.strip().split("\n")
+
+        for chunk in chunks:
+            chunk = chunk.strip()
+            if not chunk:
                 continue
             try:
-                raw = json.loads(line)
+                raw = json.loads(chunk)
                 # Skip stream events (text deltas) - not useful for analysis
                 if raw.get("type") == "stream_event":
                     continue
