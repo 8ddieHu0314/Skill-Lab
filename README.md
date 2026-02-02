@@ -92,15 +92,15 @@ Test whether skills activate correctly with real LLM execution:
 
 ```bash
 # Run trigger tests (requires Codex or Claude CLI installed)
-sklab test-triggers ./my-skill
+sklab trigger ./my-skill
 
 # Specify runtime
-sklab test-triggers ./my-skill --runtime codex
-sklab test-triggers ./my-skill --runtime claude
+sklab trigger ./my-skill --runtime codex
+sklab trigger ./my-skill --runtime claude
 
 # Filter by trigger type
-sklab test-triggers ./my-skill --type explicit
-sklab test-triggers ./my-skill --type negative
+sklab trigger ./my-skill --type explicit
+sklab trigger ./my-skill --type negative
 ```
 
 **Prerequisites:** Trigger testing requires one of:

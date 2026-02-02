@@ -393,7 +393,7 @@ sklab validate ./my-skill [--spec-only]
 sklab list-checks [--dimension structure|naming|description|content] [--spec-only] [--suggestions-only]
 
 # Trigger testing (Phase 2)
-sklab test-triggers ./my-skill [--runtime codex|claude] [--type explicit|implicit|contextual|negative] [--format console|json]
+sklab trigger ./my-skill [--runtime codex|claude] [--type explicit|implicit|contextual|negative] [--format console|json]
 
 # Trace evaluation (Phase 3)
 sklab eval-trace ./my-skill --trace ./execution.jsonl [--format console|json] [--output file.json]

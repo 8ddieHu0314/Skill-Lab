@@ -219,8 +219,8 @@ def list_checks(
     console.print(f"\nTotal: {len(checks)} checks ({spec_count} spec-required, {len(checks) - spec_count} quality suggestions)")
 
 
-@app.command("test-triggers")
-def test_triggers(
+@app.command("trigger")
+def trigger(
     skill_path: Annotated[
         Path,
         typer.Argument(
