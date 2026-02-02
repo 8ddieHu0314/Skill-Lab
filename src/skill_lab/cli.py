@@ -19,8 +19,9 @@ from skill_lab.triggers.trigger_evaluator import TriggerEvaluator
 
 app = typer.Typer(
     name="sklab",
-    help="Evaluate agent skills through static analysis and quality checks.",
+    help="Agent Skills Evaluation Framework",
     add_completion=False,
+    context_settings={"help_option_names": ["-h", "--help"]},
 )
 console = Console()
 
@@ -38,7 +39,7 @@ def app_callback(
         bool,
         typer.Option(
             "--version",
-            "-V",
+            "-v",
             help="Show version and exit.",
             callback=version_callback,
             is_eager=True,
@@ -88,7 +89,7 @@ def evaluate(
         bool,
         typer.Option(
             "--verbose",
-            "-v",
+            "-V",
             help="Show all checks, not just failures",
         ),
     ] = False,
