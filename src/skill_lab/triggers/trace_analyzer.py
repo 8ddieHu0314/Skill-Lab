@@ -31,6 +31,8 @@ class TraceAnalyzer:
         1. Claude Code's Skill tool invocation with the skill name
         2. Explicit $skill-name prefix in user prompts
         3. Codex-style skill invocation events
+        4. Bash commands referencing the skill's scripts (e.g., python scripts/skill.py)
+        5. Permission denials for skill-related commands (attempted execution)
 
         Does NOT match incidental references like file paths or system init.
 
@@ -40,6 +42,13 @@ class TraceAnalyzer:
         Returns:
             True if the skill appears to have been triggered.
         """
+        # Patterns that indicate skill execution via Bash
+        skill_script_patterns = [
+            f"scripts/{skill_name}",  # python scripts/skill-name.py
+            f"/{skill_name}/scripts/",  # ~/.claude/skills/skill-name/scripts/
+            f"skills/{skill_name}",  # .claude/skills/skill-name
+        ]
+
         for event in self.events:
             raw = event.raw
             if not isinstance(raw, dict):
@@ -63,10 +72,19 @@ class TraceAnalyzer:
                 content = message.get("content", [])
                 if isinstance(content, list):
                     for item in content:
-                        if isinstance(item, dict) and item.get("name") == "Skill":
-                            tool_input = item.get("input", {})
-                            if isinstance(tool_input, dict) and tool_input.get("skill") == skill_name:
-                                return True
+                        if isinstance(item, dict):
+                            # Check for Skill tool
+                            if item.get("name") == "Skill":
+                                tool_input = item.get("input", {})
+                                if isinstance(tool_input, dict) and tool_input.get("skill") == skill_name:
+                                    return True
+                            # Check for Bash tool with skill script
+                            if item.get("name") == "Bash":
+                                tool_input = item.get("input", {})
+                                if isinstance(tool_input, dict):
+                                    command = tool_input.get("command", "")
+                                    if any(pattern in command for pattern in skill_script_patterns):
+                                        return True
 
             # Check for Codex-style skill invocation events
             if event.item_type == "skill_invocation" and skill_name in (event.command or ""):
@@ -79,6 +97,17 @@ class TraceAnalyzer:
                     user_content = user_message.get("content", "")
                     if isinstance(user_content, str) and f"${skill_name}" in user_content:
                         return True
+
+            # Check result event for permission denials (skill tried to execute but was blocked)
+            if raw.get("type") == "result":
+                permission_denials = raw.get("permission_denials", [])
+                for denial in permission_denials:
+                    if isinstance(denial, dict):
+                        tool_input = denial.get("tool_input", {})
+                        if isinstance(tool_input, dict):
+                            command = tool_input.get("command", "")
+                            if any(pattern in command for pattern in skill_script_patterns):
+                                return True
 
         return False
 

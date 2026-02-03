@@ -32,20 +32,23 @@ class ClaudeRuntime(RuntimeAdapter):
         skill_path: Path,
         trace_path: Path,
         stop_on_skill: str | None = None,
+        working_dir: Path | None = None,
     ) -> int:
         """Run Claude Code with the given prompt.
 
         Args:
             prompt: The user prompt to send.
-            skill_path: Path to the skill directory.
+            skill_path: Path to the skill directory (for metadata).
             trace_path: Where to write the trace.
             stop_on_skill: If provided, terminate early when this skill
                 is triggered. Optimizes positive trigger tests.
+            working_dir: Directory to run from. Defaults to skill_path.
 
         Returns:
             Exit code from Claude Code.
         """
         trace_path.parent.mkdir(parents=True, exist_ok=True)
+        cwd = working_dir if working_dir is not None else skill_path
 
         # Get full path to handle Windows .CMD files
         claude_path = shutil.which("claude")
@@ -70,7 +73,7 @@ class ClaudeRuntime(RuntimeAdapter):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                cwd=skill_path,
+                cwd=cwd,
             )
 
             captured_lines: list[str] = []
@@ -123,7 +126,10 @@ class ClaudeRuntime(RuntimeAdapter):
     def _check_skill_trigger(self, line: str, skill_name: str) -> bool:
         """Check if a JSONL line indicates the skill was triggered.
 
-        Looks for Skill tool invocations with the specified skill name.
+        Looks for:
+        1. Skill tool invocations with the specified skill name
+        2. Bash commands referencing the skill's scripts
+        3. Read operations on skill files
 
         Args:
             line: A single line of JSONL output.
@@ -141,6 +147,13 @@ class ClaudeRuntime(RuntimeAdapter):
         if event.get("type") == "system":
             return False
 
+        # Patterns that indicate skill execution
+        skill_patterns = [
+            f"scripts/{skill_name}",
+            f"/{skill_name}/scripts/",
+            f"skills/{skill_name}",
+        ]
+
         # Check for direct Skill tool_use (shouldn't happen at top level, but check)
         if event.get("name") == "Skill":
             tool_input = event.get("input", {})
@@ -154,9 +167,25 @@ class ClaudeRuntime(RuntimeAdapter):
             content = message.get("content", [])
             if isinstance(content, list):
                 for item in content:
-                    if isinstance(item, dict) and item.get("name") == "Skill":
-                        tool_input = item.get("input", {})
-                        if isinstance(tool_input, dict) and tool_input.get("skill") == skill_name:
+                    if not isinstance(item, dict):
+                        continue
+                    tool_name = item.get("name")
+                    tool_input = item.get("input", {})
+
+                    # Check for Skill tool
+                    if tool_name == "Skill" and isinstance(tool_input, dict) and tool_input.get("skill") == skill_name:
+                        return True
+
+                    # Check for Bash tool running skill scripts
+                    if tool_name == "Bash" and isinstance(tool_input, dict):
+                        command = tool_input.get("command", "")
+                        if any(pattern in command for pattern in skill_patterns):
+                            return True
+
+                    # Check for Read tool accessing skill files
+                    if tool_name == "Read" and isinstance(tool_input, dict):
+                        file_path = tool_input.get("file_path", "")
+                        if any(pattern in file_path for pattern in skill_patterns):
                             return True
 
         return False

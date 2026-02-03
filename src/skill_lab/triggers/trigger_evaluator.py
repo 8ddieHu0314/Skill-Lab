@@ -6,15 +6,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from skill_lab.core.models import (
+    Skill,
     TriggerReport,
     TriggerResult,
     TriggerTestCase,
     TriggerType,
 )
 from skill_lab.core.scoring import build_summary_by_attribute, calculate_metrics
+from skill_lab.parsers.skill_parser import parse_skill
 from skill_lab.runtimes.base import RuntimeAdapter
 from skill_lab.runtimes.claude_runtime import ClaudeRuntime
 from skill_lab.runtimes.codex_runtime import CodexRuntime
+from skill_lab.triggers.failure_analyzer import FailureAnalyzer
 from skill_lab.triggers.test_loader import load_trigger_tests
 from skill_lab.triggers.trace_analyzer import TraceAnalyzer
 
@@ -33,15 +36,53 @@ class TriggerEvaluator:
         self,
         runtime: str | None = None,
         trace_dir: Path | None = None,
+        analyze_failures: bool = True,
     ) -> None:
         """Initialize the trigger evaluator.
 
         Args:
             runtime: Runtime to use ('codex', 'claude', or None for auto-detect).
             trace_dir: Directory to store execution traces.
+            analyze_failures: Whether to analyze failures and generate suggestions.
         """
         self._runtime_name = runtime
         self._trace_dir = trace_dir or Path(".skill-lab/traces")
+        self._analyze_failures = analyze_failures
+        self._failure_analyzer = FailureAnalyzer() if analyze_failures else None
+
+    def _find_project_root(self, skill_path: Path) -> Path | None:
+        """Find the project root directory containing .claude/skills/.
+
+        Traverses up from skill_path to find a directory that contains
+        .claude/skills/. This is used to run implicit tests from a location
+        where Claude can discover project-level skills.
+
+        Args:
+            skill_path: Path to the skill directory.
+
+        Returns:
+            Path to project root, or None if not found.
+        """
+        # skill_path is typically: /project/.claude/skills/skill-name
+        # We want to find: /project (which contains .claude/skills/)
+        current = skill_path.resolve()
+
+        # Traverse up to find .claude/skills/
+        for _ in range(10):  # Limit depth to avoid infinite loop
+            # Check if this directory contains .claude/skills/
+            if (current / ".claude" / "skills").is_dir():
+                return current
+
+            # Check if we're inside .claude/skills/ already
+            if current.name == "skills" and current.parent.name == ".claude":
+                return current.parent.parent
+
+            parent = current.parent
+            if parent == current:  # Reached root
+                break
+            current = parent
+
+        return None
 
     def evaluate(
         self,
@@ -62,6 +103,9 @@ class TriggerEvaluator:
         start_time = time.time()
         skill_path = Path(skill_path)
 
+        # Find project root for implicit tests (where .claude/skills/ is visible)
+        project_root = self._find_project_root(skill_path)
+
         # Load test cases
         test_cases, load_errors = load_trigger_tests(skill_path)
 
@@ -74,6 +118,11 @@ class TriggerEvaluator:
 
         # Extract skill name
         skill_name = self._get_skill_name(skill_path, test_cases)
+
+        # Parse skill for failure analysis (if enabled)
+        skill: Skill | None = None
+        if self._analyze_failures:
+            skill = parse_skill(skill_path)
 
         # Run tests
         results: list[TriggerResult] = []
@@ -97,7 +146,28 @@ class TriggerEvaluator:
             for i, test_case in enumerate(test_cases):
                 if progress_callback:
                     progress_callback(i + 1, total, test_case.name)
-                result = self._run_single_test(test_case, skill_path, runtime)
+                result = self._run_single_test(test_case, skill_path, runtime, project_root)
+
+                # Analyze failure if enabled and test failed
+                if not result.passed and self._failure_analyzer and skill:
+                    analysis = self._failure_analyzer.analyze(test_case, result, skill)
+                    if analysis:
+                        # Create new result with analysis attached
+                        result = TriggerResult(
+                            test_id=result.test_id,
+                            test_name=result.test_name,
+                            trigger_type=result.trigger_type,
+                            passed=result.passed,
+                            skill_triggered=result.skill_triggered,
+                            expected_trigger=result.expected_trigger,
+                            message=result.message,
+                            trace_path=result.trace_path,
+                            events_count=result.events_count,
+                            exit_code=result.exit_code,
+                            details=result.details,
+                            failure_analysis=analysis,
+                        )
+
                 results.append(result)
 
         # Calculate metrics
@@ -153,6 +223,7 @@ class TriggerEvaluator:
         test_case: TriggerTestCase,
         skill_path: Path,
         runtime: RuntimeAdapter,
+        project_root: Path | None = None,
     ) -> TriggerResult:
         """Execute a single trigger test.
 
@@ -160,6 +231,8 @@ class TriggerEvaluator:
             test_case: The test case to run.
             skill_path: Path to the skill directory.
             runtime: Runtime adapter to use.
+            project_root: Project root directory (where .claude/skills/ exists).
+                Used for implicit/contextual tests to test skill discovery.
 
         Returns:
             TriggerResult for this test.
@@ -167,6 +240,14 @@ class TriggerEvaluator:
         # Determine trace path
         trace_path = self._trace_dir / f"{test_case.id}.jsonl"
         trace_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Determine working directory based on trigger type:
+        # - Explicit tests: Run from skill_path (CLI expands $skill-name)
+        # - Implicit/contextual/negative: Run from project_root (Claude discovers skill)
+        if test_case.trigger_type == TriggerType.EXPLICIT:
+            working_dir = skill_path
+        else:
+            working_dir = project_root if project_root else skill_path
 
         try:
             # For positive tests (expecting trigger), enable early termination
@@ -181,6 +262,7 @@ class TriggerEvaluator:
                 skill_path=skill_path,
                 trace_path=trace_path,
                 stop_on_skill=stop_on_skill,
+                working_dir=working_dir,
             )
 
             # Parse and analyze the trace

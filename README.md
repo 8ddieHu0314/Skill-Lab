@@ -113,10 +113,12 @@ sklab trigger --type negative
 skill: my-skill
 test_cases:
   - id: explicit-1
+    name: "Direct invocation to do something"
     type: explicit
     prompt: "$my-skill do something"
     expected: trigger
   - id: negative-1
+    name: "Unrelated question (should not trigger)"
     type: negative
     prompt: "unrelated question"
     expected: no_trigger

@@ -35,16 +35,20 @@ class RuntimeAdapter(ABC):
         skill_path: Path,
         trace_path: Path,
         stop_on_skill: str | None = None,
+        working_dir: Path | None = None,
     ) -> int:
         """Execute a skill with the given prompt and capture the trace.
 
         Args:
             prompt: The user prompt to send to the LLM.
-            skill_path: Path to the skill directory.
+            skill_path: Path to the skill directory (for metadata).
             trace_path: Where to write the execution trace.
             stop_on_skill: If provided, terminate execution early when
                 this skill is triggered. Used to optimize positive trigger
                 tests by avoiding unnecessary API calls after detection.
+            working_dir: Directory to run from. If None, defaults to skill_path.
+                For implicit tests, this should be the project root so Claude
+                must discover the skill via the Skill tool.
 
         Returns:
             Exit code from the runtime (0 for success).

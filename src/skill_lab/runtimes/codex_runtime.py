@@ -36,20 +36,23 @@ class CodexRuntime(RuntimeAdapter):
         skill_path: Path,
         trace_path: Path,
         stop_on_skill: str | None = None,
+        working_dir: Path | None = None,
     ) -> int:
         """Run Codex with the given prompt, capturing structured events.
 
         Args:
             prompt: The user prompt to send.
-            skill_path: Path to the skill directory.
+            skill_path: Path to the skill directory (for metadata).
             trace_path: Where to write the JSONL trace.
             stop_on_skill: If provided, terminate early when this skill
                 is triggered. Optimizes positive trigger tests.
+            working_dir: Directory to run from. Defaults to skill_path.
 
         Returns:
             Exit code from Codex.
         """
         trace_path.parent.mkdir(parents=True, exist_ok=True)
+        cwd = working_dir if working_dir is not None else skill_path
 
         # Get full path to handle Windows .CMD files
         codex_path = shutil.which("codex")
@@ -72,7 +75,7 @@ class CodexRuntime(RuntimeAdapter):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                cwd=skill_path,
+                cwd=cwd,
             )
 
             captured_lines: list[str] = []

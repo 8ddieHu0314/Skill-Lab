@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from rich import box
 from rich.console import Console
 from rich.table import Table
 
@@ -306,6 +307,14 @@ def trigger(
             help="Output format",
         ),
     ] = OutputFormat.console,
+    quiet: Annotated[
+        bool,
+        typer.Option(
+            "--quiet",
+            "-q",
+            help="Only show failed tests, no analysis (for CI/scripting)",
+        ),
+    ] = False,
 ) -> None:
     """Run trigger tests to verify skill activation.
 
@@ -342,7 +351,7 @@ def trigger(
             raise typer.Exit(code=1) from None
 
     # Run evaluation with progress display
-    evaluator = TriggerEvaluator(runtime=runtime)
+    evaluator = TriggerEvaluator(runtime=runtime, analyze_failures=not quiet)
 
     with console.status("", spinner="dots") as status:
         def update_progress(current: int, total: int, test_name: str) -> None:
@@ -365,60 +374,142 @@ def trigger(
         else:
             console.print(report_json)
     else:
-        _print_trigger_report(report)
+        _print_trigger_report(report, quiet=quiet)
 
     # Exit with non-zero code if tests failed
     if not report.overall_pass:
         raise typer.Exit(code=1)
 
 
-def _print_trigger_report(report: TriggerReport) -> None:
-    """Print a trigger test report to console."""
-    # Header
-    console.print()
-    console.print(f"[bold]Trigger Test Report: {report.skill_name}[/bold]")
-    console.print(f"[bold]Runtime: {report.runtime}[/bold]")
-    console.print(f"[bold]Duration: {report.duration_ms:.1f}ms[/bold]")
+def _format_duration(ms: float) -> str:
+    """Format duration in human-readable form."""
+    if ms < 1000:
+        return f"{ms:.0f}ms"
+    return f"{ms / 1000:.1f}s"
+
+
+def _print_trigger_report(report: TriggerReport, quiet: bool = False) -> None:
+    """Print a trigger test report to console.
+
+    Args:
+        report: The trigger test report to print.
+        quiet: If True, only show failed tests without analysis.
+    """
+    # Quiet mode: minimal output for CI/scripting
+    if quiet:
+        _print_trigger_report_quiet(report)
+        return
+
+    # Full output mode
     console.print()
 
-    # Summary
-    if report.overall_pass:
-        console.print(f"[green]All {report.tests_passed} tests passed![/green]")
-    else:
-        console.print(
-            f"[red]{report.tests_failed} of {report.tests_run} tests failed[/red]"
-        )
+    # Compact header line
+    duration = _format_duration(report.duration_ms)
+    pass_status = (
+        f"[green]{report.tests_passed}/{report.tests_run} passed[/green]"
+        if report.overall_pass
+        else f"[red]{report.tests_passed}/{report.tests_run} passed[/red]"
+    )
+    console.print(
+        f"[bold]Trigger Test Report:[/bold] {report.skill_name}\n"
+        f"[dim]Runtime:[/dim] {report.runtime} [dim]│[/dim] "
+        f"[dim]Duration:[/dim] {duration} [dim]│[/dim] "
+        f"{pass_status}"
+    )
     console.print()
 
-    # Results table
-    table = Table(title="Test Results")
-    table.add_column("Test", style="cyan")
-    table.add_column("Type", style="blue")
-    table.add_column("Status")
-    table.add_column("Message")
+    # Results table with borders
+    table = Table(box=box.ROUNDED, padding=(0, 1))
+    table.add_column("Test", style="cyan", no_wrap=True)
+    table.add_column("Type", style="dim")
+    table.add_column("Status", justify="center")  # Status column
 
     for result in report.results:
-        status = "[green]PASS[/green]" if result.passed else "[red]FAIL[/red]"
+        status = "[green]✓[/green]" if result.passed else "[red]✗[/red]"
         table.add_row(
             result.test_name,
             result.trigger_type.value,
             status,
-            result.message,
         )
 
     console.print(table)
     console.print()
 
-    # Summary by type
+    # Failure analysis section
+    failed_with_analysis = [
+        r for r in report.results if not r.passed and r.failure_analysis
+    ]
+    if failed_with_analysis:
+        console.print(f"[bold red]Failures ({len(failed_with_analysis)}):[/bold red]")
+        console.print()
+
+        for result in failed_with_analysis:
+            analysis = result.failure_analysis
+            assert analysis is not None  # for type checker
+
+            # Test header with expected vs actual
+            expected = "trigger" if result.expected_trigger else "no_trigger"
+            actual = "trigger" if result.skill_triggered else "no_trigger"
+            console.print(f"  [red]✗[/red] [bold]{result.test_name}[/bold]")
+            console.print(f"    [dim]Expected:[/dim] {expected} [dim]│[/dim] [dim]Got:[/dim] {actual}")
+            console.print()
+
+            # Analysis
+            console.print(f"    [dim]Analysis:[/dim] {analysis.analysis}")
+
+            # Keywords on separate line if present
+            if analysis.matching_keywords:
+                keywords = ", ".join(analysis.matching_keywords[:5])
+                console.print(f"    [dim]Keywords:[/dim] {keywords}")
+
+            console.print()
+
+            # Suggestions with clear visual hierarchy
+            if analysis.suggestions:
+                if analysis.is_likely_test_bug:
+                    console.print("    [yellow]⚠ Test bug likely[/yellow]")
+                console.print("    [bold]Suggestions:[/bold]")
+                for suggestion in analysis.suggestions:
+                    # Confidence badge
+                    if suggestion.confidence >= 0.7:
+                        badge = "[black on green] HIGH [/black on green]"
+                    elif suggestion.confidence >= 0.4:
+                        badge = "[black on yellow] MED [/black on yellow]"
+                    else:
+                        badge = "[white on dim] LOW [/white on dim]"
+
+                    console.print(f"      {badge} {suggestion.description}")
+                    if suggestion.code_snippet:
+                        console.print(f"           [dim]{suggestion.code_snippet}[/dim]")
+
+            console.print()
+
+    # Summary by type - compact inline format
     if report.summary_by_type:
-        console.print("[bold]Summary by Trigger Type:[/bold]")
+        parts = []
         for type_name, stats in report.summary_by_type.items():
             passed = stats["passed"]
             total = stats["total"]
             pct = (passed / total * 100) if total > 0 else 0
             color = "green" if passed == total else "yellow" if passed > 0 else "red"
-            console.print(f"  {type_name}: [{color}]{passed}/{total} ({pct:.0f}%)[/{color}]")
+            parts.append(f"{type_name}: [{color}]{passed}/{total}[/{color}] ({pct:.0f}%)")
+        console.print("[dim]By type:[/dim] " + " [dim]│[/dim] ".join(parts))
         console.print()
+
+
+def _print_trigger_report_quiet(report: TriggerReport) -> None:
+    """Print minimal trigger report for CI/scripting."""
+    console.print()
+    if report.overall_pass:
+        console.print(f"[green]✓ {report.tests_passed}/{report.tests_run} passed[/green]")
+    else:
+        console.print(f"[red]✗ {report.tests_passed}/{report.tests_run} passed[/red]")
+        for result in report.results:
+            if not result.passed:
+                expected = "trigger" if result.expected_trigger else "no_trigger"
+                actual = "trigger" if result.skill_triggered else "no_trigger"
+                console.print(f"  {result.test_name}: expected {expected}, got {actual}")
+    console.print()
 
 
 @app.command("eval-trace", hidden=True)
