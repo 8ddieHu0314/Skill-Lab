@@ -100,10 +100,7 @@ def evaluate(
 ) -> None:
     """Evaluate a skill and generate a quality report."""
     # Resolve default path and validate
-    if skill_path is None:
-        skill_path = Path.cwd()
-    else:
-        skill_path = skill_path.resolve()
+    skill_path = Path.cwd() if skill_path is None else skill_path.resolve()
 
     if not skill_path.exists():
         console.print(f"[red]Error: Path does not exist: {skill_path}[/red]")
@@ -158,10 +155,7 @@ def validate(
 ) -> None:
     """Quick validation that reports only errors."""
     # Resolve default path and validate
-    if skill_path is None:
-        skill_path = Path.cwd()
-    else:
-        skill_path = skill_path.resolve()
+    skill_path = Path.cwd() if skill_path is None else skill_path.resolve()
 
     if not skill_path.exists():
         console.print(f"[red]Error: Path does not exist: {skill_path}[/red]")
@@ -324,10 +318,7 @@ def trigger(
     Requires test definitions in tests/scenarios.yaml or tests/triggers.yaml.
     """
     # Resolve default path and validate
-    if skill_path is None:
-        skill_path = Path.cwd()
-    else:
-        skill_path = skill_path.resolve()
+    skill_path = Path.cwd() if skill_path is None else skill_path.resolve()
 
     if not skill_path.exists():
         console.print(f"[red]Error: Path does not exist: {skill_path}[/red]")
