@@ -35,18 +35,15 @@ class TriggerEvaluator:
     def __init__(
         self,
         runtime: str | None = None,
-        trace_dir: Path | None = None,
         analyze_failures: bool = True,
     ) -> None:
         """Initialize the trigger evaluator.
 
         Args:
             runtime: Runtime to use ('codex', 'claude', or None for auto-detect).
-            trace_dir: Directory to store execution traces.
             analyze_failures: Whether to analyze failures and generate suggestions.
         """
         self._runtime_name = runtime
-        self._trace_dir = trace_dir or Path(".skill-lab/traces")
         self._analyze_failures = analyze_failures
         self._failure_analyzer = FailureAnalyzer() if analyze_failures else None
 
@@ -102,6 +99,9 @@ class TriggerEvaluator:
         """
         start_time = time.time()
         skill_path = Path(skill_path)
+
+        # Store traces in the skill's .skill-lab/traces directory
+        self._trace_dir = skill_path / ".skill-lab" / "traces"
 
         # Find project root for implicit tests (where .claude/skills/ is visible)
         project_root = self._find_project_root(skill_path)
@@ -241,13 +241,10 @@ class TriggerEvaluator:
         trace_path = self._trace_dir / f"{test_case.id}.jsonl"
         trace_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Determine working directory based on trigger type:
-        # - Explicit tests: Run from skill_path (CLI expands $skill-name)
-        # - Implicit/contextual/negative: Run from project_root (Claude discovers skill)
-        if test_case.trigger_type == TriggerType.EXPLICIT:
-            working_dir = skill_path
-        else:
-            working_dir = project_root if project_root else skill_path
+        # Always run from project root to ensure all skills are loaded
+        # This provides a consistent testing environment where Claude can
+        # discover all project-level skills via .claude/skills/
+        working_dir = project_root if project_root else skill_path
 
         try:
             # For positive tests (expecting trigger), enable early termination
