@@ -8,7 +8,8 @@ from skill_lab.core.models import CheckResult, EvalDimension, Severity, Skill
 from skill_lab.core.registry import register_check
 
 # Name format: lowercase letters, numbers, and hyphens only
-NAME_PATTERN = re.compile(r"^[a-z][a-z0-9-]*[a-z0-9]$|^[a-z]$")
+# Must not start or end with hyphen (but can start with number per spec)
+NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$")
 
 # Maximum name length
 MAX_NAME_LENGTH = 64
@@ -70,7 +71,7 @@ class NameFormatCheck(StaticCheck):
         if not NAME_PATTERN.match(name):
             errors.append(
                 "Name must be lowercase letters, numbers, and hyphens only, "
-                "starting with a letter"
+                "and must not start or end with a hyphen"
             )
 
         # Check for consecutive hyphens

@@ -42,6 +42,13 @@ class CompatibilityLengthCheck(StaticCheck):
                 location=self._skill_md_location(skill),
             )
 
+        # Spec requires 1-500 characters if provided
+        if not compatibility.strip():
+            return self._fail(
+                "Compatibility field is empty (must be 1-500 characters if provided)",
+                location=self._skill_md_location(skill),
+            )
+
         if len(compatibility) > MAX_COMPATIBILITY_LENGTH:
             return self._fail(
                 f"Compatibility field exceeds {MAX_COMPATIBILITY_LENGTH} characters "

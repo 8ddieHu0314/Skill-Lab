@@ -171,3 +171,59 @@ class ReferencesValidCheck(StaticCheck):
         )
 
 
+# Official Agent Skills spec frontmatter fields
+# https://agentskills.io/specification
+SPEC_FRONTMATTER_FIELDS = {
+    "name",  # required
+    "description",  # required
+    "license",  # optional
+    "compatibility",  # optional
+    "metadata",  # optional
+    "allowed-tools",  # optional/experimental
+}
+
+
+@register_check
+class StandardFrontmatterFieldsCheck(StaticCheck):
+    """Check that frontmatter only contains spec-defined fields."""
+
+    check_id: ClassVar[str] = "structure.standard-frontmatter-fields"
+    check_name: ClassVar[str] = "Standard Frontmatter Fields"
+    description: ClassVar[str] = (
+        "Frontmatter contains only fields defined in the Agent Skills spec"
+    )
+    severity: ClassVar[Severity] = Severity.WARNING
+    dimension: ClassVar[EvalDimension] = EvalDimension.STRUCTURE
+
+    def run(self, skill: Skill) -> CheckResult:
+        # Check if metadata exists
+        if skill.metadata is None:
+            return self._pass(
+                "No frontmatter to check",
+                location=self._skill_md_location(skill),
+            )
+
+        # Get all fields from raw frontmatter
+        raw_fields = set(skill.metadata.raw.keys())
+
+        # Find non-standard fields
+        non_standard = raw_fields - SPEC_FRONTMATTER_FIELDS
+
+        if non_standard:
+            sorted_fields = sorted(non_standard)
+            return self._fail(
+                f"Non-standard frontmatter fields: {', '.join(sorted_fields)}",
+                details={
+                    "non_standard_fields": sorted_fields,
+                    "spec_fields": sorted(SPEC_FRONTMATTER_FIELDS),
+                    "note": "Custom fields may cause unexpected behavior with different agents",
+                },
+                location=self._skill_md_location(skill),
+            )
+
+        return self._pass(
+            "All frontmatter fields are spec-compliant",
+            location=self._skill_md_location(skill),
+        )
+
+

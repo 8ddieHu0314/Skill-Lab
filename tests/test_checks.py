@@ -21,6 +21,7 @@ from skill_lab.checks.static.naming import (
 )
 from skill_lab.checks.static.structure import (
     SkillMdExistsCheck,
+    StandardFrontmatterFieldsCheck,
     ValidFrontmatterCheck,
 )
 from skill_lab.core.models import Severity, Skill, SkillMetadata
@@ -80,6 +81,74 @@ class TestStructureChecks:
         result = check.run(skill)
         assert not result.passed
 
+    def test_standard_frontmatter_fields_pass(self):
+        """Test that standard spec fields pass."""
+        check = StandardFrontmatterFieldsCheck()
+        skill = Skill(
+            path=Path("/test/my-skill"),
+            metadata=SkillMetadata(
+                name="my-skill",
+                description="A test skill",
+                raw={
+                    "name": "my-skill",
+                    "description": "A test skill",
+                    "license": "MIT",
+                    "compatibility": "Requires Python 3.10+",
+                    "metadata": {"author": "test"},
+                    "allowed-tools": "Read Write Bash",
+                },
+            ),
+            body="Body content",
+            has_scripts=False,
+            has_references=False,
+            has_assets=False,
+        )
+        result = check.run(skill)
+        assert result.passed
+        assert result.severity == Severity.WARNING
+
+    def test_standard_frontmatter_fields_fail_non_standard(self):
+        """Test that non-standard fields trigger a warning."""
+        check = StandardFrontmatterFieldsCheck()
+        skill = Skill(
+            path=Path("/test/my-skill"),
+            metadata=SkillMetadata(
+                name="my-skill",
+                description="A test skill",
+                raw={
+                    "name": "my-skill",
+                    "description": "A test skill",
+                    "argument-hint": "[topic]",  # non-standard
+                    "disable-model-invocation": True,  # non-standard
+                    "context": "fork",  # non-standard
+                },
+            ),
+            body="Body content",
+            has_scripts=False,
+            has_references=False,
+            has_assets=False,
+        )
+        result = check.run(skill)
+        assert not result.passed
+        assert result.severity == Severity.WARNING
+        assert "argument-hint" in result.message
+        assert "context" in result.message
+        assert "disable-model-invocation" in result.message
+
+    def test_standard_frontmatter_fields_no_metadata(self):
+        """Test that missing metadata passes (nothing to check)."""
+        check = StandardFrontmatterFieldsCheck()
+        skill = Skill(
+            path=Path("/test"),
+            metadata=None,
+            body="Body",
+            has_scripts=False,
+            has_references=False,
+            has_assets=False,
+        )
+        result = check.run(skill)
+        assert result.passed
+
 
 class TestNamingChecks:
     """Tests for naming checks."""
@@ -98,14 +167,16 @@ class TestNamingChecks:
 
     def test_name_format_valid(self):
         check = NameFormatCheck()
-        for valid_name in ["my-skill", "skill123", "a", "creating-reports"]:
+        # Per spec: lowercase alphanumeric + hyphens, no start/end hyphen
+        for valid_name in ["my-skill", "skill123", "a", "creating-reports", "30daysresearch", "123", "1"]:
             skill = make_skill(name=valid_name)
             result = check.run(skill)
             assert result.passed, f"Expected '{valid_name}' to pass"
 
     def test_name_format_invalid(self):
         check = NameFormatCheck()
-        for invalid_name in ["My_Skill", "UPPERCASE", "spaces here", "-starts-with-hyphen"]:
+        # Invalid: uppercase, underscores, spaces, start/end with hyphen, consecutive hyphens
+        for invalid_name in ["My_Skill", "UPPERCASE", "spaces here", "-starts-with-hyphen", "ends-with-hyphen-", "has--consecutive-hyphens"]:
             skill = make_skill(name=invalid_name)
             result = check.run(skill)
             assert not result.passed, f"Expected '{invalid_name}' to fail"
@@ -204,3 +275,198 @@ class TestContentChecks:
         skill = make_skill(body="Just text without any code examples.")
         result = check.run(skill)
         assert not result.passed
+
+
+class TestFrontmatterChecks:
+    """Tests for optional frontmatter field checks."""
+
+    def test_compatibility_valid(self):
+        from skill_lab.checks.static.frontmatter import CompatibilityLengthCheck
+
+        check = CompatibilityLengthCheck()
+        skill = Skill(
+            path=Path("/test/my-skill"),
+            metadata=SkillMetadata(
+                name="my-skill",
+                description="A test skill",
+                raw={
+                    "name": "my-skill",
+                    "description": "A test skill",
+                    "compatibility": "Requires Python 3.10+",
+                },
+            ),
+            body="Body content",
+            has_scripts=False,
+            has_references=False,
+            has_assets=False,
+        )
+        result = check.run(skill)
+        assert result.passed
+
+    def test_compatibility_too_long(self):
+        from skill_lab.checks.static.frontmatter import CompatibilityLengthCheck
+
+        check = CompatibilityLengthCheck()
+        skill = Skill(
+            path=Path("/test/my-skill"),
+            metadata=SkillMetadata(
+                name="my-skill",
+                description="A test skill",
+                raw={
+                    "name": "my-skill",
+                    "description": "A test skill",
+                    "compatibility": "x" * 501,  # Over 500 chars
+                },
+            ),
+            body="Body content",
+            has_scripts=False,
+            has_references=False,
+            has_assets=False,
+        )
+        result = check.run(skill)
+        assert not result.passed
+        assert "exceeds" in result.message
+
+    def test_compatibility_empty_fails(self):
+        """Spec requires 1-500 characters if provided."""
+        from skill_lab.checks.static.frontmatter import CompatibilityLengthCheck
+
+        check = CompatibilityLengthCheck()
+        skill = Skill(
+            path=Path("/test/my-skill"),
+            metadata=SkillMetadata(
+                name="my-skill",
+                description="A test skill",
+                raw={
+                    "name": "my-skill",
+                    "description": "A test skill",
+                    "compatibility": "",  # Empty string
+                },
+            ),
+            body="Body content",
+            has_scripts=False,
+            has_references=False,
+            has_assets=False,
+        )
+        result = check.run(skill)
+        assert not result.passed
+        assert "empty" in result.message.lower()
+
+    def test_compatibility_whitespace_only_fails(self):
+        """Whitespace-only compatibility should fail."""
+        from skill_lab.checks.static.frontmatter import CompatibilityLengthCheck
+
+        check = CompatibilityLengthCheck()
+        skill = Skill(
+            path=Path("/test/my-skill"),
+            metadata=SkillMetadata(
+                name="my-skill",
+                description="A test skill",
+                raw={
+                    "name": "my-skill",
+                    "description": "A test skill",
+                    "compatibility": "   ",  # Whitespace only
+                },
+            ),
+            body="Body content",
+            has_scripts=False,
+            has_references=False,
+            has_assets=False,
+        )
+        result = check.run(skill)
+        assert not result.passed
+
+    def test_metadata_valid(self):
+        from skill_lab.checks.static.frontmatter import MetadataFormatCheck
+
+        check = MetadataFormatCheck()
+        skill = Skill(
+            path=Path("/test/my-skill"),
+            metadata=SkillMetadata(
+                name="my-skill",
+                description="A test skill",
+                raw={
+                    "name": "my-skill",
+                    "description": "A test skill",
+                    "metadata": {"author": "test-org", "version": "1.0"},
+                },
+            ),
+            body="Body content",
+            has_scripts=False,
+            has_references=False,
+            has_assets=False,
+        )
+        result = check.run(skill)
+        assert result.passed
+
+    def test_metadata_non_string_value_fails(self):
+        from skill_lab.checks.static.frontmatter import MetadataFormatCheck
+
+        check = MetadataFormatCheck()
+        skill = Skill(
+            path=Path("/test/my-skill"),
+            metadata=SkillMetadata(
+                name="my-skill",
+                description="A test skill",
+                raw={
+                    "name": "my-skill",
+                    "description": "A test skill",
+                    "metadata": {"author": "test-org", "version": 1.0},  # Number instead of string
+                },
+            ),
+            body="Body content",
+            has_scripts=False,
+            has_references=False,
+            has_assets=False,
+        )
+        result = check.run(skill)
+        assert not result.passed
+        assert "string" in result.message.lower()
+
+    def test_allowed_tools_valid(self):
+        from skill_lab.checks.static.frontmatter import AllowedToolsFormatCheck
+
+        check = AllowedToolsFormatCheck()
+        skill = Skill(
+            path=Path("/test/my-skill"),
+            metadata=SkillMetadata(
+                name="my-skill",
+                description="A test skill",
+                raw={
+                    "name": "my-skill",
+                    "description": "A test skill",
+                    "allowed-tools": "Read Write Bash",
+                },
+            ),
+            body="Body content",
+            has_scripts=False,
+            has_references=False,
+            has_assets=False,
+        )
+        result = check.run(skill)
+        assert result.passed
+
+    def test_allowed_tools_list_fails(self):
+        """Using YAML list syntax instead of space-delimited string should fail."""
+        from skill_lab.checks.static.frontmatter import AllowedToolsFormatCheck
+
+        check = AllowedToolsFormatCheck()
+        skill = Skill(
+            path=Path("/test/my-skill"),
+            metadata=SkillMetadata(
+                name="my-skill",
+                description="A test skill",
+                raw={
+                    "name": "my-skill",
+                    "description": "A test skill",
+                    "allowed-tools": ["Read", "Write", "Bash"],  # List instead of string
+                },
+            ),
+            body="Body content",
+            has_scripts=False,
+            has_references=False,
+            has_assets=False,
+        )
+        result = check.run(skill)
+        assert not result.passed
+        assert "space-delimited" in result.message.lower()

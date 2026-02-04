@@ -1,7 +1,7 @@
 # Skill-Lab Quality Checks
 
 This document lists all checks used to evaluate agent skills:
-- **18 Static Checks**: Validate SKILL.md structure, naming, description, and content
+- **19 Static Checks**: Validate SKILL.md structure, naming, description, and content
 - **5 Trace Check Types**: Validate execution traces (command presence, file creation, sequences, loops, efficiency)
 
 Static checks are aligned with the [Agent Skills Specification](https://agentskills.io/specification).
@@ -26,7 +26,7 @@ sklab list-checks --suggestions-only
 
 **Spec-required checks (10):** Must pass to be considered a valid Agent Skill per the specification.
 
-**Quality suggestions (8):** Additional checks for best practices that improve skill quality but aren't required by the spec.
+**Quality suggestions (9):** Additional checks for best practices that improve skill quality but aren't required by the spec.
 
 ---
 
@@ -45,12 +45,13 @@ sklab list-checks --suggestions-only
 
 ---
 
-## Structure Checks (7)
+## Structure Checks (8)
 
 | Check ID | Severity | Spec | Description |
 |----------|----------|------|-------------|
 | `structure.skill-md-exists` | ERROR | Required | SKILL.md file exists in the skill directory |
 | `structure.valid-frontmatter` | ERROR | Required | YAML frontmatter is parseable and valid |
+| `structure.standard-frontmatter-fields` | WARNING | - | Frontmatter contains only spec-defined fields |
 | `frontmatter.compatibility-length` | ERROR | Required | Compatibility field is under 500 characters if provided |
 | `frontmatter.metadata-format` | ERROR | Required | Metadata field is a string-to-string mapping if provided |
 | `frontmatter.allowed-tools-format` | WARNING | - | Allowed-tools field is a space-delimited string if provided |
@@ -66,6 +67,12 @@ sklab list-checks --suggestions-only
 **structure.valid-frontmatter** (Spec: Required)
 - Verifies YAML frontmatter can be parsed
 - Fails if frontmatter is missing or malformed
+
+**structure.standard-frontmatter-fields** (Quality suggestion)
+- Warns when frontmatter contains fields not defined in the Agent Skills spec
+- Spec-defined fields: `name`, `description`, `license`, `compatibility`, `metadata`, `allowed-tools`
+- Non-standard fields (e.g., `argument-hint`, `context`, `agent`) may cause unexpected behavior across different agent implementations
+- Custom fields should be placed in the `metadata` map instead
 
 **frontmatter.compatibility-length** (Spec: Required)
 - Validates the optional `compatibility` field if present
