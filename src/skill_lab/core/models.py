@@ -164,52 +164,6 @@ class TriggerExpectation:
 
 
 @dataclass(frozen=True)
-class FixSuggestion:
-    """A single actionable fix suggestion for a failed trigger test."""
-
-    category: str  # "description", "test", "prompt"
-    action: str  # "update", "add", "remove", "change_expectation"
-    description: str
-    code_snippet: str | None = None
-    confidence: float = 0.5  # 0.0-1.0
-
-    def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for JSON serialization."""
-        result: dict[str, Any] = {
-            "category": self.category,
-            "action": self.action,
-            "description": self.description,
-            "confidence": self.confidence,
-        }
-        if self.code_snippet is not None:
-            result["code_snippet"] = self.code_snippet
-        return result
-
-
-@dataclass(frozen=True)
-class FailureAnalysis:
-    """Analysis of why a trigger test failed with fix suggestions."""
-
-    failure_type: str  # "false_positive" or "false_negative"
-    analysis: str  # Human-readable explanation
-    root_cause: str  # Brief categorization: "keyword_overlap", "missing_exclusion", etc.
-    matching_keywords: tuple[str, ...]  # Keywords that caused/prevented trigger
-    suggestions: tuple[FixSuggestion, ...]  # Ordered by confidence
-    is_likely_test_bug: bool  # True if test expectation is probably wrong
-
-    def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for JSON serialization."""
-        return {
-            "failure_type": self.failure_type,
-            "analysis": self.analysis,
-            "root_cause": self.root_cause,
-            "matching_keywords": list(self.matching_keywords),
-            "suggestions": [s.to_dict() for s in self.suggestions],
-            "is_likely_test_bug": self.is_likely_test_bug,
-        }
-
-
-@dataclass(frozen=True)
 class TriggerTestCase:
     """A single trigger test case loaded from YAML.
 
@@ -258,7 +212,6 @@ class TriggerResult:
     events_count: int = 0
     exit_code: int | None = None
     details: dict[str, Any] | None = None
-    failure_analysis: FailureAnalysis | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -278,8 +231,6 @@ class TriggerResult:
             result["exit_code"] = self.exit_code
         if self.details is not None:
             result["details"] = self.details
-        if self.failure_analysis is not None:
-            result["failure_analysis"] = self.failure_analysis.to_dict()
         return result
 
 

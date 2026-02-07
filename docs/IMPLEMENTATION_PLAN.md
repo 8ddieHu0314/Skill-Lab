@@ -61,17 +61,3 @@ We follow [Semantic Versioning](https://semver.org/):
 Pre-1.0 versions may have breaking changes between minor versions.
 
 ---
-
-## Design Decisions
-
-| Decision | Choice | Rationale |
-|----------|--------|-----------|
-| **Execution Model** | Orchestrate directly + consume traces | Skill-Lab sends prompts to LLM, captures and analyzes traces |
-| **Storage** | File-based (YAML/JSON) | Version-controllable, no dependencies, simple |
-| **LLM Providers** | OpenAI + Anthropic | Support both major agent platforms |
-| **CLI Runtimes** | Claude CLI (v0.2.0), Codex CLI (v0.3.0) | Shell out to installed CLIs for execution |
-| **API Runtimes** | Direct API + agent loop (v0.5.0) | Reduced friction, user provides API key |
-| **Sandboxing** | Docker containers (v0.4.0) | Isolated execution, protects user's system |
-| **Trace Format** | Normalize to TraceEvent | Both Codex JSONL and Claude traces converted to unified model |
-
----

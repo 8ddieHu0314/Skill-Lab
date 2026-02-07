@@ -6,18 +6,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from skill_lab.core.models import (
-    Skill,
     TriggerReport,
     TriggerResult,
     TriggerTestCase,
     TriggerType,
 )
 from skill_lab.core.scoring import build_summary_by_attribute, calculate_metrics
-from skill_lab.parsers.skill_parser import parse_skill
 from skill_lab.runtimes.base import RuntimeAdapter
 from skill_lab.runtimes.claude_runtime import ClaudeRuntime
 from skill_lab.runtimes.codex_runtime import CodexRuntime
-from skill_lab.triggers.failure_analyzer import FailureAnalyzer
 from skill_lab.triggers.test_loader import load_trigger_tests
 from skill_lab.triggers.trace_analyzer import TraceAnalyzer
 
@@ -35,17 +32,13 @@ class TriggerEvaluator:
     def __init__(
         self,
         runtime: str | None = None,
-        analyze_failures: bool = True,
     ) -> None:
         """Initialize the trigger evaluator.
 
         Args:
             runtime: Runtime to use ('codex', 'claude', or None for auto-detect).
-            analyze_failures: Whether to analyze failures and generate suggestions.
         """
         self._runtime_name = runtime
-        self._analyze_failures = analyze_failures
-        self._failure_analyzer = FailureAnalyzer() if analyze_failures else None
 
     def _find_project_root(self, skill_path: Path) -> Path | None:
         """Find the project root directory containing .claude/skills/.
@@ -119,11 +112,6 @@ class TriggerEvaluator:
         # Extract skill name
         skill_name = self._get_skill_name(skill_path, test_cases)
 
-        # Parse skill for failure analysis (if enabled)
-        skill: Skill | None = None
-        if self._analyze_failures:
-            skill = parse_skill(skill_path)
-
         # Run tests
         results: list[TriggerResult] = []
 
@@ -147,27 +135,6 @@ class TriggerEvaluator:
                 if progress_callback:
                     progress_callback(i + 1, total, test_case.name)
                 result = self._run_single_test(test_case, skill_path, runtime, project_root)
-
-                # Analyze failure if enabled and test failed
-                if not result.passed and self._failure_analyzer and skill:
-                    analysis = self._failure_analyzer.analyze(test_case, result, skill)
-                    if analysis:
-                        # Create new result with analysis attached
-                        result = TriggerResult(
-                            test_id=result.test_id,
-                            test_name=result.test_name,
-                            trigger_type=result.trigger_type,
-                            passed=result.passed,
-                            skill_triggered=result.skill_triggered,
-                            expected_trigger=result.expected_trigger,
-                            message=result.message,
-                            trace_path=result.trace_path,
-                            events_count=result.events_count,
-                            exit_code=result.exit_code,
-                            details=result.details,
-                            failure_analysis=analysis,
-                        )
-
                 results.append(result)
 
         # Calculate metrics
