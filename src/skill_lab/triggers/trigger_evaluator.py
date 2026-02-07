@@ -209,9 +209,7 @@ class TriggerEvaluator:
             # Default to codex even if not available (will fail with helpful error)
             return codex
 
-    def _get_skill_name(
-        self, skill_path: Path, test_cases: list[TriggerTestCase]
-    ) -> str:
+    def _get_skill_name(self, skill_path: Path, test_cases: list[TriggerTestCase]) -> str:
         """Extract skill name from test cases or path."""
         for tc in test_cases:
             if tc.skill_name and tc.skill_name != "unknown":
@@ -350,4 +348,3 @@ class TriggerEvaluator:
 
         # Check for loops
         return not (expected.no_loops and analyzer.detect_loops())
-

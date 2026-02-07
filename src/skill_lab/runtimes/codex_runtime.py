@@ -57,9 +57,7 @@ class CodexRuntime(RuntimeAdapter):
         # Get full path to handle Windows .CMD files
         codex_path = shutil.which("codex")
         if codex_path is None:
-            trace_path.write_text(
-                '{"type": "error", "message": "Codex CLI not found"}\n'
-            )
+            trace_path.write_text('{"type": "error", "message": "Codex CLI not found"}\n')
             return 127
 
         try:
@@ -145,9 +143,7 @@ class CodexRuntime(RuntimeAdapter):
 
         # Check for skill_invocation item type (Codex format)
         item = event.get("item", {})
-        if item.get("type") == "skill_invocation" and skill_name in (
-            item.get("command") or ""
-        ):
+        if item.get("type") == "skill_invocation" and skill_name in (item.get("command") or ""):
             return True
 
         # Check for explicit $skill-name or skill:skill-name patterns

@@ -1,7 +1,6 @@
 """Parse JSONL trace files into TraceEvent objects."""
 
 import json
-from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -39,37 +38,6 @@ def parse_trace_file(trace_path: Path) -> list[TraceEvent]:
                 raise ValueError(f"Invalid JSON on line {line_num}: {e}") from e
 
     return events
-
-
-def iter_trace_file(trace_path: Path) -> Iterator[TraceEvent]:
-    """Iterate over events in a JSONL trace file.
-
-    This is more memory-efficient for large trace files.
-
-    Args:
-        trace_path: Path to the JSONL trace file.
-
-    Yields:
-        TraceEvent objects.
-
-    Raises:
-        FileNotFoundError: If the trace file doesn't exist.
-        ValueError: If a line contains invalid JSON.
-    """
-    if not trace_path.exists():
-        raise FileNotFoundError(f"Trace file not found: {trace_path}")
-
-    with open(trace_path, encoding="utf-8") as f:
-        for line_num, line in enumerate(f, start=1):
-            line = line.strip()
-            if not line:
-                continue
-
-            try:
-                data = json.loads(line)
-                yield _parse_event(data)
-            except json.JSONDecodeError as e:
-                raise ValueError(f"Invalid JSON on line {line_num}: {e}") from e
 
 
 def _parse_event(data: dict[str, Any]) -> TraceEvent:

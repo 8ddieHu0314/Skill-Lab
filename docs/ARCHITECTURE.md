@@ -36,7 +36,7 @@ src/skill_lab/
 │   ├── models.py             # Data classes (Skill, CheckResult, TriggerResult, etc.)
 │   ├── registry.py           # Check auto-discovery system (extends generic Registry[T])
 │   ├── scoring.py            # Quality score calculation and shared metrics
-│   ├── utils.py              # Shared utilities (generic Registry[T], serialize_value)
+│   ├── utils.py              # Shared utilities (generic Registry[T])
 │   └── exceptions.py         # Custom exception hierarchy (SkillLabError, ParseError, etc.)
 ├── parsers/
 │   ├── skill_parser.py       # SKILL.md parser (YAML + markdown)
@@ -44,7 +44,7 @@ src/skill_lab/
 ├── checks/
 │   ├── base.py               # StaticCheck abstract base class
 │   └── static/               # Check implementations
-│       ├── structure.py      # 4 checks
+│       ├── structure.py      # 5 checks
 │       ├── schema.py         # 9 checks (declarative FieldRule)
 │       ├── naming.py         # 1 check
 │       ├── description.py    # 1 check
@@ -123,7 +123,7 @@ src/skill_lab/
                     │                    │                    │              │
             ┌───────────────┐    ┌───────────────┐    ┌───────────────┐ ┌──────────┐
             │ structure.py  │    │  schema.py    │    │  naming.py    │ │description│ │content.py│
-            │ (4 checks)    │    │  (9 checks)   │    │ (1 check)    │ │ (1 check) │ │(4 checks)│
+            │ (5 checks)    │    │  (9 checks)   │    │ (1 check)    │ │ (1 check) │ │(4 checks)│
             └───────────────┘    └───────────────┘    └───────────────┘ └──────────┘
 ```
 
@@ -587,7 +587,7 @@ scenarios:
 | **Decorator-based registration** | No central file listing all checks needed |
 | **Weighted scoring** | Different severities and dimensions have different impact |
 | **Strict typing** | mypy strict mode enforced in `pyproject.toml` |
-| **Generic Registry[T]** | Eliminates code duplication between CheckRegistry and TraceCheckRegistry |
+| **Generic Registry[T]** | Provides reusable base for CheckRegistry; TraceCheckRegistry uses separate impl for check-type-based registration |
 | **Base class helpers** | `_require_metadata()`, `_skill_md_location()`, `_require_field()` reduce repetitive null-checks |
 | **Shared metric utilities** | `calculate_metrics()` ensures consistent pass/fail calculation across all evaluators |
 | **Custom exception hierarchy** | `SkillLabError` base with `context` and `suggestion` fields for actionable error messages |
@@ -619,11 +619,11 @@ class CheckExecutionError(SkillLabError):
 class TraceParseError(ParseError):
     """Errors specific to trace file parsing."""
 
-class TestDefinitionError(SkillLabError):
-    """Errors in test definition files."""
+class ConfigurationError(SkillLabError):
+    """Errors in configuration files or options."""
 
-class RuntimeError(SkillLabError):
-    """Errors from runtime adapters."""
+class ValidationError(SkillLabError):
+    """Errors validating skill structure or content."""
 ```
 
 Usage:
@@ -773,7 +773,7 @@ class TraceReport:
 
 ### Handler Registration Pattern
 
-Similar to static checks, trace handlers use a decorator-based registration system. The `TraceCheckRegistry` also extends the generic `Registry[T]` base class.
+Similar to static checks, trace handlers use a decorator-based registration system. The `TraceCheckRegistry` is a standalone registry that registers handlers by check type string rather than class attribute.
 
 ```python
 from skill_lab.tracechecks.registry import register_trace_handler

@@ -76,7 +76,10 @@ class TraceAnalyzer:
                             # Check for Skill tool
                             if item.get("name") == "Skill":
                                 tool_input = item.get("input", {})
-                                if isinstance(tool_input, dict) and tool_input.get("skill") == skill_name:
+                                if (
+                                    isinstance(tool_input, dict)
+                                    and tool_input.get("skill") == skill_name
+                                ):
                                     return True
                             # Check for Bash tool with skill script
                             if item.get("name") == "Bash":

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Python CLI tool that evaluates agent skills (SKILL.md files) through static analysis and trigger testing. Produces a 0-100 quality score based on 20 checks across 4 dimensions.
 
-**Current Release:** v0.1.0 on PyPI includes static analysis (20 checks). See [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) for the version roadmap.
+**Current Release:** v0.2.0 on PyPI includes static analysis (20 checks) and trigger testing. See [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) for the version roadmap.
 
 ## Naming Convention
 

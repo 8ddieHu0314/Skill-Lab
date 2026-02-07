@@ -99,9 +99,7 @@ def _load_scenarios_yaml(path: Path) -> tuple[list[TriggerTestCase], list[str]]:
     return test_cases, errors
 
 
-def _parse_scenario(
-    scenario: dict[str, Any], default_skill: str, index: int
-) -> TriggerTestCase:
+def _parse_scenario(scenario: dict[str, Any], default_skill: str, index: int) -> TriggerTestCase:
     """Parse a single scenario from Given/When/Then format."""
     name = scenario.get("name", f"scenario-{index + 1}")
     scenario_id = scenario.get("id", f"scenario-{index + 1}")
@@ -198,9 +196,7 @@ def _load_triggers_yaml(path: Path) -> tuple[list[TriggerTestCase], list[str]]:
     return test_cases, errors
 
 
-def _parse_simple_case(
-    case: dict[str, Any], default_skill: str, index: int
-) -> TriggerTestCase:
+def _parse_simple_case(case: dict[str, Any], default_skill: str, index: int) -> TriggerTestCase:
     """Parse a single test case from simple format."""
     case_id = case.get("id", f"test-{index + 1}")
     name = case.get("name", case_id)

@@ -293,9 +293,7 @@ def _validate_rule(check: StaticCheck, skill: Skill, rule: FieldRule) -> CheckRe
     if rule.max_length is not None and isinstance(value, str) and len(value) > rule.max_length:
         if rule.regex_pattern is not None or rule.no_consecutive is not None:
             # Multi-error accumulation mode (naming.format)
-            errors.append(
-                f"Name exceeds {rule.max_length} characters (got {len(value)})"
-            )
+            errors.append(f"Name exceeds {rule.max_length} characters (got {len(value)})")
         else:
             # Single-error mode (description.max-length, compatibility)
             length = len(value)
@@ -308,16 +306,14 @@ def _validate_rule(check: StaticCheck, skill: Skill, rule: FieldRule) -> CheckRe
                 location=location,
             )
 
-    if rule.regex_pattern is not None and isinstance(value, str) and not re.match(
-        rule.regex_pattern, value
+    if (
+        rule.regex_pattern is not None
+        and isinstance(value, str)
+        and not re.match(rule.regex_pattern, value)
     ):
         errors.append(rule.regex_fail_message)
 
-    if (
-        rule.no_consecutive is not None
-        and isinstance(value, str)
-        and rule.no_consecutive in value
-    ):
+    if rule.no_consecutive is not None and isinstance(value, str) and rule.no_consecutive in value:
         errors.append(rule.no_consecutive_message)
 
     if errors:

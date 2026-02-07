@@ -31,17 +31,44 @@ class FailureAnalyzer:
     """
 
     # Verbs indicating execution (DO something)
-    EXECUTION_VERBS = frozenset({
-        "run", "execute", "do", "perform", "make", "create",
-        "commit", "push", "deploy", "install", "build", "start",
-        "stop", "delete", "remove", "update", "apply",
-    })
+    EXECUTION_VERBS = frozenset(
+        {
+            "run",
+            "execute",
+            "do",
+            "perform",
+            "make",
+            "create",
+            "commit",
+            "push",
+            "deploy",
+            "install",
+            "build",
+            "start",
+            "stop",
+            "delete",
+            "remove",
+            "update",
+            "apply",
+        }
+    )
 
     # Verbs indicating drafting/writing (WRITE something)
-    DRAFTING_VERBS = frozenset({
-        "write", "draft", "compose", "help", "suggest", "generate",
-        "prepare", "create a message", "phrase", "word", "formulate",
-    })
+    DRAFTING_VERBS = frozenset(
+        {
+            "write",
+            "draft",
+            "compose",
+            "help",
+            "suggest",
+            "generate",
+            "prepare",
+            "create a message",
+            "phrase",
+            "word",
+            "formulate",
+        }
+    )
 
     # Patterns indicating informational queries
     INFORMATIONAL_PATTERNS = (
@@ -63,22 +90,116 @@ class FailureAnalyzer:
     )
 
     # Common stop words to filter from keyword extraction
-    STOP_WORDS = frozenset({
-        "the", "a", "an", "is", "are", "was", "were", "be", "been",
-        "being", "have", "has", "had", "do", "does", "did", "will",
-        "would", "could", "should", "may", "might", "must", "shall",
-        "can", "need", "to", "of", "in", "for", "on", "with", "at",
-        "by", "from", "as", "into", "through", "during", "before",
-        "after", "above", "below", "between", "under", "over", "again",
-        "further", "then", "once", "here", "there", "when", "where",
-        "why", "how", "all", "each", "every", "both", "few", "more",
-        "most", "other", "some", "such", "no", "nor", "not", "only",
-        "own", "same", "so", "than", "too", "very", "just", "i",
-        "you", "he", "she", "it", "we", "they", "me", "him", "her",
-        "us", "them", "my", "your", "his", "its", "our", "their",
-        "this", "that", "these", "those", "what", "which", "who",
-        "whom", "use", "using", "used",
-    })
+    STOP_WORDS = frozenset(
+        {
+            "the",
+            "a",
+            "an",
+            "is",
+            "are",
+            "was",
+            "were",
+            "be",
+            "been",
+            "being",
+            "have",
+            "has",
+            "had",
+            "do",
+            "does",
+            "did",
+            "will",
+            "would",
+            "could",
+            "should",
+            "may",
+            "might",
+            "must",
+            "shall",
+            "can",
+            "need",
+            "to",
+            "of",
+            "in",
+            "for",
+            "on",
+            "with",
+            "at",
+            "by",
+            "from",
+            "as",
+            "into",
+            "through",
+            "during",
+            "before",
+            "after",
+            "above",
+            "below",
+            "between",
+            "under",
+            "over",
+            "again",
+            "further",
+            "then",
+            "once",
+            "here",
+            "there",
+            "when",
+            "where",
+            "why",
+            "how",
+            "all",
+            "each",
+            "every",
+            "both",
+            "few",
+            "more",
+            "most",
+            "other",
+            "some",
+            "such",
+            "no",
+            "nor",
+            "not",
+            "only",
+            "own",
+            "same",
+            "so",
+            "than",
+            "too",
+            "very",
+            "just",
+            "i",
+            "you",
+            "he",
+            "she",
+            "it",
+            "we",
+            "they",
+            "me",
+            "him",
+            "her",
+            "us",
+            "them",
+            "my",
+            "your",
+            "his",
+            "its",
+            "our",
+            "their",
+            "this",
+            "that",
+            "these",
+            "those",
+            "what",
+            "which",
+            "who",
+            "whom",
+            "use",
+            "using",
+            "used",
+        }
+    )
 
     # Common synonyms mapping
     SYNONYMS = {
@@ -151,18 +272,19 @@ class FailureAnalyzer:
 
         if has_execution and not has_drafting:
             analysis_parts.append(
-                "However, this prompt asks to EXECUTE an action, "
-                "not DRAFT/WRITE content."
+                "However, this prompt asks to EXECUTE an action, not DRAFT/WRITE content."
             )
             root_cause = "missing_exclusion"
 
-            suggestions.append(FixSuggestion(
-                category="description",
-                action="add",
-                description="Add exclusion clause for execution requests",
-                code_snippet="Do NOT use when user asks to execute/run commands.",
-                confidence=0.8,
-            ))
+            suggestions.append(
+                FixSuggestion(
+                    category="description",
+                    action="add",
+                    description="Add exclusion clause for execution requests",
+                    code_snippet="Do NOT use when user asks to execute/run commands.",
+                    confidence=0.8,
+                )
+            )
 
         # FP-3: Inline content provided
         if self._has_inline_content(prompt_lower):
@@ -172,13 +294,15 @@ class FailureAnalyzer:
             )
             root_cause = "inline_content"
 
-            suggestions.append(FixSuggestion(
-                category="description",
-                action="add",
-                description="Add exclusion for inline content",
-                code_snippet="Do NOT use when user provides content inline.",
-                confidence=0.85,
-            ))
+            suggestions.append(
+                FixSuggestion(
+                    category="description",
+                    action="add",
+                    description="Add exclusion for inline content",
+                    code_snippet="Do NOT use when user provides content inline.",
+                    confidence=0.85,
+                )
+            )
 
         # FP-4: Informational query
         if self._is_informational_query(prompt_lower):
@@ -188,13 +312,15 @@ class FailureAnalyzer:
             )
             root_cause = "informational_query"
 
-            suggestions.append(FixSuggestion(
-                category="description",
-                action="add",
-                description="Add exclusion for informational questions",
-                code_snippet="Do NOT use for questions about how to use tools.",
-                confidence=0.75,
-            ))
+            suggestions.append(
+                FixSuggestion(
+                    category="description",
+                    action="add",
+                    description="Add exclusion for informational questions",
+                    code_snippet="Do NOT use for questions about how to use tools.",
+                    confidence=0.75,
+                )
+            )
 
         # Check if this might be a test bug (test expectation is wrong)
         if (
@@ -203,29 +329,34 @@ class FailureAnalyzer:
             and (len(matching) >= 2 or (has_execution and has_drafting))
         ):
             is_test_bug = True
-            suggestions.append(FixSuggestion(
-                category="test",
-                action="change_expectation",
-                description=(
-                    "Consider changing expectation to 'trigger' if "
-                    "this prompt genuinely falls within skill scope"
-                ),
-                confidence=0.5,
-            ))
+            suggestions.append(
+                FixSuggestion(
+                    category="test",
+                    action="change_expectation",
+                    description=(
+                        "Consider changing expectation to 'trigger' if "
+                        "this prompt genuinely falls within skill scope"
+                    ),
+                    confidence=0.5,
+                )
+            )
 
         # Default suggestion if none matched
         if not suggestions:
-            suggestions.append(FixSuggestion(
-                category="description",
-                action="update",
-                description="Narrow the skill description to be more specific",
-                confidence=0.4,
-            ))
+            suggestions.append(
+                FixSuggestion(
+                    category="description",
+                    action="update",
+                    description="Narrow the skill description to be more specific",
+                    confidence=0.4,
+                )
+            )
 
         return FailureAnalysis(
             failure_type="false_positive",
-            analysis=" ".join(analysis_parts) if analysis_parts else
-                     "Skill triggered unexpectedly - description may be too broad",
+            analysis=" ".join(analysis_parts)
+            if analysis_parts
+            else "Skill triggered unexpectedly - description may be too broad",
             root_cause=root_cause,
             matching_keywords=tuple(sorted(matching)[:10]),
             suggestions=tuple(sorted(suggestions, key=lambda s: -s.confidence)),
@@ -254,25 +385,23 @@ class FailureAnalyzer:
 
         # FN-2: No keyword overlap at all
         if not matching:
-            analysis_parts.append(
-                "No keywords from the skill description appear in the prompt."
-            )
+            analysis_parts.append("No keywords from the skill description appear in the prompt.")
             root_cause = "no_overlap"
 
             # FN-4: Test too indirect
             if test_case.trigger_type in (TriggerType.IMPLICIT, TriggerType.CONTEXTUAL):
-                analysis_parts.append(
-                    "This implicit/contextual test may be too indirect."
-                )
+                analysis_parts.append("This implicit/contextual test may be too indirect.")
                 is_test_bug = True
                 root_cause = "test_too_indirect"
 
-                suggestions.append(FixSuggestion(
-                    category="test",
-                    action="update",
-                    description="Make test prompt more explicit about the task",
-                    confidence=0.6,
-                ))
+                suggestions.append(
+                    FixSuggestion(
+                        category="test",
+                        action="update",
+                        description="Make test prompt more explicit about the task",
+                        confidence=0.6,
+                    )
+                )
 
         # FN-1: Missing keywords
         important_missing = [k for k in missing_from_desc if len(k) > 3][:5]
@@ -283,44 +412,49 @@ class FailureAnalyzer:
             if root_cause == "unknown":
                 root_cause = "missing_keywords"
 
-            suggestions.append(FixSuggestion(
-                category="description",
-                action="add",
-                description="Add missing trigger keywords to description",
-                code_snippet=f"Consider adding: {', '.join(important_missing)}",
-                confidence=0.7,
-            ))
+            suggestions.append(
+                FixSuggestion(
+                    category="description",
+                    action="add",
+                    description="Add missing trigger keywords to description",
+                    code_snippet=f"Consider adding: {', '.join(important_missing)}",
+                    confidence=0.7,
+                )
+            )
 
         # FN-3: Synonym gap
         synonym_suggestions = self._find_synonym_gaps(prompt_keywords, description)
         if synonym_suggestions:
-            analysis_parts.append(
-                "Prompt may use synonyms not in description."
-            )
+            analysis_parts.append("Prompt may use synonyms not in description.")
             if root_cause == "unknown":
                 root_cause = "synonym_gap"
 
-            suggestions.append(FixSuggestion(
-                category="description",
-                action="add",
-                description="Add synonym phrases that users might use",
-                code_snippet=f"Consider adding: {', '.join(synonym_suggestions[:5])}",
-                confidence=0.6,
-            ))
+            suggestions.append(
+                FixSuggestion(
+                    category="description",
+                    action="add",
+                    description="Add synonym phrases that users might use",
+                    code_snippet=f"Consider adding: {', '.join(synonym_suggestions[:5])}",
+                    confidence=0.6,
+                )
+            )
 
         # Default suggestion if none matched
         if not suggestions:
-            suggestions.append(FixSuggestion(
-                category="description",
-                action="update",
-                description="Broaden the skill description to match user intent",
-                confidence=0.4,
-            ))
+            suggestions.append(
+                FixSuggestion(
+                    category="description",
+                    action="update",
+                    description="Broaden the skill description to match user intent",
+                    confidence=0.4,
+                )
+            )
 
         return FailureAnalysis(
             failure_type="false_negative",
-            analysis=" ".join(analysis_parts) if analysis_parts else
-                     "Skill did not trigger - description may need broadening",
+            analysis=" ".join(analysis_parts)
+            if analysis_parts
+            else "Skill did not trigger - description may need broadening",
             root_cause=root_cause,
             matching_keywords=tuple(sorted(missing_from_desc)[:10]),
             suggestions=tuple(sorted(suggestions, key=lambda s: -s.confidence)),

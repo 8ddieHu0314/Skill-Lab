@@ -116,9 +116,7 @@ def calculate_score(results: list[CheckResult]) -> float:
         dimension_scores[dim] = calculate_dimension_score(dim_results)
 
     # Calculate weighted average
-    total_score = sum(
-        dimension_scores[dim] * DIMENSION_WEIGHTS[dim] for dim in EvalDimension
-    )
+    total_score = sum(dimension_scores[dim] * DIMENSION_WEIGHTS[dim] for dim in EvalDimension)
 
     return round(total_score, 2)
 

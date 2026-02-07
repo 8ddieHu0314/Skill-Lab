@@ -105,9 +105,7 @@ class StaticEvaluator:
         metrics = calculate_metrics(results)
 
         # Determine overall pass (no ERROR-level failures)
-        error_failures = [
-            r for r in results if not r.passed and r.severity == Severity.ERROR
-        ]
+        error_failures = [r for r in results if not r.passed and r.severity == Severity.ERROR]
         overall_pass = len(error_failures) == 0
 
         # Calculate quality score
@@ -140,7 +138,5 @@ class StaticEvaluator:
             Tuple of (passed, error_results).
         """
         report = self.evaluate(skill_path)
-        error_results = [
-            r for r in report.results if not r.passed and r.severity == Severity.ERROR
-        ]
+        error_results = [r for r in report.results if not r.passed and r.severity == Severity.ERROR]
         return report.overall_pass, error_results

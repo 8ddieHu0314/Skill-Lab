@@ -30,7 +30,7 @@ def parse_frontmatter(content: str) -> tuple[dict[str, Any] | None, str, list[st
         return None, content, errors
 
     frontmatter_text = match.group(1)
-    body = content[match.end():]
+    body = content[match.end() :]
 
     try:
         frontmatter = yaml.safe_load(frontmatter_text)
@@ -65,7 +65,9 @@ def extract_metadata(frontmatter: dict[str, Any] | None) -> tuple[SkillMetadata 
 
     if not isinstance(name, str):
         name = str(name) if name else ""
-        errors.append(f"Name field should be a string, got {type(frontmatter.get('name')).__name__}")
+        errors.append(
+            f"Name field should be a string, got {type(frontmatter.get('name')).__name__}"
+        )
 
     if not isinstance(description, str):
         description = str(description) if description else ""

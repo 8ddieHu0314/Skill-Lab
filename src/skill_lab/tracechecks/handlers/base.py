@@ -52,7 +52,9 @@ class TraceCheckHandler(ABC):
             return self._fail(check, f"Missing required '{field_name}' field")
         return value
 
-    def _pass(self, check: TraceCheckDefinition, message: str, details: dict[str, object] | None = None) -> TraceCheckResult:
+    def _pass(
+        self, check: TraceCheckDefinition, message: str, details: dict[str, object] | None = None
+    ) -> TraceCheckResult:
         """Create a passing result.
 
         Args:
@@ -71,7 +73,9 @@ class TraceCheckHandler(ABC):
             details=details,
         )
 
-    def _fail(self, check: TraceCheckDefinition, message: str, details: dict[str, object] | None = None) -> TraceCheckResult:
+    def _fail(
+        self, check: TraceCheckDefinition, message: str, details: dict[str, object] | None = None
+    ) -> TraceCheckResult:
         """Create a failing result.
 
         Args:

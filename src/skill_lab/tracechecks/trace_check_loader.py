@@ -62,7 +62,13 @@ def _parse_check(data: dict[str, Any], source_path: Path) -> TraceCheckDefinitio
         raise ValueError(f"Check '{check_id}' missing required 'type' field in {source_path}")
 
     # Validate check type
-    valid_types = {"command_presence", "file_creation", "event_sequence", "loop_detection", "efficiency"}
+    valid_types = {
+        "command_presence",
+        "file_creation",
+        "event_sequence",
+        "loop_detection",
+        "efficiency",
+    }
     if check_type not in valid_types:
         raise ValueError(
             f"Check '{check_id}' has invalid type '{check_type}'. "

@@ -49,28 +49,39 @@ class ConsoleReporter:
         self.console.print()
         self.console.print(
             Panel(
-                f"[bold]Skill:[/bold] {skill_name}\n"
-                f"[bold]Path:[/bold] {report.skill_path}",
+                f"[bold]Skill:[/bold] {skill_name}\n[bold]Path:[/bold] {report.skill_path}",
                 title="Skill Lab Evaluation",
                 border_style="blue",
             )
         )
 
         # Score and status
-        score_color = "green" if report.quality_score >= 80 else "yellow" if report.quality_score >= 60 else "red"
+        score_color = (
+            "green"
+            if report.quality_score >= 80
+            else "yellow"
+            if report.quality_score >= 60
+            else "red"
+        )
         status = "[green]PASS[/green]" if report.overall_pass else "[red]FAIL[/red]"
 
         self.console.print()
-        self.console.print(f"[bold]Quality Score:[/bold] [{score_color}]{report.quality_score:.1f}/100[/{score_color}]")
+        self.console.print(
+            f"[bold]Quality Score:[/bold] [{score_color}]{report.quality_score:.1f}/100[/{score_color}]"
+        )
         self.console.print(f"[bold]Status:[/bold] {status}")
-        self.console.print(f"[bold]Checks:[/bold] {report.checks_passed}/{report.checks_run} passed")
+        self.console.print(
+            f"[bold]Checks:[/bold] {report.checks_passed}/{report.checks_run} passed"
+        )
         self.console.print(f"[bold]Duration:[/bold] {report.duration_ms:.1f}ms")
 
         # Results table
         self.console.print()
 
         # Filter results based on verbosity
-        results_to_show = report.results if self.verbose else [r for r in report.results if not r.passed]
+        results_to_show = (
+            report.results if self.verbose else [r for r in report.results if not r.passed]
+        )
 
         if results_to_show:
             table = Table(title="Check Results" if self.verbose else "Failed Checks")
@@ -80,8 +91,14 @@ class ConsoleReporter:
             table.add_column("Message", width=50)
 
             for result in results_to_show:
-                status_icon = "[green]OK[/green]" if result.passed else f"[{self._severity_style(result.severity)}]{self._severity_icon(result.severity)}[/{self._severity_style(result.severity)}]"
-                severity_text = Text(result.severity.value.upper(), style=self._severity_style(result.severity))
+                status_icon = (
+                    "[green]OK[/green]"
+                    if result.passed
+                    else f"[{self._severity_style(result.severity)}]{self._severity_icon(result.severity)}[/{self._severity_style(result.severity)}]"
+                )
+                severity_text = Text(
+                    result.severity.value.upper(), style=self._severity_style(result.severity)
+                )
                 table.add_row(
                     status_icon,
                     severity_text,
@@ -95,7 +112,9 @@ class ConsoleReporter:
         if not self.verbose:
             hidden_count = len(report.results) - len(results_to_show)
             if hidden_count > 0:
-                self.console.print(f"[dim]({hidden_count} passing checks hidden, run with --verbose to see all)[/dim]")
+                self.console.print(
+                    f"[dim]({hidden_count} passing checks hidden, run with --verbose to see all)[/dim]"
+                )
             elif not results_to_show:
                 self.console.print("[green]All checks passed![/green]")
                 self.console.print("[dim](run with --verbose to see details)[/dim]")
@@ -142,7 +161,9 @@ class ConsoleReporter:
         self.console.print()
 
         # Results table
-        results_to_show = report.results if self.verbose else [r for r in report.results if not r.passed]
+        results_to_show = (
+            report.results if self.verbose else [r for r in report.results if not r.passed]
+        )
 
         if results_to_show:
             table = Table(title="Check Results" if self.verbose else "Failed Checks")
@@ -166,7 +187,9 @@ class ConsoleReporter:
         if not self.verbose:
             hidden_count = len(report.results) - len(results_to_show)
             if hidden_count > 0:
-                self.console.print(f"[dim]({hidden_count} passing checks hidden, run with --verbose to see all)[/dim]")
+                self.console.print(
+                    f"[dim]({hidden_count} passing checks hidden, run with --verbose to see all)[/dim]"
+                )
             elif not results_to_show:
                 self.console.print("[green]All checks passed![/green]")
                 self.console.print("[dim](run with --verbose to see details)[/dim]")
@@ -180,7 +203,9 @@ class ConsoleReporter:
                 total = stats["total"]
                 pct = (passed / total * 100) if total > 0 else 0
                 color = "green" if passed == total else "yellow" if passed > 0 else "red"
-                self.console.print(f"  {type_name}: [{color}]{passed}/{total} ({pct:.0f}%)[/{color}]")
+                self.console.print(
+                    f"  {type_name}: [{color}]{passed}/{total} ({pct:.0f}%)[/{color}]"
+                )
             self.console.print()
 
         self.console.print(f"Duration: {report.duration_ms:.1f}ms")

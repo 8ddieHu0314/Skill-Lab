@@ -118,11 +118,7 @@ class RuntimeAdapter(ABC):
         content = trace_path.read_text()
 
         # Split by double newline (formatted) or single newline (compact JSONL)
-        chunks = (
-            content.split("\n\n")
-            if "\n\n" in content
-            else content.strip().split("\n")
-        )
+        chunks = content.split("\n\n") if "\n\n" in content else content.strip().split("\n")
 
         for chunk in chunks:
             chunk = chunk.strip()

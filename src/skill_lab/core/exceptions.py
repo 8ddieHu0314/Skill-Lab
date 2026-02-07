@@ -158,40 +158,6 @@ class ConfigurationError(SkillLabError):
     pass
 
 
-class RuntimeError(SkillLabError):
-    """Error during runtime execution.
-
-    Raised when the runtime (Codex, Claude) fails to execute a prompt.
-    """
-
-    def __init__(
-        self,
-        message: str,
-        *,
-        runtime_name: str | None = None,
-        exit_code: int | None = None,
-        context: dict[str, Any] | None = None,
-        suggestion: str | None = None,
-    ) -> None:
-        """Initialize the runtime error.
-
-        Args:
-            message: Description of what went wrong.
-            runtime_name: Name of the runtime that failed.
-            exit_code: Exit code from the runtime.
-            context: Additional context for debugging.
-            suggestion: How to fix the issue.
-        """
-        self.runtime_name = runtime_name
-        self.exit_code = exit_code
-        ctx = context or {}
-        if runtime_name:
-            ctx["runtime_name"] = runtime_name
-        if exit_code is not None:
-            ctx["exit_code"] = exit_code
-        super().__init__(message, context=ctx, suggestion=suggestion)
-
-
 class ValidationError(SkillLabError):
     """Error validating skill structure or content.
 

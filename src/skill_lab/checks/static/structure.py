@@ -189,9 +189,7 @@ class StandardFrontmatterFieldsCheck(StaticCheck):
 
     check_id: ClassVar[str] = "structure.standard-frontmatter-fields"
     check_name: ClassVar[str] = "Standard Frontmatter Fields"
-    description: ClassVar[str] = (
-        "Frontmatter contains only fields defined in the Agent Skills spec"
-    )
+    description: ClassVar[str] = "Frontmatter contains only fields defined in the Agent Skills spec"
     severity: ClassVar[Severity] = Severity.WARNING
     dimension: ClassVar[EvalDimension] = EvalDimension.STRUCTURE
 
@@ -225,5 +223,3 @@ class StandardFrontmatterFieldsCheck(StaticCheck):
             "All frontmatter fields are spec-compliant",
             location=self._skill_md_location(skill),
         )
-
-

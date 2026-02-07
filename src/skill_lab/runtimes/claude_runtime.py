@@ -53,9 +53,7 @@ class ClaudeRuntime(RuntimeAdapter):
         # Get full path to handle Windows .CMD files
         claude_path = shutil.which("claude")
         if claude_path is None:
-            trace_path.write_text(
-                '{"type": "error", "message": "Claude CLI not found"}\n'
-            )
+            trace_path.write_text('{"type": "error", "message": "Claude CLI not found"}\n')
             return 127
 
         try:
@@ -173,7 +171,11 @@ class ClaudeRuntime(RuntimeAdapter):
                     tool_input = item.get("input", {})
 
                     # Check for Skill tool
-                    if tool_name == "Skill" and isinstance(tool_input, dict) and tool_input.get("skill") == skill_name:
+                    if (
+                        tool_name == "Skill"
+                        and isinstance(tool_input, dict)
+                        and tool_input.get("skill") == skill_name
+                    ):
                         return True
 
                     # Check for Bash tool running skill scripts

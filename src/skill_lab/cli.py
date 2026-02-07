@@ -10,7 +10,7 @@ from rich.console import Console
 from rich.table import Table
 
 from skill_lab import __version__
-from skill_lab.core.models import EvalDimension, TraceReport, TriggerReport, TriggerType
+from skill_lab.core.models import EvalDimension, TriggerReport, TriggerType
 from skill_lab.core.registry import registry
 from skill_lab.evaluators.static_evaluator import StaticEvaluator
 from skill_lab.evaluators.trace_evaluator import TraceEvaluator
@@ -263,7 +263,9 @@ def list_checks(
 
     console.print(table)
     spec_count = sum(1 for c in checks if c.spec_required)
-    console.print(f"\nTotal: {len(checks)} checks ({spec_count} spec-required, {len(checks) - spec_count} quality suggestions)")
+    console.print(
+        f"\nTotal: {len(checks)} checks ({spec_count} spec-required, {len(checks) - spec_count} quality suggestions)"
+    )
 
 
 @app.command("trigger")
@@ -354,6 +356,7 @@ def trigger(
     evaluator = TriggerEvaluator(runtime=runtime, analyze_failures=not quiet)
 
     with console.status("", spinner="dots") as status:
+
         def update_progress(current: int, total: int, test_name: str) -> None:
             status.update(f"[cyan]Running trigger tests[/cyan] [{current}/{total}]: {test_name}")
 
@@ -367,6 +370,7 @@ def trigger(
     # Output results
     if format == OutputFormat.json:
         import json as json_module
+
         report_json = json_module.dumps(report.to_dict(), indent=2)
         if output:
             output.write_text(report_json)
@@ -436,9 +440,7 @@ def _print_trigger_report(report: TriggerReport, quiet: bool = False) -> None:
     console.print()
 
     # Failure analysis section
-    failed_with_analysis = [
-        r for r in report.results if not r.passed and r.failure_analysis
-    ]
+    failed_with_analysis = [r for r in report.results if not r.passed and r.failure_analysis]
     if failed_with_analysis:
         console.print(f"[bold red]Failures ({len(failed_with_analysis)}):[/bold red]")
         console.print()
@@ -451,7 +453,9 @@ def _print_trigger_report(report: TriggerReport, quiet: bool = False) -> None:
             expected = "trigger" if result.expected_trigger else "no_trigger"
             actual = "trigger" if result.skill_triggered else "no_trigger"
             console.print(f"  [red]✗[/red] [bold]{result.test_name}[/bold]")
-            console.print(f"    [dim]Expected:[/dim] {expected} [dim]│[/dim] [dim]Got:[/dim] {actual}")
+            console.print(
+                f"    [dim]Expected:[/dim] {expected} [dim]│[/dim] [dim]Got:[/dim] {actual}"
+            )
             console.print()
 
             # Analysis
@@ -584,71 +588,13 @@ def eval_trace(
         else:
             console.print(report_json)
     else:
-        _print_trace_report(report)
+        # Use verbose=True to show all checks (trace checks are typically few)
+        trace_reporter = ConsoleReporter(verbose=True)
+        trace_reporter.report_trace(report)
 
     # Exit with non-zero code if checks failed
     if not report.overall_pass:
         raise typer.Exit(code=1)
-
-
-def _print_trace_report(report: TraceReport) -> None:
-    """Print a trace evaluation report to console."""
-    from rich.panel import Panel
-    from rich.table import Table
-
-    # Header
-    console.print()
-    console.print(
-        Panel(
-            f"[bold]Trace:[/bold] {report.trace_path}\n"
-            f"[bold]Project:[/bold] {report.project_dir}",
-            title="Trace Evaluation Report",
-            border_style="blue",
-        )
-    )
-
-    # Summary
-    console.print()
-    if report.overall_pass:
-        console.print(f"[green]All {report.checks_passed} checks passed![/green]")
-    else:
-        console.print(
-            f"[red]{report.checks_failed} of {report.checks_run} checks failed[/red]"
-        )
-    console.print(f"Pass rate: {report.pass_rate:.1f}%")
-    console.print()
-
-    # Results table
-    table = Table(title="Check Results")
-    table.add_column("Status", width=6)
-    table.add_column("Check ID", style="cyan", width=25)
-    table.add_column("Type", style="blue", width=18)
-    table.add_column("Message", width=50)
-
-    for result in report.results:
-        status = "[green]PASS[/green]" if result.passed else "[red]FAIL[/red]"
-        table.add_row(
-            status,
-            result.check_id,
-            result.check_type,
-            result.message,
-        )
-
-    console.print(table)
-    console.print()
-
-    # Summary by type
-    if report.summary.get("by_type"):
-        console.print("[bold]Summary by Check Type:[/bold]")
-        for type_name, stats in report.summary["by_type"].items():
-            passed = stats["passed"]
-            total = stats["total"]
-            pct = (passed / total * 100) if total > 0 else 0
-            color = "green" if passed == total else "yellow" if passed > 0 else "red"
-            console.print(f"  {type_name}: [{color}]{passed}/{total} ({pct:.0f}%)[/{color}]")
-        console.print()
-
-    console.print(f"Duration: {report.duration_ms:.1f}ms")
 
 
 def main() -> None:
