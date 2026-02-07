@@ -9,13 +9,12 @@ A Python CLI tool for evaluating agent skills through static analysis, trigger t
 ## Features
 
 - **SKILL.md Parsing**: Parse YAML frontmatter and markdown body from skill definitions
-- **18 Static Checks**: Comprehensive checks across 4 dimensions
-  - Structure: File existence, folder organization, frontmatter validation
+- **19 Static Checks**: Comprehensive checks across 4 dimensions
+  - Structure: File existence, folder organization, frontmatter validation, standard fields
   - Naming: Format, directory matching
-  - Description: Length, trigger information
+  - Description: Required, non-empty, max length
   - Content: Examples, line budget, reference depth
 - **Trigger Testing**: Test skill activation with 4 trigger types (explicit, implicit, contextual, negative)
-- **Trace Analysis**: Validate execution traces with 5 check types (command presence, file creation, event sequence, loop detection, efficiency)
 - **Quality Scoring**: Weighted 0-100 score based on check results
 - **Multiple Output Formats**: Console (rich formatting) and JSON
 
@@ -124,26 +123,6 @@ test_cases:
     expected: no_trigger
 ```
 
-### Trace Analysis
-
-Analyze execution traces with custom checks:
-
-```bash
-sklab eval-trace ./my-skill --trace ./execution.jsonl
-```
-
-**Check Definition** (`tests/trace_checks.yaml`):
-
-```yaml
-checks:
-  - id: npm-install-ran
-    type: command_presence
-    pattern: "npm install"
-  - id: package-json-created
-    type: file_creation
-    path: "package.json"
-```
-
 ## Output Format (JSON)
 
 ```json
@@ -154,8 +133,8 @@ checks:
   "duration_ms": 45.3,
   "quality_score": 87.5,
   "overall_pass": true,
-  "checks_run": 18,
-  "checks_passed": 19,
+  "checks_run": 19,
+  "checks_passed": 17,
   "checks_failed": 2,
   "results": [...],
   "summary": {
