@@ -11,7 +11,6 @@ from skill_lab.checks.base import StaticCheck
 # The imports appear unused but are required for the auto-discovery pattern.
 from skill_lab.checks.static import (  # noqa: F401
     content,
-    description,
     naming,
     schema,
     structure,

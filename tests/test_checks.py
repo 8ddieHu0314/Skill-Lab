@@ -9,9 +9,6 @@ from skill_lab.checks.static.content import (
     HasExamplesCheck,
     LineBudgetCheck,
 )
-from skill_lab.checks.static.description import (
-    DescriptionIncludesTriggersCheck,
-)
 from skill_lab.checks.static.naming import (
     NameMatchesDirectoryCheck,
 )

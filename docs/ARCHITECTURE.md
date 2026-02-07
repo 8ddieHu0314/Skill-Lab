@@ -47,7 +47,6 @@ src/skill_lab/
 │       ├── structure.py      # 5 checks
 │       ├── schema.py         # 9 checks (declarative FieldRule)
 │       ├── naming.py         # 1 check
-│       ├── description.py    # 1 check
 │       └── content.py        # 4 checks
 ├── evaluators/
 │   ├── static_evaluator.py   # Orchestrates static check execution

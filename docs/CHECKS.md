@@ -1,7 +1,7 @@
 # Skill-Lab Quality Checks
 
 This document lists all checks used to evaluate agent skills:
-- **20 Static Checks**: Validate SKILL.md structure, naming, description, and content
+- **19 Static Checks**: Validate SKILL.md structure, naming, description, and content
 - **5 Trace Check Types**: Validate execution traces (command presence, file creation, sequences, loops, efficiency)
 
 Static checks are aligned with the [Agent Skills Specification](https://agentskills.io/specification).
@@ -26,7 +26,7 @@ sklab list-checks --suggestions-only
 
 **Spec-required checks (10):** Must pass to be considered a valid Agent Skill per the specification.
 
-**Quality suggestions (10):** Additional checks for best practices that improve skill quality but aren't required by the spec.
+**Quality suggestions (9):** Additional checks for best practices that improve skill quality but aren't required by the spec.
 
 ---
 
@@ -132,14 +132,13 @@ sklab list-checks --suggestions-only
 
 ---
 
-## Description Checks (4)
+## Description Checks (3)
 
 | Check ID | Severity | Spec | Description |
 |----------|----------|------|-------------|
 | `description.required` | ERROR | Required | Description field is present in frontmatter |
 | `description.not-empty` | ERROR | Required | Description is not empty (1-1024 chars) |
 | `description.max-length` | ERROR | Required | Description is under 1024 characters |
-| `description.includes-triggers` | INFO | Recommended | Description describes when to use the skill |
 
 ### Details
 
@@ -152,9 +151,7 @@ sklab list-checks --suggestions-only
 **description.max-length** (Spec: Required)
 - Maximum 1024 characters
 
-**description.includes-triggers** (Spec: Recommended)
-- Per spec: description "should describe when to use it"
-- Looks for trigger keywords: `when`, `if`, `trigger`, `activate`, `invoke`, `use when/for/to`
+> **Note:** Trigger keyword validation (`description.includes-triggers`) was removed because static regex matching produces false positives on semantically clear descriptions. This will be reimplemented as an LLM-as-judge check in a future release.
 
 ---
 
