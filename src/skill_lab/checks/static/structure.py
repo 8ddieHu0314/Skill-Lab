@@ -210,11 +210,12 @@ class StandardFrontmatterFieldsCheck(StaticCheck):
         if non_standard:
             sorted_fields = sorted(non_standard)
             return self._fail(
-                f"Non-standard frontmatter fields: {', '.join(sorted_fields)}",
+                f"Non-standard frontmatter fields: {', '.join(sorted_fields)}. "
+                "Move custom fields to the metadata map",
                 details={
                     "non_standard_fields": sorted_fields,
                     "spec_fields": sorted(SPEC_FRONTMATTER_FIELDS),
-                    "note": "Custom fields may cause unexpected behavior with different agents",
+                    "note": "Custom fields should be placed in the metadata map instead",
                 },
                 location=self._skill_md_location(skill),
             )
