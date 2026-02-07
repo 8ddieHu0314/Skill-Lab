@@ -12,8 +12,8 @@ from skill_lab.checks.base import StaticCheck
 from skill_lab.checks.static import (  # noqa: F401
     content,
     description,
-    frontmatter,
     naming,
+    schema,
     structure,
 )
 from skill_lab.core.models import CheckResult, EvaluationReport, Severity

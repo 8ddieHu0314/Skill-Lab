@@ -1,7 +1,7 @@
 # Skill-Lab Quality Checks
 
 This document lists all checks used to evaluate agent skills:
-- **19 Static Checks**: Validate SKILL.md structure, naming, description, and content
+- **20 Static Checks**: Validate SKILL.md structure, naming, description, and content
 - **5 Trace Check Types**: Validate execution traces (command presence, file creation, sequences, loops, efficiency)
 
 Static checks are aligned with the [Agent Skills Specification](https://agentskills.io/specification).
@@ -26,7 +26,7 @@ sklab list-checks --suggestions-only
 
 **Spec-required checks (10):** Must pass to be considered a valid Agent Skill per the specification.
 
-**Quality suggestions (9):** Additional checks for best practices that improve skill quality but aren't required by the spec.
+**Quality suggestions (10):** Additional checks for best practices that improve skill quality but aren't required by the spec.
 
 ---
 
@@ -45,7 +45,7 @@ sklab list-checks --suggestions-only
 
 ---
 
-## Structure Checks (8)
+## Structure Checks (9)
 
 | Check ID | Severity | Spec | Description |
 |----------|----------|------|-------------|
@@ -55,6 +55,7 @@ sklab list-checks --suggestions-only
 | `frontmatter.compatibility-length` | ERROR | Required | Compatibility field is under 500 characters if provided |
 | `frontmatter.metadata-format` | ERROR | Required | Metadata field is a string-to-string mapping if provided |
 | `frontmatter.allowed-tools-format` | WARNING | - | Allowed-tools field is a space-delimited string if provided |
+| `frontmatter.license-format` | WARNING | - | License field is a valid string if provided |
 | `structure.scripts-valid` | WARNING | - | /scripts contains only valid script files |
 | `structure.references-valid` | WARNING | - | /references contains only valid reference files |
 
@@ -89,6 +90,11 @@ sklab list-checks --suggestions-only
 - Validates the optional `allowed-tools` field if present
 - Must be a space-delimited string (e.g., `"Read Write Bash"`)
 - Common mistake: using YAML list syntax instead of string
+- Passes if field is not present (optional field)
+
+**frontmatter.license-format** (Quality suggestion)
+- Validates the optional `license` field if present
+- Must be a non-empty string
 - Passes if field is not present (optional field)
 
 **structure.scripts-valid** (Quality suggestion)

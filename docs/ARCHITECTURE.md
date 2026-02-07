@@ -45,9 +45,9 @@ src/skill_lab/
 │   ├── base.py               # StaticCheck abstract base class
 │   └── static/               # Check implementations
 │       ├── structure.py      # 4 checks
-│       ├── frontmatter.py    # 3 checks
-│       ├── naming.py         # 3 checks
-│       ├── description.py    # 4 checks
+│       ├── schema.py         # 9 checks (declarative FieldRule)
+│       ├── naming.py         # 1 check
+│       ├── description.py    # 1 check
 │       └── content.py        # 4 checks
 ├── evaluators/
 │   ├── static_evaluator.py   # Orchestrates static check execution
@@ -122,8 +122,8 @@ src/skill_lab/
                     ┌───────────────────────────────┴────────────────────────┐
                     │                    │                    │              │
             ┌───────────────┐    ┌───────────────┐    ┌───────────────┐ ┌──────────┐
-            │ structure.py  │ │frontmatter.py│ │  naming.py  │ │description.py│ │content.py│
-            │ (4 checks)    │ │  (3 checks)  │ │ (3 checks)  │ │  (4 checks)  │ │(4 checks)│
+            │ structure.py  │    │  schema.py    │    │  naming.py    │ │description│ │content.py│
+            │ (4 checks)    │    │  (9 checks)   │    │ (1 check)    │ │ (1 check) │ │(4 checks)│
             └───────────────┘    └───────────────┘    └───────────────┘ └──────────┘
 ```
 
@@ -286,10 +286,10 @@ def run(self, skill: Skill) -> CheckResult:
 
 ```python
 # evaluators/static_evaluator.py
-from skill_lab.checks.static import content, description, frontmatter, naming, structure
+from skill_lab.checks.static import content, description, naming, schema, structure
 
 # This import executes the module code, which runs @register_check decorators
-# Now registry.get_all() returns all 18 check classes
+# Now registry.get_all() returns all 20 check classes
 ```
 
 #### Why This Pattern?
@@ -412,7 +412,7 @@ sklab eval-trace ./my-skill --trace ./execution.jsonl [-f console|json] [-o file
 **Evaluation Flags:**
 - `-V` / `--verbose`: Show all checks, not just failures
 - `-s` / `--spec-only`: Only run checks required by the Agent Skills spec (10 checks)
-- `--suggestions-only`: List only quality suggestion checks (8 checks)
+- `--suggestions-only`: List only quality suggestion checks (10 checks)
 
 **Trigger Testing:**
 - `-t` / `--type`: Filter by trigger type (explicit, implicit, contextual, negative)
@@ -663,7 +663,7 @@ class MyNewCheck(StaticCheck):
 
 **Check Categories:**
 - **Spec-required checks** (10): Must pass to be valid per the Agent Skills spec. Use `spec_required = True` and `Severity.ERROR`.
-- **Quality suggestions** (8): Best practices that improve skill quality. Use `spec_required = False` (default) with `Severity.WARNING` or `Severity.INFO`.
+- **Quality suggestions** (10): Best practices that improve skill quality. Use `spec_required = False` (default) with `Severity.WARNING` or `Severity.INFO`.
 
 ---
 

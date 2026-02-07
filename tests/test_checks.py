@@ -10,14 +10,10 @@ from skill_lab.checks.static.content import (
     LineBudgetCheck,
 )
 from skill_lab.checks.static.description import (
-    DescriptionMaxLengthCheck,
-    DescriptionNotEmptyCheck,
-    DescriptionRequiredCheck,
+    DescriptionIncludesTriggersCheck,
 )
 from skill_lab.checks.static.naming import (
-    NameFormatCheck,
     NameMatchesDirectoryCheck,
-    NameRequiredCheck,
 )
 from skill_lab.checks.static.structure import (
     SkillMdExistsCheck,
@@ -25,6 +21,17 @@ from skill_lab.checks.static.structure import (
     ValidFrontmatterCheck,
 )
 from skill_lab.core.models import Severity, Skill, SkillMetadata
+from skill_lab.core.registry import registry
+
+# Ensure schema checks are registered
+from skill_lab.checks.static import schema as _schema  # noqa: F401
+
+
+def _get_check(check_id: str):
+    """Get a check instance from the registry by ID."""
+    check_class = registry.get(check_id)
+    assert check_class is not None, f"Check '{check_id}' not found in registry"
+    return check_class()
 
 
 def make_skill(
@@ -154,19 +161,19 @@ class TestNamingChecks:
     """Tests for naming checks."""
 
     def test_name_required_pass(self):
-        check = NameRequiredCheck()
+        check = _get_check("naming.required")
         skill = make_skill(name="my-skill")
         result = check.run(skill)
         assert result.passed
 
     def test_name_required_fail(self):
-        check = NameRequiredCheck()
+        check = _get_check("naming.required")
         skill = make_skill(name="")
         result = check.run(skill)
         assert not result.passed
 
     def test_name_format_valid(self):
-        check = NameFormatCheck()
+        check = _get_check("naming.format")
         # Per spec: lowercase alphanumeric + hyphens, no start/end hyphen
         for valid_name in ["my-skill", "skill123", "a", "creating-reports", "30daysresearch", "123", "1"]:
             skill = make_skill(name=valid_name)
@@ -174,7 +181,7 @@ class TestNamingChecks:
             assert result.passed, f"Expected '{valid_name}' to pass"
 
     def test_name_format_invalid(self):
-        check = NameFormatCheck()
+        check = _get_check("naming.format")
         # Invalid: uppercase, underscores, spaces, start/end with hyphen, consecutive hyphens
         for invalid_name in ["My_Skill", "UPPERCASE", "spaces here", "-starts-with-hyphen", "ends-with-hyphen-", "has--consecutive-hyphens"]:
             skill = make_skill(name=invalid_name)
@@ -199,31 +206,31 @@ class TestDescriptionChecks:
     """Tests for description checks."""
 
     def test_description_required_pass(self):
-        check = DescriptionRequiredCheck()
+        check = _get_check("description.required")
         skill = make_skill(description="Some description")
         result = check.run(skill)
         assert result.passed
 
     def test_description_not_empty_pass(self):
-        check = DescriptionNotEmptyCheck()
+        check = _get_check("description.not-empty")
         skill = make_skill(description="Valid description")
         result = check.run(skill)
         assert result.passed
 
     def test_description_not_empty_fail(self):
-        check = DescriptionNotEmptyCheck()
+        check = _get_check("description.not-empty")
         skill = make_skill(description="   ")
         result = check.run(skill)
         assert not result.passed
 
     def test_description_max_length_pass(self):
-        check = DescriptionMaxLengthCheck()
+        check = _get_check("description.max-length")
         skill = make_skill(description="Short description")
         result = check.run(skill)
         assert result.passed
 
     def test_description_max_length_fail(self):
-        check = DescriptionMaxLengthCheck()
+        check = _get_check("description.max-length")
         skill = make_skill(description="x" * 2000)
         result = check.run(skill)
         assert not result.passed
@@ -281,9 +288,7 @@ class TestFrontmatterChecks:
     """Tests for optional frontmatter field checks."""
 
     def test_compatibility_valid(self):
-        from skill_lab.checks.static.frontmatter import CompatibilityLengthCheck
-
-        check = CompatibilityLengthCheck()
+        check = _get_check("frontmatter.compatibility-length")
         skill = Skill(
             path=Path("/test/my-skill"),
             metadata=SkillMetadata(
@@ -304,9 +309,7 @@ class TestFrontmatterChecks:
         assert result.passed
 
     def test_compatibility_too_long(self):
-        from skill_lab.checks.static.frontmatter import CompatibilityLengthCheck
-
-        check = CompatibilityLengthCheck()
+        check = _get_check("frontmatter.compatibility-length")
         skill = Skill(
             path=Path("/test/my-skill"),
             metadata=SkillMetadata(
@@ -329,9 +332,7 @@ class TestFrontmatterChecks:
 
     def test_compatibility_empty_fails(self):
         """Spec requires 1-500 characters if provided."""
-        from skill_lab.checks.static.frontmatter import CompatibilityLengthCheck
-
-        check = CompatibilityLengthCheck()
+        check = _get_check("frontmatter.compatibility-length")
         skill = Skill(
             path=Path("/test/my-skill"),
             metadata=SkillMetadata(
@@ -354,9 +355,7 @@ class TestFrontmatterChecks:
 
     def test_compatibility_whitespace_only_fails(self):
         """Whitespace-only compatibility should fail."""
-        from skill_lab.checks.static.frontmatter import CompatibilityLengthCheck
-
-        check = CompatibilityLengthCheck()
+        check = _get_check("frontmatter.compatibility-length")
         skill = Skill(
             path=Path("/test/my-skill"),
             metadata=SkillMetadata(
@@ -377,9 +376,7 @@ class TestFrontmatterChecks:
         assert not result.passed
 
     def test_metadata_valid(self):
-        from skill_lab.checks.static.frontmatter import MetadataFormatCheck
-
-        check = MetadataFormatCheck()
+        check = _get_check("frontmatter.metadata-format")
         skill = Skill(
             path=Path("/test/my-skill"),
             metadata=SkillMetadata(
@@ -400,9 +397,7 @@ class TestFrontmatterChecks:
         assert result.passed
 
     def test_metadata_non_string_value_fails(self):
-        from skill_lab.checks.static.frontmatter import MetadataFormatCheck
-
-        check = MetadataFormatCheck()
+        check = _get_check("frontmatter.metadata-format")
         skill = Skill(
             path=Path("/test/my-skill"),
             metadata=SkillMetadata(
@@ -424,9 +419,7 @@ class TestFrontmatterChecks:
         assert "string" in result.message.lower()
 
     def test_allowed_tools_valid(self):
-        from skill_lab.checks.static.frontmatter import AllowedToolsFormatCheck
-
-        check = AllowedToolsFormatCheck()
+        check = _get_check("frontmatter.allowed-tools-format")
         skill = Skill(
             path=Path("/test/my-skill"),
             metadata=SkillMetadata(
@@ -448,9 +441,7 @@ class TestFrontmatterChecks:
 
     def test_allowed_tools_list_fails(self):
         """Using YAML list syntax instead of space-delimited string should fail."""
-        from skill_lab.checks.static.frontmatter import AllowedToolsFormatCheck
-
-        check = AllowedToolsFormatCheck()
+        check = _get_check("frontmatter.allowed-tools-format")
         skill = Skill(
             path=Path("/test/my-skill"),
             metadata=SkillMetadata(
@@ -470,3 +461,53 @@ class TestFrontmatterChecks:
         result = check.run(skill)
         assert not result.passed
         assert "space-delimited" in result.message.lower()
+
+    def test_license_valid_string(self):
+        check = _get_check("frontmatter.license-format")
+        skill = Skill(
+            path=Path("/test/my-skill"),
+            metadata=SkillMetadata(
+                name="my-skill",
+                description="A test skill",
+                raw={
+                    "name": "my-skill",
+                    "description": "A test skill",
+                    "license": "Apache-2.0",
+                },
+            ),
+            body="Body content",
+            has_scripts=False,
+            has_references=False,
+            has_assets=False,
+        )
+        result = check.run(skill)
+        assert result.passed
+
+    def test_license_absent_passes(self):
+        check = _get_check("frontmatter.license-format")
+        skill = make_skill()
+        result = check.run(skill)
+        assert result.passed
+
+    def test_license_non_string_fails(self):
+        """YAML can parse 'license: true' as boolean."""
+        check = _get_check("frontmatter.license-format")
+        skill = Skill(
+            path=Path("/test/my-skill"),
+            metadata=SkillMetadata(
+                name="my-skill",
+                description="A test skill",
+                raw={
+                    "name": "my-skill",
+                    "description": "A test skill",
+                    "license": True,  # Boolean instead of string
+                },
+            ),
+            body="Body content",
+            has_scripts=False,
+            has_references=False,
+            has_assets=False,
+        )
+        result = check.run(skill)
+        assert not result.passed
+        assert "string" in result.message.lower()
