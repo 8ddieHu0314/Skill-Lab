@@ -85,3 +85,4 @@ Thumbs.db
 downloaded-skills/
 tests/fixtures/skills/downloaded/
 .skill-lab/
+!tests/fixtures/**/.skill-lab/
