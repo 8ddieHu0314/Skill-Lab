@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Python CLI tool that evaluates agent skills (SKILL.md files) through static analysis and trigger testing. Produces a 0-100 quality score based on 19 checks across 4 dimensions.
+Python CLI tool that evaluates agent skills (SKILL.md files) through static analysis, trigger testing, and LLM-based test generation. Produces a 0-100 quality score based on 19 checks across 4 dimensions.
 
-**Current Release:** v0.2.0 on PyPI includes static analysis (19 checks) and trigger testing. See [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) for the version roadmap.
+**Current Release:** v0.3.0 on PyPI includes static analysis (19 checks), trigger testing, and `sklab generate` for LLM-based trigger test generation. See [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) for the version roadmap.
 
 ## Naming Convention
 
@@ -44,6 +44,8 @@ sklab evaluate                             # Run static analysis on current dire
 sklab evaluate -s                          # Spec-required checks only
 sklab validate                             # Quick pass/fail validation
 sklab trigger                              # Run trigger tests (requires Claude CLI)
+sklab generate                             # Generate trigger tests via LLM (requires anthropic)
+sklab generate --model claude-sonnet-4-5-20250929  # Use a specific model
 pytest tests/ -v                           # Run all tests
 pytest tests/test_naming.py -v             # Run single test file
 pytest tests/test_naming.py::test_name -v  # Run single test

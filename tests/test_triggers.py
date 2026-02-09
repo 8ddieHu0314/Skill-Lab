@@ -52,7 +52,7 @@ class TestTriggerTestLoader:
 
         assert len(test_cases) == 0
         assert len(errors) >= 1
-        assert "No tests/ directory found" in errors[0]
+        assert "No .skill-lab/tests/ directory found" in errors[0]
 
     def test_trigger_type_parsing(self, fixtures_dir: Path) -> None:
         """Test that all trigger types are correctly parsed."""

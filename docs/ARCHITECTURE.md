@@ -12,6 +12,7 @@ This document provides a comprehensive overview of Skill-Lab's technology stack 
 | **Typer** | ≥0.9.0 | CLI framework built on Click with type hints |
 | **Rich** | ≥13.0.0 | Terminal formatting (tables, panels, colors) |
 | **PyYAML** | ≥6.0 | YAML frontmatter parsing |
+| **anthropic** | ≥0.39.0 | LLM-based test generation (optional, `pip install skill-lab[generate]`) |
 
 ### Development Dependencies
 
@@ -63,6 +64,7 @@ src/skill_lab/
 │       ├── loop_detection.py
 │       └── efficiency.py
 ├── triggers/                 # Trigger testing (Phase 2)
+│   ├── generator.py          # LLM-based trigger test generation (v0.3.0)
 │   ├── test_loader.py        # Load test cases from YAML
 │   ├── trace_analyzer.py     # Analyze execution traces
 │   └── trigger_evaluator.py  # Orchestrates trigger tests
@@ -398,7 +400,10 @@ sklab list-checks [-d structure|naming|description|content] [-s] [--suggestions-
 # Trigger testing (defaults to current directory if path omitted)
 sklab trigger [./my-skill] [-t explicit|implicit|contextual|negative] [-f console|json] [-o file.json]
 
-# Trace evaluation (hidden, coming in v0.3.0)
+# Generate trigger tests via LLM (defaults to current directory, requires ANTHROPIC_API_KEY)
+sklab generate [./my-skill] [-m MODEL] [--force]
+
+# Trace evaluation (hidden, coming in v0.4.0)
 sklab eval-trace ./my-skill --trace ./execution.jsonl [-f console|json] [-o file.json]
 ```
 
@@ -460,8 +465,8 @@ Trigger testing verifies that skills activate correctly for different prompt typ
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
 │  1. Load test cases from YAML                                           │
-│     tests/triggers.yaml → Simple flat format                            │
-│     (tests/scenarios.yaml → GWT DSL, coming in v0.3.0)                  │
+│     .skill-lab/tests/triggers.yaml → Simple flat format                 │
+│     .skill-lab/tests/scenarios.yaml → GWT DSL                           │
 │                              │                                          │
 │  2. Execute prompts via Runtime Adapter                                 │
 │     RuntimeAdapter (Claude CLI; Codex CLI in v0.3.0)                    │
@@ -542,7 +547,7 @@ class RuntimeAdapter(ABC):
 
 ### Test Definition Format
 
-**Simple Format** (`tests/triggers.yaml`) - v0.2.0:
+**Simple Format** (`.skill-lab/tests/triggers.yaml`):
 ```yaml
 skill: my-skill
 test_cases:
@@ -559,7 +564,7 @@ test_cases:
     expected: no_trigger
 ```
 
-**Given/When/Then DSL** (`tests/scenarios.yaml`) - coming in v0.3.0:
+**Given/When/Then DSL** (`.skill-lab/tests/scenarios.yaml`):
 ```yaml
 skill: my-skill
 scenarios:
@@ -623,6 +628,9 @@ class ConfigurationError(SkillLabError):
 
 class ValidationError(SkillLabError):
     """Errors validating skill structure or content."""
+
+class GenerationError(SkillLabError):
+    """Errors during LLM-based trigger generation."""
 ```
 
 Usage:

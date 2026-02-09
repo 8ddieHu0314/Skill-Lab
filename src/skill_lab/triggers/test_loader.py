@@ -1,8 +1,8 @@
 """Load trigger test cases from YAML files.
 
 Supports two formats:
-1. Given/When/Then DSL (scenarios.yaml)
-2. Simple flat format (triggers.yaml)
+1. Given/When/Then DSL (.skill-lab/tests/scenarios.yaml)
+2. Simple flat format (.skill-lab/tests/triggers.yaml)
 """
 
 from pathlib import Path
@@ -17,8 +17,8 @@ def load_trigger_tests(skill_path: Path) -> tuple[list[TriggerTestCase], list[st
     """Load trigger test cases from a skill directory.
 
     Looks for test definitions in:
-    - tests/scenarios.yaml (Given/When/Then DSL)
-    - tests/triggers.yaml (simple format)
+    - .skill-lab/tests/scenarios.yaml (Given/When/Then DSL)
+    - .skill-lab/tests/triggers.yaml (simple format)
 
     Args:
         skill_path: Path to the skill directory.
@@ -26,12 +26,12 @@ def load_trigger_tests(skill_path: Path) -> tuple[list[TriggerTestCase], list[st
     Returns:
         Tuple of (test_cases, errors) where errors contains any parsing issues.
     """
-    tests_dir = skill_path / "tests"
+    tests_dir = skill_path / ".skill-lab" / "tests"
     test_cases: list[TriggerTestCase] = []
     errors: list[str] = []
 
     if not tests_dir.exists():
-        return test_cases, ["No tests/ directory found"]
+        return test_cases, ["No .skill-lab/tests/ directory found"]
 
     # Try loading scenarios.yaml (Given/When/Then DSL)
     scenarios_path = tests_dir / "scenarios.yaml"

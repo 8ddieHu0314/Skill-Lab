@@ -190,3 +190,33 @@ class ValidationError(SkillLabError):
         if missing_items:
             ctx["missing_items"] = missing_items
         super().__init__(message, context=ctx, suggestion=suggestion)
+
+
+class GenerationError(SkillLabError):
+    """Error during LLM-based trigger generation.
+
+    Raised when trigger test generation fails due to API errors,
+    invalid responses, or other generation issues.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        skill_path: str | None = None,
+        context: dict[str, Any] | None = None,
+        suggestion: str | None = None,
+    ) -> None:
+        """Initialize the generation error.
+
+        Args:
+            message: Description of what went wrong.
+            skill_path: Path to the skill being generated for.
+            context: Additional context for debugging.
+            suggestion: How to fix the issue.
+        """
+        self.skill_path = skill_path
+        ctx = context or {}
+        if skill_path:
+            ctx["skill_path"] = skill_path
+        super().__init__(message, context=ctx, suggestion=suggestion)

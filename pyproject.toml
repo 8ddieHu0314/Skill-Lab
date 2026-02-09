@@ -1,6 +1,6 @@
 [project]
 name = "skill-lab"
-version = "0.2.0"
+version = "0.3.0"
 description = "A Python CLI tool for evaluating agent skills through static analysis, trigger testing, and trace analysis"
 readme = "README.md"
 license = "MIT"
@@ -39,12 +39,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+generate = ["anthropic>=0.39.0"]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "mypy>=1.0",
     "ruff>=0.1.0",
     "types-PyYAML>=6.0",
+    "anthropic>=0.39.0",
 ]
 
 [project.scripts]
@@ -63,6 +65,9 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+skill_lab = ["triggers/*.md"]
 
 # Ruff - Linting and formatting
 [tool.ruff]
@@ -101,6 +106,10 @@ show_error_codes = true
 
 [[tool.mypy.overrides]]
 module = ["yaml.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["anthropic.*"]
 ignore_missing_imports = true
 
 # Pytest - Testing
