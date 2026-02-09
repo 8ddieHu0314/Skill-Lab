@@ -335,6 +335,20 @@ def trigger(
         console.print("[dim]This directory does not appear to be a skill folder.[/dim]")
         raise typer.Exit(code=1)
 
+    # Check for trigger test files
+    tests_dir = skill_path / ".skill-lab" / "tests"
+    has_tests = tests_dir.exists() and any(
+        f.suffix in (".yaml", ".yml") for f in tests_dir.iterdir()
+    ) if tests_dir.exists() else False
+    if not has_tests:
+        console.print("[yellow]No trigger tests found.[/yellow]")
+        console.print(
+            f"[dim]Run [bold]sklab generate {skill_path}[/bold] to auto-generate "
+            f"trigger tests, or create them manually at "
+            f".skill-lab/tests/triggers.yaml[/dim]"
+        )
+        raise typer.Exit(code=1)
+
     # Parse type filter
     trigger_type: TriggerType | None = None
     if type_filter:

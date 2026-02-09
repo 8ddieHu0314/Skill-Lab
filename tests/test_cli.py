@@ -80,3 +80,14 @@ class TestListChecksCommand:
         result = runner.invoke(app, ["list-checks", "--dimension", "invalid"])
         assert result.exit_code == 1
         assert "Invalid dimension" in result.stdout
+
+
+class TestTriggerCommand:
+    """Tests for the trigger command."""
+
+    def test_trigger_no_tests_hints_generate(self, invalid_skill_path: Path):
+        """Test that trigger command hints at sklab generate when no tests exist."""
+        result = runner.invoke(app, ["trigger", str(invalid_skill_path)])
+        assert result.exit_code == 1
+        assert "No trigger tests found" in result.stdout
+        assert "sklab generate" in result.stdout
