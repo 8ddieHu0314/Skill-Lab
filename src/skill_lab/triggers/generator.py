@@ -11,6 +11,7 @@ from typing import Any
 
 import yaml
 
+from skill_lab.core.constants import TESTS_DIR
 from skill_lab.core.exceptions import GenerationError
 from skill_lab.parsers.skill_parser import parse_skill
 
@@ -138,7 +139,7 @@ class TriggerGenerator:
             FileExistsError: If file exists and force is False.
             GenerationError: If generation fails.
         """
-        output_dir = skill_path / ".skill-lab" / "tests"
+        output_dir = skill_path / TESTS_DIR
         output_path = output_dir / "triggers.yaml"
 
         if output_path.exists() and not force:

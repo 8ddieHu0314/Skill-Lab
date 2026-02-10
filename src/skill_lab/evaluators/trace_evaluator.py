@@ -4,30 +4,13 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+import skill_lab.tracechecks.handlers as _handlers  # noqa: F401  # trigger registration
 from skill_lab.core.models import TraceCheckResult, TraceReport
 from skill_lab.core.scoring import build_summary_by_attribute, calculate_metrics
 from skill_lab.parsers.trace_parser import parse_trace_file
-from skill_lab.tracechecks.handlers import (
-    CommandPresenceHandler,
-    EfficiencyHandler,
-    EventSequenceHandler,
-    FileCreationHandler,
-    LoopDetectionHandler,
-)
 from skill_lab.tracechecks.registry import trace_registry
 from skill_lab.tracechecks.trace_check_loader import load_trace_checks
 from skill_lab.triggers.trace_analyzer import TraceAnalyzer
-
-# Side-effect references: These handlers are imported above but the references below
-# ensure they are not removed by linters/dead-code analyzers. The @register_trace_handler
-# decorator on each class registers it with trace_registry when the module is imported.
-_ = (
-    CommandPresenceHandler,
-    FileCreationHandler,
-    EventSequenceHandler,
-    LoopDetectionHandler,
-    EfficiencyHandler,
-)
 
 
 class TraceEvaluator:

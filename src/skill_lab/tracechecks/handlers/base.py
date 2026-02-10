@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from skill_lab.core.models import TraceCheckDefinition, TraceCheckResult
 from skill_lab.triggers.trace_analyzer import TraceAnalyzer
@@ -14,7 +14,11 @@ class TraceCheckHandler(ABC):
     Each handler implements a specific check type (e.g., command_presence,
     file_creation). Handlers are registered with the trace registry and
     invoked by the trace evaluator based on the check type in YAML definitions.
+
+    The check_type attribute is set by the @register_trace_handler decorator.
     """
+
+    check_type: ClassVar[str] = ""
 
     @abstractmethod
     def run(

@@ -59,17 +59,50 @@ For full CLI options, see [ARCHITECTURE.md - CLI Commands](docs/ARCHITECTURE.md#
 
 ## Key Architecture
 
-The codebase uses a **decorator-based auto-discovery pattern** for checks:
+### Two Check Systems (19 total: 10 spec-required, 9 quality suggestions)
 
-1. Checks are defined in `src/skill_lab/checks/static/*.py` with `@register_check` decorator
-2. Importing the module registers the check to the global `CheckRegistry` singleton
-3. `StaticEvaluator` imports all check modules, triggering registration
-4. `registry.get_all()` returns all registered checks for execution
+The codebase has **two distinct patterns** for defining static checks:
+
+**1. Behavioral checks** — hand-written classes with `@register_check` decorator:
+- `structure.py` (5 checks): `SkillMdExistsCheck`, `ValidFrontmatterCheck`, `StandardFrontmatterFieldsCheck`, etc.
+- `naming.py` (1 check): `MatchesDirectoryCheck`
+- `content.py` (4 checks): `HasExamplesCheck`, `LineBudgetCheck`, etc.
+
+**2. Schema-based checks** — declarative `FieldRule` definitions in `schema.py` (9 checks):
+- Each `FieldRule` in `FRONTMATTER_SCHEMA` list describes a single constraint (field name, type, max length, regex, etc.)
+- `_make_schema_check()` factory creates a concrete `StaticCheck` subclass per rule at import time
+- `_validate_rule()` engine interprets the rule and produces `CheckResult` objects
+- To add a schema check: append a `FieldRule` to `FRONTMATTER_SCHEMA` — no class needed
+
+### Auto-Discovery Pattern
+
+1. Importing a check module registers checks to the global `CheckRegistry` singleton
+2. `StaticEvaluator` imports all check modules (`content`, `naming`, `schema`, `structure`), triggering registration
+3. `registry.get_all()` returns all registered check classes for execution
+4. `Registry.register()` raises `ValueError` on duplicate `check_id`
 
 Same pattern applies to trace handlers (`@register_trace_handler` in `tracechecks/handlers/`).
 
+### Sync Requirements
+
+- `SPEC_FRONTMATTER_FIELDS` set in `structure.py` must stay in sync with `FRONTMATTER_SCHEMA` in `schema.py` when adding new frontmatter fields
+
+### Optional Dependencies
+
+- `anthropic` is an optional dep: `pip install skill-lab[generate]`
+- `TriggerGenerator` in `triggers/generator.py` is deliberately **NOT** imported in `triggers/__init__.py` to avoid import errors when `anthropic` is not installed
+- Guard pattern: lazy import inside the `generate` CLI command only
+
+## Testing Conventions
+
+- **Fixtures** live in `tests/fixtures/skills/` — each subdirectory is a mock skill with `SKILL.md`
+- **Schema-based checks**: use `_get_check(check_id)` helper (registry lookup) in `test_checks.py`
+- **Behavioral checks**: import the class directly (e.g., `from skill_lab.checks.static.naming import MatchesDirectoryCheck`)
+- **Trigger test files**: `.skill-lab/tests/triggers.yaml` (migrated from `tests/` in v0.3.0)
+
 ## Common Tasks
 
-- **Adding a check**: See [ARCHITECTURE.md - Adding a New Check](docs/ARCHITECTURE.md#adding-a-new-check)
+- **Adding a behavioral check**: See [ARCHITECTURE.md - Adding a New Check](docs/ARCHITECTURE.md#adding-a-new-check)
+- **Adding a schema check**: Append a `FieldRule` to `FRONTMATTER_SCHEMA` in `schema.py`
 - **Understanding data flow**: See [ARCHITECTURE.md - Data Flow](docs/ARCHITECTURE.md#data-flow)
 - **Check details**: See [CHECKS.md](docs/CHECKS.md)

@@ -10,6 +10,7 @@ from typing import Any
 
 import yaml
 
+from skill_lab.core.constants import TESTS_DIR
 from skill_lab.core.models import TriggerExpectation, TriggerTestCase, TriggerType
 
 
@@ -26,12 +27,12 @@ def load_trigger_tests(skill_path: Path) -> tuple[list[TriggerTestCase], list[st
     Returns:
         Tuple of (test_cases, errors) where errors contains any parsing issues.
     """
-    tests_dir = skill_path / ".skill-lab" / "tests"
+    tests_dir = skill_path / TESTS_DIR
     test_cases: list[TriggerTestCase] = []
     errors: list[str] = []
 
     if not tests_dir.exists():
-        return test_cases, ["No .skill-lab/tests/ directory found"]
+        return test_cases, [f"No {TESTS_DIR}/ directory found"]
 
     # Try loading scenarios.yaml (Given/When/Then DSL)
     scenarios_path = tests_dir / "scenarios.yaml"

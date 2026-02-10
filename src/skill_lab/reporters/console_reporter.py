@@ -7,6 +7,19 @@ from rich.text import Text
 
 from skill_lab.core.models import EvaluationReport, Severity, TraceReport
 
+# Shared severity display mappings — keyed by Severity.value string
+SEVERITY_STYLES: dict[str, str] = {
+    "error": "bold red",
+    "warning": "yellow",
+    "info": "blue",
+}
+
+SEVERITY_ICONS: dict[str, str] = {
+    "error": "X",
+    "warning": "!",
+    "info": "i",
+}
+
 
 class ConsoleReporter:
     """Reporter that outputs evaluation results to the console."""
@@ -22,21 +35,11 @@ class ConsoleReporter:
 
     def _severity_style(self, severity: Severity) -> str:
         """Get the rich style for a severity level."""
-        styles = {
-            Severity.ERROR: "bold red",
-            Severity.WARNING: "yellow",
-            Severity.INFO: "blue",
-        }
-        return styles.get(severity, "white")
+        return SEVERITY_STYLES.get(severity.value, "white")
 
     def _severity_icon(self, severity: Severity) -> str:
         """Get the icon for a severity level."""
-        icons = {
-            Severity.ERROR: "X",
-            Severity.WARNING: "!",
-            Severity.INFO: "i",
-        }
-        return icons.get(severity, "?")
+        return SEVERITY_ICONS.get(severity.value, "?")
 
     def report(self, report: EvaluationReport) -> None:
         """Print an evaluation report to the console.

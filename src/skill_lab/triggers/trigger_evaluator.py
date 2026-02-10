@@ -5,6 +5,7 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
+from skill_lab.core.constants import TRACES_DIR
 from skill_lab.core.models import (
     TriggerReport,
     TriggerResult,
@@ -94,7 +95,7 @@ class TriggerEvaluator:
         skill_path = Path(skill_path)
 
         # Store traces in the skill's .skill-lab/traces directory
-        self._trace_dir = skill_path / ".skill-lab" / "traces"
+        self._trace_dir = skill_path / TRACES_DIR
 
         # Find project root for implicit tests (where .claude/skills/ is visible)
         project_root = self._find_project_root(skill_path)

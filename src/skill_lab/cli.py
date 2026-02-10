@@ -11,11 +11,12 @@ from rich.console import Console
 from rich.table import Table
 
 from skill_lab import __version__
+from skill_lab.core.constants import TESTS_DIR
 from skill_lab.core.models import EvalDimension, TriggerReport, TriggerType
 from skill_lab.core.registry import registry
 from skill_lab.evaluators.static_evaluator import StaticEvaluator
 from skill_lab.evaluators.trace_evaluator import TraceEvaluator
-from skill_lab.reporters.console_reporter import ConsoleReporter
+from skill_lab.reporters.console_reporter import SEVERITY_STYLES, ConsoleReporter
 from skill_lab.reporters.json_reporter import JsonReporter
 from skill_lab.triggers.trigger_evaluator import TriggerEvaluator
 
@@ -50,6 +51,32 @@ def app_callback(
 ) -> None:
     """Evaluate agent skills through static analysis and quality checks."""
     pass
+
+
+def _resolve_skill_path(skill_path: Path | None) -> Path:
+    """Resolve and validate a skill directory path.
+
+    Args:
+        skill_path: User-provided path, or None for current directory.
+
+    Returns:
+        Resolved absolute path.
+
+    Raises:
+        typer.Exit: If path doesn't exist, isn't a directory, or has no SKILL.md.
+    """
+    resolved = Path.cwd() if skill_path is None else skill_path.resolve()
+    if not resolved.exists():
+        console.print(f"[red]Error: Path does not exist: {resolved}[/red]")
+        raise typer.Exit(code=1)
+    if not resolved.is_dir():
+        console.print(f"[red]Error: Path is not a directory: {resolved}[/red]")
+        raise typer.Exit(code=1)
+    if not (resolved / "SKILL.md").exists():
+        console.print(f"[red]Error: No SKILL.md found in {resolved}[/red]")
+        console.print("[dim]This directory does not appear to be a skill folder.[/dim]")
+        raise typer.Exit(code=1)
+    return resolved
 
 
 class OutputFormat(str, Enum):
@@ -101,19 +128,7 @@ def evaluate(
     ] = False,
 ) -> None:
     """Evaluate a skill and generate a quality report."""
-    # Resolve default path and validate
-    skill_path = Path.cwd() if skill_path is None else skill_path.resolve()
-
-    if not skill_path.exists():
-        console.print(f"[red]Error: Path does not exist: {skill_path}[/red]")
-        raise typer.Exit(code=1)
-    if not skill_path.is_dir():
-        console.print(f"[red]Error: Path is not a directory: {skill_path}[/red]")
-        raise typer.Exit(code=1)
-    if not (skill_path / "SKILL.md").exists():
-        console.print(f"[red]Error: No SKILL.md found in {skill_path}[/red]")
-        console.print("[dim]This directory does not appear to be a skill folder.[/dim]")
-        raise typer.Exit(code=1)
+    skill_path = _resolve_skill_path(skill_path)
 
     try:
         evaluator = StaticEvaluator(spec_only=spec_only)
@@ -156,19 +171,7 @@ def validate(
     ] = False,
 ) -> None:
     """Quick validation that reports only errors."""
-    # Resolve default path and validate
-    skill_path = Path.cwd() if skill_path is None else skill_path.resolve()
-
-    if not skill_path.exists():
-        console.print(f"[red]Error: Path does not exist: {skill_path}[/red]")
-        raise typer.Exit(code=1)
-    if not skill_path.is_dir():
-        console.print(f"[red]Error: Path is not a directory: {skill_path}[/red]")
-        raise typer.Exit(code=1)
-    if not (skill_path / "SKILL.md").exists():
-        console.print(f"[red]Error: No SKILL.md found in {skill_path}[/red]")
-        console.print("[dim]This directory does not appear to be a skill folder.[/dim]")
-        raise typer.Exit(code=1)
+    skill_path = _resolve_skill_path(skill_path)
 
     try:
         evaluator = StaticEvaluator(spec_only=spec_only)
@@ -244,14 +247,8 @@ def list_checks(
     table.add_column("Spec", style="green")
     table.add_column("Description")
 
-    severity_styles = {
-        "error": "red",
-        "warning": "yellow",
-        "info": "blue",
-    }
-
     for check_class in sorted(checks, key=lambda c: c.check_id):
-        severity_style = severity_styles.get(check_class.severity.value, "white")
+        severity_style = SEVERITY_STYLES.get(check_class.severity.value, "white")
         spec_badge = "[green]Yes[/green]" if check_class.spec_required else "[dim]No[/dim]"
         table.add_row(
             check_class.check_id,
@@ -321,25 +318,15 @@ def trigger(
 
     Requires test definitions in .skill-lab/tests/scenarios.yaml or .skill-lab/tests/triggers.yaml.
     """
-    # Resolve default path and validate
-    skill_path = Path.cwd() if skill_path is None else skill_path.resolve()
-
-    if not skill_path.exists():
-        console.print(f"[red]Error: Path does not exist: {skill_path}[/red]")
-        raise typer.Exit(code=1)
-    if not skill_path.is_dir():
-        console.print(f"[red]Error: Path is not a directory: {skill_path}[/red]")
-        raise typer.Exit(code=1)
-    if not (skill_path / "SKILL.md").exists():
-        console.print(f"[red]Error: No SKILL.md found in {skill_path}[/red]")
-        console.print("[dim]This directory does not appear to be a skill folder.[/dim]")
-        raise typer.Exit(code=1)
+    skill_path = _resolve_skill_path(skill_path)
 
     # Check for trigger test files
-    tests_dir = skill_path / ".skill-lab" / "tests"
-    has_tests = tests_dir.exists() and any(
-        f.suffix in (".yaml", ".yml") for f in tests_dir.iterdir()
-    ) if tests_dir.exists() else False
+    tests_dir = skill_path / TESTS_DIR
+    has_tests = (
+        tests_dir.exists() and any(f.suffix in (".yaml", ".yml") for f in tests_dir.iterdir())
+        if tests_dir.exists()
+        else False
+    )
     if not has_tests:
         console.print("[yellow]No trigger tests found.[/yellow]")
         console.print(
@@ -480,19 +467,7 @@ def generate(
 
     Requires the 'anthropic' package: pip install skill-lab[generate]
     """
-    # Resolve default path and validate
-    skill_path = Path.cwd() if skill_path is None else skill_path.resolve()
-
-    if not skill_path.exists():
-        console.print(f"[red]Error: Path does not exist: {skill_path}[/red]")
-        raise typer.Exit(code=1)
-    if not skill_path.is_dir():
-        console.print(f"[red]Error: Path is not a directory: {skill_path}[/red]")
-        raise typer.Exit(code=1)
-    if not (skill_path / "SKILL.md").exists():
-        console.print(f"[red]Error: No SKILL.md found in {skill_path}[/red]")
-        console.print("[dim]This directory does not appear to be a skill folder.[/dim]")
-        raise typer.Exit(code=1)
+    skill_path = _resolve_skill_path(skill_path)
 
     # Lazy import — anthropic is an optional dependency
     try:
@@ -514,7 +489,7 @@ def generate(
         raise typer.Exit(code=1)
 
     # Check for existing file (prompt unless --force)
-    output_path = skill_path / ".skill-lab" / "tests" / "triggers.yaml"
+    output_path = skill_path / TESTS_DIR / "triggers.yaml"
     if output_path.exists() and not force:
         overwrite = typer.confirm(f"Trigger tests already exist at {output_path}. Overwrite?")
         if not overwrite:

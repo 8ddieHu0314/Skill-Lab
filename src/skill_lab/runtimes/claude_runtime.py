@@ -7,6 +7,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+from skill_lab.core.constants import skill_script_patterns
 from skill_lab.core.models import TraceEvent
 from skill_lab.runtimes.base import RuntimeAdapter
 
@@ -146,11 +147,7 @@ class ClaudeRuntime(RuntimeAdapter):
             return False
 
         # Patterns that indicate skill execution
-        skill_patterns = [
-            f"scripts/{skill_name}",
-            f"/{skill_name}/scripts/",
-            f"skills/{skill_name}",
-        ]
+        skill_patterns = skill_script_patterns(skill_name)
 
         # Check for direct Skill tool_use (shouldn't happen at top level, but check)
         if event.get("name") == "Skill":

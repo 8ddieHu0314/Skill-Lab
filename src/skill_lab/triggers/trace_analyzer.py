@@ -3,6 +3,7 @@
 from collections import Counter
 from pathlib import Path
 
+from skill_lab.core.constants import skill_script_patterns
 from skill_lab.core.models import TraceEvent
 
 
@@ -43,11 +44,7 @@ class TraceAnalyzer:
             True if the skill appears to have been triggered.
         """
         # Patterns that indicate skill execution via Bash
-        skill_script_patterns = [
-            f"scripts/{skill_name}",  # python scripts/skill-name.py
-            f"/{skill_name}/scripts/",  # ~/.claude/skills/skill-name/scripts/
-            f"skills/{skill_name}",  # .claude/skills/skill-name
-        ]
+        patterns = skill_script_patterns(skill_name)
 
         for event in self.events:
             raw = event.raw
@@ -86,7 +83,7 @@ class TraceAnalyzer:
                                 tool_input = item.get("input", {})
                                 if isinstance(tool_input, dict):
                                     command = tool_input.get("command", "")
-                                    if any(pattern in command for pattern in skill_script_patterns):
+                                    if any(pattern in command for pattern in patterns):
                                         return True
 
             # Check for Codex-style skill invocation events
@@ -109,7 +106,7 @@ class TraceAnalyzer:
                         tool_input = denial.get("tool_input", {})
                         if isinstance(tool_input, dict):
                             command = tool_input.get("command", "")
-                            if any(pattern in command for pattern in skill_script_patterns):
+                            if any(pattern in command for pattern in patterns):
                                 return True
 
         return False
