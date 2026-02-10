@@ -36,6 +36,7 @@ src/skill_lab/
 ├── core/
 │   ├── models.py             # Data classes (Skill, CheckResult, TriggerResult, etc.)
 │   ├── registry.py           # Check auto-discovery system (extends generic Registry[T])
+│   ├── constants.py          # Shared constants (paths, skill patterns)
 │   ├── scoring.py            # Quality score calculation and shared metrics
 │   ├── utils.py              # Shared utilities (generic Registry[T])
 │   └── exceptions.py         # Custom exception hierarchy (SkillLabError, ParseError, etc.)
@@ -123,8 +124,8 @@ src/skill_lab/
                     ┌───────────────────────────────┴────────────────────────┐
                     │                    │                    │              │
             ┌───────────────┐    ┌───────────────┐    ┌───────────────┐ ┌──────────┐
-            │ structure.py  │    │  schema.py    │    │  naming.py    │ │description│ │content.py│
-            │ (5 checks)    │    │  (9 checks)   │    │ (1 check)    │ │ (1 check) │ │(4 checks)│
+            │ structure.py  │    │  schema.py    │    │  naming.py    │ │content.py│
+            │ (5 checks)    │    │  (9 checks)   │    │ (1 check)    │ │(4 checks)│
             └───────────────┘    └───────────────┘    └───────────────┘ └──────────┘
 ```
 
@@ -290,7 +291,7 @@ def run(self, skill: Skill) -> CheckResult:
 from skill_lab.checks.static import content, description, naming, schema, structure
 
 # This import executes the module code, which runs @register_check decorators
-# Now registry.get_all() returns all 20 check classes
+# Now registry.get_all() returns all 19 check classes
 ```
 
 #### Why This Pattern?
@@ -407,7 +408,7 @@ sklab generate [./my-skill] [-m MODEL] [--force]
 sklab eval-trace ./my-skill --trace ./execution.jsonl [-f console|json] [-o file.json]
 ```
 
-**Path Defaults:** The `evaluate`, `validate`, and `trigger` commands default to the current directory when no skill path is provided. They validate that `SKILL.md` exists in the target directory.
+**Path Defaults:** The `evaluate`, `validate`, `trigger`, and `generate` commands default to the current directory when no skill path is provided. They validate that `SKILL.md` exists in the target directory via the shared `_resolve_skill_path()` helper.
 
 **Global Flags:**
 - `-v` / `--version`: Show package version
@@ -420,7 +421,7 @@ sklab eval-trace ./my-skill --trace ./execution.jsonl [-f console|json] [-o file
 
 **Trigger Testing:**
 - `-t` / `--type`: Filter by trigger type (explicit, implicit, contextual, negative)
-- Runtime defaults to Claude CLI (Codex support coming in v0.3.0)
+- Runtime auto-detects (Codex if available, otherwise Claude CLI)
 
 ---
 
@@ -543,7 +544,7 @@ class RuntimeAdapter(ABC):
 ```
 
 **ClaudeRuntime**: Executes via `claude --print --output-format stream-json`
-**CodexRuntime**: Executes via `codex exec --json --full-auto` (v0.3.0)
+**CodexRuntime**: Executes via `codex exec --json --full-auto`
 
 ### Test Definition Format
 
@@ -591,7 +592,7 @@ scenarios:
 | **Decorator-based registration** | No central file listing all checks needed |
 | **Weighted scoring** | Different severities and dimensions have different impact |
 | **Strict typing** | mypy strict mode enforced in `pyproject.toml` |
-| **Generic Registry[T]** | Provides reusable base for CheckRegistry; TraceCheckRegistry uses separate impl for check-type-based registration |
+| **Generic Registry[T]** | Provides reusable base for both CheckRegistry and TraceCheckRegistry |
 | **Base class helpers** | `_require_metadata()`, `_skill_md_location()`, `_require_field()` reduce repetitive null-checks |
 | **Shared metric utilities** | `calculate_metrics()` ensures consistent pass/fail calculation across all evaluators |
 | **Custom exception hierarchy** | `SkillLabError` base with `context` and `suggestion` fields for actionable error messages |
@@ -670,13 +671,13 @@ class MyNewCheck(StaticCheck):
 
 **Check Categories:**
 - **Spec-required checks** (10): Must pass to be valid per the Agent Skills spec. Use `spec_required = True` and `Severity.ERROR`.
-- **Quality suggestions** (10): Best practices that improve skill quality. Use `spec_required = False` (default) with `Severity.WARNING` or `Severity.INFO`.
+- **Quality suggestions** (9): Best practices that improve skill quality. Use `spec_required = False` (default) with `Severity.WARNING` or `Severity.INFO`.
 
 ---
 
-## Trace Analysis (v0.3.0)
+## Trace Analysis
 
-> **Note:** The `sklab eval-trace` command is hidden in v0.2.0 and will be fully available in v0.3.0.
+> **Note:** The `sklab eval-trace` command is currently hidden. It will be fully available in a future release.
 
 Trace analysis validates execution traces against YAML-defined checks. This enables skill authors to define custom checks for command presence, file creation, event sequences, and loop detection.
 
@@ -780,13 +781,13 @@ class TraceReport:
 
 ### Handler Registration Pattern
 
-Similar to static checks, trace handlers use a decorator-based registration system. The `TraceCheckRegistry` is a standalone registry that registers handlers by check type string rather than class attribute.
+Similar to static checks, trace handlers use a decorator-based registration system. The `TraceCheckRegistry` extends `Registry[TraceCheckHandler]` — the `@register_trace_handler` decorator sets a `check_type` ClassVar on each handler class before registering it.
 
 ```python
 from skill_lab.tracechecks.registry import register_trace_handler
 from skill_lab.tracechecks.handlers.base import TraceCheckHandler
 
-@register_trace_handler("command_presence")
+@register_trace_handler("command_presence")  # Sets cls.check_type = "command_presence"
 class CommandPresenceHandler(TraceCheckHandler):
     def run(self, check, analyzer, project_dir) -> TraceCheckResult:
         # Use _require_field() helper for parameter validation
