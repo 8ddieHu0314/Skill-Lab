@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from skill_lab.checks.base import StaticCheck
+from skill_lab.checks.static.structure import VALID_SCRIPT_EXTENSIONS
 from skill_lab.core.models import CheckResult, EvalDimension, Severity, Skill
 from skill_lab.core.registry import register_check
 
@@ -151,4 +152,172 @@ class ReferenceDepthCheck(StaticCheck):
         return self._pass(
             f"References within depth limit ({MAX_REFERENCE_DEPTH} level max)",
             location=str(references_path),
+        )
+
+
+@register_check
+class ScriptsReferencedCheck(StaticCheck):
+    """Check that scripts in scripts/ are mentioned in SKILL.md body."""
+
+    check_id: ClassVar[str] = "content.scripts-referenced"
+    check_name: ClassVar[str] = "Scripts Referenced"
+    description: ClassVar[str] = "Scripts in scripts/ are mentioned in the SKILL.md body"
+    severity: ClassVar[Severity] = Severity.WARNING
+    dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
+
+    def run(self, skill: Skill) -> CheckResult:
+        scripts_path = skill.path / "scripts"
+
+        if not scripts_path.exists() or not scripts_path.is_dir():
+            return self._pass("No scripts folder present (optional)")
+
+        script_files = [
+            item.name
+            for item in scripts_path.iterdir()
+            if item.is_file() and item.suffix.lower() in VALID_SCRIPT_EXTENSIONS
+        ]
+
+        if not script_files:
+            return self._pass(
+                "No script files in scripts/",
+                location=str(scripts_path),
+            )
+
+        body = skill.body
+        mentioned = [f for f in script_files if f in body]
+
+        if mentioned:
+            return self._pass(
+                f"Script(s) mentioned in body: {', '.join(mentioned)}",
+                location=self._skill_md_location(skill),
+            )
+
+        return self._fail(
+            f"Scripts exist but none mentioned in body: {', '.join(sorted(script_files))}",
+            details={
+                "script_files": sorted(script_files),
+                "suggestion": "List available scripts in your SKILL.md so the agent knows they exist",
+            },
+            location=self._skill_md_location(skill),
+        )
+
+
+# Regex to match scripts/<name>.<ext> references in body
+_SCRIPT_EXT_PATTERN = "|".join(ext.lstrip(".") for ext in sorted(VALID_SCRIPT_EXTENSIONS))
+_SCRIPT_PATH_RE = re.compile(rf"(?<![/\w-])scripts/[\w.-]+\.(?:{_SCRIPT_EXT_PATTERN})\b")
+
+
+@register_check
+class ScriptPathsExistCheck(StaticCheck):
+    """Check that script paths referenced in body exist on disk."""
+
+    check_id: ClassVar[str] = "content.script-paths-exist"
+    check_name: ClassVar[str] = "Script Paths Exist"
+    description: ClassVar[str] = "Script paths referenced in body resolve to files on disk"
+    severity: ClassVar[Severity] = Severity.WARNING
+    dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
+
+    def run(self, skill: Skill) -> CheckResult:
+        refs = _SCRIPT_PATH_RE.findall(skill.body)
+
+        if not refs:
+            return self._pass(
+                "No script path references in body",
+                location=self._skill_md_location(skill),
+            )
+
+        # Deduplicate while preserving order
+        seen: set[str] = set()
+        unique_refs: list[str] = []
+        for ref in refs:
+            if ref not in seen:
+                seen.add(ref)
+                unique_refs.append(ref)
+
+        missing = [ref for ref in unique_refs if not (skill.path / ref).exists()]
+
+        if missing:
+            return self._fail(
+                f"Script path(s) not found on disk: {', '.join(missing)}",
+                details={"missing_paths": missing, "all_references": unique_refs},
+                location=self._skill_md_location(skill),
+            )
+
+        return self._pass(
+            f"All referenced script paths exist ({len(unique_refs)} verified)",
+            location=self._skill_md_location(skill),
+        )
+
+
+# Command runners and their expected runtime mentions in compatibility
+_RUNNER_TO_RUNTIME: dict[str, str] = {
+    "npx": "Node.js",
+    "uvx": "uv",
+    "bunx": "Bun",
+    "deno run": "Deno",
+    "go run": "Go",
+    "pipx run": "pipx",
+}
+
+# Build a regex that matches any runner keyword (case-insensitive, word boundary)
+_RUNNER_RE = re.compile(
+    r"\b(" + "|".join(re.escape(r) for r in _RUNNER_TO_RUNTIME) + r")\b",
+    re.IGNORECASE,
+)
+
+
+@register_check
+class CompatibilityPrereqsCheck(StaticCheck):
+    """Check that command runners in body have matching compatibility entries."""
+
+    check_id: ClassVar[str] = "content.compatibility-prereqs"
+    check_name: ClassVar[str] = "Compatibility Prerequisites"
+    description: ClassVar[str] = "Command runners in body are documented in compatibility field"
+    severity: ClassVar[Severity] = Severity.INFO
+    dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
+
+    def run(self, skill: Skill) -> CheckResult:
+        matches = _RUNNER_RE.findall(skill.body)
+
+        if not matches:
+            return self._pass(
+                "No command runners referenced in body",
+                location=self._skill_md_location(skill),
+            )
+
+        # Normalize matches to canonical form (lowercase lookup)
+        runners_found: dict[str, str] = {}
+        for match in matches:
+            canonical = match.lower()
+            if canonical not in runners_found:
+                runners_found[canonical] = _RUNNER_TO_RUNTIME.get(
+                    canonical, _RUNNER_TO_RUNTIME.get(match, match)
+                )
+
+        # Get compatibility field
+        compat = ""
+        if skill.metadata and skill.metadata.raw.get("compatibility"):
+            compat_val = skill.metadata.raw["compatibility"]
+            if isinstance(compat_val, str):
+                compat = compat_val.lower()
+
+        missing: dict[str, str] = {}
+        for runner, runtime in runners_found.items():
+            if runtime.lower() not in compat:
+                missing[runner] = runtime
+
+        if missing:
+            pairs = [f"{r} (needs {rt})" for r, rt in missing.items()]
+            return self._fail(
+                f"Command runners missing from compatibility: {', '.join(pairs)}",
+                details={
+                    "missing_runners": missing,
+                    "suggestion": "Add runtime prerequisites to the compatibility frontmatter field",
+                },
+                location=self._skill_md_location(skill),
+            )
+
+        return self._pass(
+            "All command runners documented in compatibility field",
+            location=self._skill_md_location(skill),
         )

@@ -1,8 +1,10 @@
 """CLI interface for skill-lab."""
 
+import contextlib
 import json as json_module
 import os
 import sys
+from collections.abc import Iterator
 from enum import Enum
 from pathlib import Path
 from typing import Annotated
@@ -84,6 +86,16 @@ def _resolve_skill_path(skill_path: Path | None) -> Path:
     return resolved
 
 
+@contextlib.contextmanager
+def _cli_error_handler() -> Iterator[None]:
+    """Catch exceptions and convert to styled CLI error + exit code 1."""
+    try:
+        yield
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(code=1) from None
+
+
 class OutputFormat(str, Enum):
     """Output format options."""
 
@@ -135,12 +147,9 @@ def evaluate(
     """Evaluate a skill and generate a quality report."""
     skill_path = _resolve_skill_path(skill_path)
 
-    try:
+    with _cli_error_handler():
         evaluator = StaticEvaluator(spec_only=spec_only)
         report = evaluator.evaluate(skill_path)
-    except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(code=1) from None
 
     if format == OutputFormat.json:
         json_reporter = JsonReporter()
@@ -178,12 +187,9 @@ def validate(
     """Quick validation that reports only errors."""
     skill_path = _resolve_skill_path(skill_path)
 
-    try:
+    with _cli_error_handler():
         evaluator = StaticEvaluator(spec_only=spec_only)
         passed, errors = evaluator.validate(skill_path)
-    except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(code=1) from None
 
     if passed:
         console.print("[green]Validation passed![/green]")
@@ -503,7 +509,7 @@ def generate(
     # Resolve model: --model flag > SKLAB_MODEL env var > default
     resolved_model = model or os.environ.get("SKLAB_MODEL") or None
 
-    try:
+    with _cli_error_handler():
         kwargs: dict[str, str] = {}
         if resolved_model:
             kwargs["model"] = resolved_model
@@ -512,10 +518,6 @@ def generate(
 
         with console.status("[cyan]Generating trigger tests...[/cyan]", spinner="dots"):
             written_path = generator.generate_and_write(skill_path, force=force)
-
-    except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(code=1) from None
 
     # Print summary
     import yaml

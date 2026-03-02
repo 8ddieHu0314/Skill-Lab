@@ -6,17 +6,25 @@ import pytest
 
 from skill_lab.checks.static.content import (
     BodyNotEmptyCheck,
+    CompatibilityPrereqsCheck,
     HasExamplesCheck,
     LineBudgetCheck,
+    ScriptPathsExistCheck,
+    ScriptsReferencedCheck,
 )
 from skill_lab.checks.static.naming import (
     NameMatchesDirectoryCheck,
 )
 from skill_lab.checks.static.structure import (
+    ScriptsNoInteractiveCheck,
+    ScriptsSelfContainedCheck,
+    ScriptsValidCheck,
     SkillMdExistsCheck,
     StandardFrontmatterFieldsCheck,
     ValidFrontmatterCheck,
 )
+from skill_lab.checks.static.schema import FRONTMATTER_SCHEMA
+from skill_lab.checks.static.structure import SPEC_FRONTMATTER_FIELDS
 from skill_lab.core.models import Severity, Skill, SkillMetadata
 from skill_lab.core.registry import registry
 
@@ -516,3 +524,358 @@ class TestFrontmatterChecks:
         result = check.run(skill)
         assert not result.passed
         assert "string" in result.message.lower()
+
+
+def _make_tmp_skill(
+    tmp_path: Path,
+    body: str = "Skill body content with enough text to pass checks.",
+    name: str = "test-skill",
+    description: str = "A test skill",
+    compatibility: str | None = None,
+) -> Skill:
+    """Create a Skill object rooted at tmp_path with a real filesystem."""
+    raw: dict[str, object] = {"name": name, "description": description}
+    if compatibility is not None:
+        raw["compatibility"] = compatibility
+    return Skill(
+        path=tmp_path,
+        metadata=SkillMetadata(name=name, description=description, raw=raw),
+        body=body,
+        has_scripts=(tmp_path / "scripts").is_dir(),
+        has_references=False,
+        has_assets=False,
+    )
+
+
+class TestScriptChecks:
+    """Tests for script-related checks (6 new checks)."""
+
+    # ── structure.scripts-valid: .rb extension fix ──────────────────────
+
+    def test_scripts_valid_accepts_ruby(self, tmp_path: Path):
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "helper.rb").write_text("puts 'hello'")
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsValidCheck().run(skill)
+        assert result.passed
+
+    # ── content.scripts-referenced ──────────────────────────────────────
+
+    def test_scripts_referenced_no_scripts_dir(self, tmp_path: Path):
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsReferencedCheck().run(skill)
+        assert result.passed
+
+    def test_scripts_referenced_empty_scripts_dir(self, tmp_path: Path):
+        (tmp_path / "scripts").mkdir()
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsReferencedCheck().run(skill)
+        assert result.passed
+
+    def test_scripts_referenced_mentioned_in_body(self, tmp_path: Path):
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "deploy.sh").write_text("#!/bin/bash")
+        skill = _make_tmp_skill(tmp_path, body="Run scripts/deploy.sh to deploy.")
+        result = ScriptsReferencedCheck().run(skill)
+        assert result.passed
+        assert "deploy.sh" in result.message
+
+    def test_scripts_referenced_fail_not_mentioned(self, tmp_path: Path):
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "deploy.sh").write_text("#!/bin/bash")
+        (scripts / "setup.py").write_text("import os")
+        skill = _make_tmp_skill(tmp_path, body="No mention of any scripts here.")
+        result = ScriptsReferencedCheck().run(skill)
+        assert not result.passed
+        assert result.severity == Severity.WARNING
+
+    # ── content.script-paths-exist ──────────────────────────────────────
+
+    def test_script_paths_exist_no_refs(self, tmp_path: Path):
+        skill = _make_tmp_skill(tmp_path, body="No script references here.")
+        result = ScriptPathsExistCheck().run(skill)
+        assert result.passed
+
+    def test_script_paths_exist_all_resolve(self, tmp_path: Path):
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "run.py").write_text("print('hi')")
+        skill = _make_tmp_skill(tmp_path, body="Execute scripts/run.py to start.")
+        result = ScriptPathsExistCheck().run(skill)
+        assert result.passed
+
+    def test_script_paths_exist_missing(self, tmp_path: Path):
+        skill = _make_tmp_skill(tmp_path, body="Run scripts/missing.py to start.")
+        result = ScriptPathsExistCheck().run(skill)
+        assert not result.passed
+        assert "scripts/missing.py" in result.message
+
+    def test_script_paths_exist_mixed(self, tmp_path: Path):
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "found.sh").write_text("#!/bin/bash")
+        skill = _make_tmp_skill(
+            tmp_path,
+            body="Run scripts/found.sh and scripts/gone.sh to deploy.",
+        )
+        result = ScriptPathsExistCheck().run(skill)
+        assert not result.passed
+        assert "scripts/gone.sh" in result.message
+
+    def test_script_paths_exist_ruby_extension(self, tmp_path: Path):
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "helper.rb").write_text("puts 'hi'")
+        skill = _make_tmp_skill(tmp_path, body="Use scripts/helper.rb for help.")
+        result = ScriptPathsExistCheck().run(skill)
+        assert result.passed
+
+    def test_script_paths_exist_ignores_prefixed_paths(self, tmp_path: Path):
+        """'my-scripts/tool.py' and './scripts/tool.py' should NOT match."""
+        skill = _make_tmp_skill(
+            tmp_path,
+            body="See my-scripts/tool.py and ./scripts/other.py for details.",
+        )
+        result = ScriptPathsExistCheck().run(skill)
+        assert result.passed  # No references detected → PASS
+
+    # ── structure.scripts-no-interactive ─────────────────────────────────
+
+    def test_scripts_no_interactive_no_scripts(self, tmp_path: Path):
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsNoInteractiveCheck().run(skill)
+        assert result.passed
+
+    def test_scripts_no_interactive_clean_scripts(self, tmp_path: Path):
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "clean.py").write_text("print('hello')\n")
+        (scripts / "clean.sh").write_text("echo hello\n")
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsNoInteractiveCheck().run(skill)
+        assert result.passed
+
+    def test_scripts_no_interactive_commented_python(self, tmp_path: Path):
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "ok.py").write_text("# input('this is a comment')\nprint('ok')\n")
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsNoInteractiveCheck().run(skill)
+        assert result.passed
+
+    def test_scripts_no_interactive_python_input(self, tmp_path: Path):
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "bad.py").write_text("name = input('Enter name: ')\n")
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsNoInteractiveCheck().run(skill)
+        assert not result.passed
+        assert "bad.py" in result.message
+
+    def test_scripts_no_interactive_shell_read(self, tmp_path: Path):
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "bad.sh").write_text("#!/bin/bash\nread -p 'Name: ' name\n")
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsNoInteractiveCheck().run(skill)
+        assert not result.passed
+        assert "bad.sh" in result.message
+
+    def test_scripts_no_interactive_js_readline(self, tmp_path: Path):
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "bad.js").write_text("const rl = readline.createInterface();\n")
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsNoInteractiveCheck().run(skill)
+        assert not result.passed
+        assert "bad.js" in result.message
+
+    def test_scripts_no_interactive_ruby_gets(self, tmp_path: Path):
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "bad.rb").write_text("name = gets.chomp\n")
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsNoInteractiveCheck().run(skill)
+        assert not result.passed
+        assert "bad.rb" in result.message
+
+    def test_scripts_no_interactive_commented_js(self, tmp_path: Path):
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "ok.js").write_text("// readline is not used\nconsole.log('ok');\n")
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsNoInteractiveCheck().run(skill)
+        assert result.passed
+
+    def test_scripts_no_interactive_shell_select(self, tmp_path: Path):
+        """Shell 'select' builtin should be detected."""
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "menu.sh").write_text('#!/bin/bash\nselect opt in "a" "b"; do echo $opt; done\n')
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsNoInteractiveCheck().run(skill)
+        assert not result.passed
+        assert "menu.sh" in result.message
+
+    def test_scripts_no_interactive_python_select_no_false_positive(self, tmp_path: Path):
+        """Python string containing 'select' should NOT trigger (language-specific patterns)."""
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "ok.py").write_text('print("Create or select a project")\n')
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsNoInteractiveCheck().run(skill)
+        assert result.passed
+
+    def test_scripts_no_interactive_python_getpass(self, tmp_path: Path):
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "auth.py").write_text("import getpass\npw = getpass.getpass('Password: ')\n")
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsNoInteractiveCheck().run(skill)
+        assert not result.passed
+        assert "auth.py" in result.message
+
+    def test_scripts_no_interactive_ruby_stdin_gets(self, tmp_path: Path):
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "ask.rb").write_text("line = STDIN.gets\n")
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsNoInteractiveCheck().run(skill)
+        assert not result.passed
+        assert "ask.rb" in result.message
+
+    def test_scripts_no_interactive_js_process_stdin(self, tmp_path: Path):
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "read.js").write_text("process.stdin.on('data', (d) => {});\n")
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsNoInteractiveCheck().run(skill)
+        assert not result.passed
+        assert "read.js" in result.message
+
+    def test_scripts_no_interactive_js_prompt(self, tmp_path: Path):
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "ask.js").write_text("const answer = prompt('Question?');\n")
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsNoInteractiveCheck().run(skill)
+        assert not result.passed
+        assert "ask.js" in result.message
+
+    # ── structure.scripts-self-contained ─────────────────────────────────
+
+    def test_scripts_self_contained_no_scripts(self, tmp_path: Path):
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsSelfContainedCheck().run(skill)
+        assert result.passed
+
+    def test_scripts_self_contained_no_manifests(self, tmp_path: Path):
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "run.py").write_text("print('hi')")
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsSelfContainedCheck().run(skill)
+        assert result.passed
+
+    def test_scripts_self_contained_fail_requirements(self, tmp_path: Path):
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "requirements.txt").write_text("requests==2.31.0")
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsSelfContainedCheck().run(skill)
+        assert not result.passed
+        assert result.severity == Severity.INFO
+        assert "requirements.txt" in result.message
+
+    def test_scripts_self_contained_fail_package_json(self, tmp_path: Path):
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "package.json").write_text('{"name": "scripts"}')
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsSelfContainedCheck().run(skill)
+        assert not result.passed
+        assert "package.json" in result.message
+
+    def test_scripts_self_contained_fail_gemfile(self, tmp_path: Path):
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "Gemfile").write_text("source 'https://rubygems.org'")
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsSelfContainedCheck().run(skill)
+        assert not result.passed
+        assert "Gemfile" in result.message
+
+    # ── content.compatibility-prereqs ───────────────────────────────────
+
+    def test_compatibility_prereqs_no_runners(self, tmp_path: Path):
+        skill = _make_tmp_skill(tmp_path, body="Just normal text.")
+        result = CompatibilityPrereqsCheck().run(skill)
+        assert result.passed
+
+    def test_compatibility_prereqs_npx_with_nodejs(self, tmp_path: Path):
+        skill = _make_tmp_skill(
+            tmp_path,
+            body="Use npx create-react-app to scaffold.",
+            compatibility="Requires Node.js 18+",
+        )
+        result = CompatibilityPrereqsCheck().run(skill)
+        assert result.passed
+
+    def test_compatibility_prereqs_uvx_with_uv(self, tmp_path: Path):
+        skill = _make_tmp_skill(
+            tmp_path,
+            body="Run uvx ruff check .",
+            compatibility="Requires uv",
+        )
+        result = CompatibilityPrereqsCheck().run(skill)
+        assert result.passed
+
+    def test_compatibility_prereqs_npx_without_compat(self, tmp_path: Path):
+        skill = _make_tmp_skill(
+            tmp_path,
+            body="Use npx create-react-app to scaffold.",
+        )
+        result = CompatibilityPrereqsCheck().run(skill)
+        assert not result.passed
+        assert result.severity == Severity.INFO
+        assert "npx" in result.message
+        assert "Node.js" in result.message
+
+    def test_compatibility_prereqs_multiple_missing(self, tmp_path: Path):
+        skill = _make_tmp_skill(
+            tmp_path,
+            body="Use npx for JS and uvx for Python tools.",
+        )
+        result = CompatibilityPrereqsCheck().run(skill)
+        assert not result.passed
+        assert "npx" in result.message
+        assert "uvx" in result.message
+
+
+class TestSchemaSync:
+    """Verify that SPEC_FRONTMATTER_FIELDS stays in sync with FRONTMATTER_SCHEMA."""
+
+    def test_spec_fields_cover_all_raw_schema_fields(self):
+        """Every field_name with source='raw' in FRONTMATTER_SCHEMA should be a spec field."""
+        schema_raw_fields = {
+            rule.field_name for rule in FRONTMATTER_SCHEMA if rule.source == "raw"
+        }
+        missing = schema_raw_fields - SPEC_FRONTMATTER_FIELDS
+        assert not missing, (
+            f"FRONTMATTER_SCHEMA has raw fields not in SPEC_FRONTMATTER_FIELDS: {missing}. "
+            f"Add them to SPEC_FRONTMATTER_FIELDS in structure.py."
+        )
+
+    def test_spec_fields_cover_all_metadata_schema_fields(self):
+        """Every field_name with source='metadata' should also be a spec field."""
+        schema_meta_fields = {
+            rule.field_name for rule in FRONTMATTER_SCHEMA if rule.source == "metadata"
+        }
+        missing = schema_meta_fields - SPEC_FRONTMATTER_FIELDS
+        assert not missing, (
+            f"FRONTMATTER_SCHEMA has metadata fields not in SPEC_FRONTMATTER_FIELDS: {missing}. "
+            f"Add them to SPEC_FRONTMATTER_FIELDS in structure.py."
+        )

@@ -1,5 +1,6 @@
 """Structure checks for skill folder organization."""
 
+import re
 from typing import ClassVar
 
 from skill_lab.checks.base import StaticCheck
@@ -7,7 +8,7 @@ from skill_lab.core.models import CheckResult, EvalDimension, Severity, Skill
 from skill_lab.core.registry import register_check
 
 # Valid file extensions for scripts folder
-VALID_SCRIPT_EXTENSIONS = {".py", ".sh", ".js", ".ts", ".bash"}
+VALID_SCRIPT_EXTENSIONS = {".py", ".sh", ".js", ".ts", ".bash", ".rb"}
 
 # Valid file extensions for references folder
 VALID_REFERENCE_EXTENSIONS = {".md", ".txt", ".rst"}
@@ -87,7 +88,7 @@ class ScriptsValidCheck(StaticCheck):
 
     check_id: ClassVar[str] = "structure.scripts-valid"
     check_name: ClassVar[str] = "Scripts Folder Valid"
-    description: ClassVar[str] = "/scripts contains only .py, .sh, .js, .ts, .bash files"
+    description: ClassVar[str] = "/scripts contains only .py, .sh, .js, .ts, .bash, .rb files"
     severity: ClassVar[Severity] = Severity.WARNING
     dimension: ClassVar[EvalDimension] = EvalDimension.STRUCTURE
 
@@ -223,4 +224,136 @@ class StandardFrontmatterFieldsCheck(StaticCheck):
         return self._pass(
             "All frontmatter fields are spec-compliant",
             location=self._skill_md_location(skill),
+        )
+
+
+# Interactive patterns by file extension — language-specific to avoid false positives
+_INTERACTIVE_PATTERNS: dict[frozenset[str], list[tuple[str, re.Pattern[str]]]] = {
+    # Python: input() and getpass
+    frozenset({".py"}): [
+        ("input(", re.compile(r"^[^#]*\binput\s*\(")),
+        ("getpass.getpass(", re.compile(r"^[^#]*\bgetpass\.getpass\s*\(")),
+    ],
+    # Shell: read and select builtins
+    frozenset({".sh", ".bash"}): [
+        ("read", re.compile(r"^[^#]*\bread\b")),
+        ("select", re.compile(r"^[^#]*\bselect\b")),
+    ],
+    # Ruby: gets and STDIN.gets
+    frozenset({".rb"}): [
+        ("gets", re.compile(r"^[^#]*\bgets\b")),
+        ("STDIN.gets", re.compile(r"^[^#]*\bSTDIN\.gets\b")),
+    ],
+    # JS/TS: readline, prompt(), process.stdin
+    frozenset({".js", ".ts"}): [
+        ("readline", re.compile(r"^[^/]*\breadline\b")),
+        ("prompt(", re.compile(r"^[^/]*\bprompt\s*\(")),
+        ("process.stdin", re.compile(r"^[^/]*\bprocess\.stdin\b")),
+    ],
+}
+
+
+@register_check
+class ScriptsNoInteractiveCheck(StaticCheck):
+    """Check that scripts do not use interactive input patterns."""
+
+    check_id: ClassVar[str] = "structure.scripts-no-interactive"
+    check_name: ClassVar[str] = "Scripts No Interactive Input"
+    description: ClassVar[str] = (
+        "Scripts do not use interactive input (agents run non-interactive shells)"
+    )
+    severity: ClassVar[Severity] = Severity.WARNING
+    dimension: ClassVar[EvalDimension] = EvalDimension.STRUCTURE
+
+    def run(self, skill: Skill) -> CheckResult:
+        scripts_path = skill.path / "scripts"
+
+        if not scripts_path.exists() or not scripts_path.is_dir():
+            return self._pass("No scripts folder present (optional)")
+
+        violations: list[str] = []
+
+        for item in scripts_path.iterdir():
+            if not item.is_file():
+                continue
+            ext = item.suffix.lower()
+
+            # Find which pattern group applies to this extension
+            patterns: list[tuple[str, re.Pattern[str]]] = []
+            for ext_group, group_patterns in _INTERACTIVE_PATTERNS.items():
+                if ext in ext_group:
+                    patterns = group_patterns
+                    break
+
+            if not patterns:
+                continue
+
+            try:
+                content = item.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+
+            for line in content.splitlines():
+                for label, pattern in patterns:
+                    if pattern.search(line):
+                        violations.append(f"{item.name}: {label}")
+
+        if violations:
+            return self._fail(
+                f"Scripts contain interactive input patterns: {', '.join(violations)}",
+                details={"violations": violations},
+                location=str(scripts_path),
+            )
+
+        return self._pass(
+            "Scripts do not use interactive input",
+            location=str(scripts_path),
+        )
+
+
+# Dependency manifests that indicate non-self-contained scripts
+_DEPENDENCY_MANIFESTS: dict[str, str] = {
+    "requirements.txt": "Use inline script metadata (PEP 723) or pip install in the script",
+    "package.json": "Use npx or bundle dependencies inline",
+    "Gemfile": "Use inline gem install or bundler inline",
+    "go.mod": "Use go run with module-aware mode",
+    "deno.json": "Use URL imports instead of a config file",
+}
+
+
+@register_check
+class ScriptsSelfContainedCheck(StaticCheck):
+    """Check that scripts/ has no loose dependency manifests."""
+
+    check_id: ClassVar[str] = "structure.scripts-self-contained"
+    check_name: ClassVar[str] = "Scripts Self-Contained"
+    description: ClassVar[str] = "Scripts folder has no loose dependency manifests"
+    severity: ClassVar[Severity] = Severity.INFO
+    dimension: ClassVar[EvalDimension] = EvalDimension.STRUCTURE
+
+    def run(self, skill: Skill) -> CheckResult:
+        scripts_path = skill.path / "scripts"
+
+        if not scripts_path.exists() or not scripts_path.is_dir():
+            return self._pass("No scripts folder present (optional)")
+
+        found: dict[str, str] = {}
+        for manifest, suggestion in _DEPENDENCY_MANIFESTS.items():
+            if (scripts_path / manifest).exists():
+                found[manifest] = suggestion
+
+        if found:
+            names = ", ".join(sorted(found))
+            return self._fail(
+                f"Scripts folder contains dependency manifests: {names}",
+                details={
+                    "manifests": list(found.keys()),
+                    "suggestions": found,
+                },
+                location=str(scripts_path),
+            )
+
+        return self._pass(
+            "Scripts folder is self-contained (no dependency manifests)",
+            location=str(scripts_path),
         )
