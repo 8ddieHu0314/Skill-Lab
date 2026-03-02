@@ -45,7 +45,7 @@ Build **infrastructure for skill testing at scale** - tooling that enables autom
 | **v0.1.0** | Static Analysis | ✅ Released | [v0.1.0.md](versions/v0.1.0.md) |
 | **v0.2.0** | Trigger Testing | ✅ Released | [v0.2.0.md](versions/v0.2.0.md) |
 | **v0.3.0** | Generate + Path Migration | ✅ Released | [v0.3.0.md](versions/v0.3.0.md) |
-| **v0.4.0** | Docker Sandboxing | 📋 Planned | [v0.4.0.md](versions/v0.4.0.md) |
+| **v0.4.0** | Spec Parity & Correctness | ✅ Released | [v0.4.0.md](versions/v0.4.0.md) |
 | **v0.5.0** | API-Based Runtimes | 📋 Planned | [v0.5.0.md](versions/v0.5.0.md) |
 | **v0.6.0** | Rubric Grading | 📋 Planned | [v0.6.0.md](versions/v0.6.0.md) |
 | **v0.7.0** | Ecosystem Integration | 📋 Planned | [v0.7.0.md](versions/v0.7.0.md) |

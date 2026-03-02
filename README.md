@@ -1,6 +1,6 @@
 # Skill Lab
 
-[![PyPI version](https://badge.fury.io/py/skill-lab.svg?v=0.3.0)](https://badge.fury.io/py/skill-lab)
+[![PyPI version](https://badge.fury.io/py/skill-lab.svg?v=0.4.0)](https://badge.fury.io/py/skill-lab)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -16,6 +16,8 @@ A Python CLI tool for evaluating agent skills through static analysis, trigger t
   - Content: Examples, line budget, reference depth
 - **Trigger Testing**: Test skill activation with 4 trigger types (explicit, implicit, contextual, negative)
 - **Trigger Generation**: LLM-powered test case generation via Anthropic API
+- **Skill Inspector**: `sklab info` shows metadata and token cost estimates
+- **Prompt Export**: `sklab prompt` exports skills as XML, Markdown, or JSON for agent platforms
 - **Quality Scoring**: Weighted 0-100 score based on check results
 - **Multiple Output Formats**: Console (rich formatting) and JSON
 
@@ -69,6 +71,15 @@ sklab evaluate                    # Uses current directory
 # Quick validation (pass/fail)
 sklab validate ./my-skill
 
+# Inspect skill metadata and token costs
+sklab info ./my-skill
+sklab info ./my-skill --json      # Machine-readable output
+
+# Export skills as a prompt for agent platforms
+sklab prompt ./skill-a ./skill-b  # XML (default)
+sklab prompt -f markdown          # Markdown format
+sklab prompt -f json              # JSON format
+
 # Generate trigger test cases (requires ANTHROPIC_API_KEY)
 sklab generate ./my-skill
 
@@ -119,6 +130,41 @@ sklab list-checks --dimension structure
 # Show only spec-required checks
 sklab list-checks --spec-only
 ```
+
+### Inspect Skill Metadata
+
+View skill metadata and token cost estimates:
+
+```bash
+# Rich-formatted panel (default)
+sklab info ./my-skill
+
+# JSON output (pipe-friendly)
+sklab info ./my-skill --json
+
+# Extract a single field
+sklab info ./my-skill --field name
+sklab info ./my-skill --field tokens
+```
+
+Token estimates show **discovery cost** (name + description, what agents see when choosing skills) and **activation cost** (full SKILL.md, loaded when the skill is invoked).
+
+### Export as Prompt
+
+Export one or more skills into a prompt format for agent platforms:
+
+```bash
+# XML format (default, recommended for Claude)
+sklab prompt ./skill-a ./skill-b
+
+# Markdown format
+sklab prompt ./my-skill -f markdown
+
+# JSON format
+sklab prompt ./my-skill -f json
+```
+
+Output goes to stdout for easy piping. A token estimate summary is printed to stderr.
 
 ### Generate Trigger Tests
 

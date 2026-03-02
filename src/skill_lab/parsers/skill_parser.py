@@ -13,6 +13,26 @@ from skill_lab.core.models import Skill, SkillMetadata
 FRONTMATTER_PATTERN = re.compile(r"^---[ \t]*\r?\n(.*?)^---[ \t]*\r?\n?", re.DOTALL | re.MULTILINE)
 
 
+class _SkillYAMLLoader(yaml.SafeLoader):
+    """Custom YAML loader that prevents implicit type coercion.
+
+    Removes implicit resolvers for bool and null so that values like
+    ``yes``, ``no``, ``true``, ``false``, ``on``, ``off``, and ``null``
+    remain as plain strings. Numbers still parse normally.
+    """
+
+
+# Copy the resolvers dict so we don't mutate SafeLoader's shared instance.
+_SkillYAMLLoader.yaml_implicit_resolvers = {
+    key: [
+        (tag, regexp)
+        for tag, regexp in resolvers
+        if tag not in ("tag:yaml.org,2002:bool", "tag:yaml.org,2002:null")
+    ]
+    for key, resolvers in _SkillYAMLLoader.yaml_implicit_resolvers.items()
+}
+
+
 def parse_frontmatter(content: str) -> tuple[dict[str, Any] | None, str, list[str]]:
     """Parse YAML frontmatter from markdown content.
 
@@ -33,7 +53,7 @@ def parse_frontmatter(content: str) -> tuple[dict[str, Any] | None, str, list[st
     body = content[match.end() :]
 
     try:
-        frontmatter = yaml.safe_load(frontmatter_text)
+        frontmatter = yaml.load(frontmatter_text, Loader=_SkillYAMLLoader)
         if frontmatter is None:
             frontmatter = {}
         if not isinstance(frontmatter, dict):

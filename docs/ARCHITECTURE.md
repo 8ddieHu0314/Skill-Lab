@@ -38,6 +38,7 @@ src/skill_lab/
 │   ├── registry.py           # Check auto-discovery system (extends generic Registry[T])
 │   ├── constants.py          # Shared constants (paths, skill patterns)
 │   ├── scoring.py            # Quality score calculation and shared metrics
+│   ├── tokens.py             # Token estimation utility (v0.4.0)
 │   ├── utils.py              # Shared utilities (generic Registry[T])
 │   └── exceptions.py         # Custom exception hierarchy (SkillLabError, ParseError, etc.)
 ├── parsers/
@@ -64,6 +65,8 @@ src/skill_lab/
 │       ├── event_sequence.py
 │       ├── loop_detection.py
 │       └── efficiency.py
+├── exporters/                # Output format renderers (v0.4.0)
+│   └── prompt_exporter.py    # XML/Markdown/JSON prompt export
 ├── triggers/                 # Trigger testing (Phase 2)
 │   ├── generator.py          # LLM-based trigger test generation (v0.3.0)
 │   ├── test_loader.py        # Load test cases from YAML
@@ -111,7 +114,7 @@ src/skill_lab/
 │                             │   │                                       │
 │  1. Read SKILL.md           │   │  Global singleton holding all         │
 │  2. Extract YAML frontmatter│   │  registered check classes             │
-│  3. Parse with yaml.safe_load│  │                                       │
+│  3. Parse with custom loader │  │                                       │
 │  4. Detect subfolders       │   │  Methods:                             │
 │  5. Return Skill object     │   │  • register(check_class)              │
 │                             │   │  • get_all() → list[StaticCheck]      │
@@ -370,7 +373,7 @@ def build_summary_by_attribute(
 The parser handles:
 
 1. **Frontmatter extraction** via regex: `^---\n(.*?)^---\n`
-2. **YAML parsing** with `yaml.safe_load()`
+2. **YAML parsing** with `_SkillYAMLLoader` (custom `SafeLoader` subclass that prevents implicit bool/null coercion — `yes`→`"yes"`, `null`→`"null"`, empty values→`""`)
 3. **Metadata extraction** - pulls `name` and `description` fields
 4. **Subfolder detection** - checks for `/scripts`, `/references`, `/assets`
 5. **Graceful error handling** - collects errors in `parse_errors` tuple instead of throwing
@@ -404,11 +407,17 @@ sklab trigger [./my-skill] [-t explicit|implicit|contextual|negative] [-f consol
 # Generate trigger tests via LLM (defaults to current directory, requires ANTHROPIC_API_KEY)
 sklab generate [./my-skill] [-m MODEL] [--force]
 
-# Trace evaluation (hidden, coming in v0.4.0)
+# Skill metadata inspector (v0.4.0)
+sklab info [./my-skill] [--json] [-f FIELD]
+
+# Multi-format prompt export (v0.4.0)
+sklab prompt [./skill-a ./skill-b] [-f xml|markdown|json]
+
+# Trace evaluation (hidden)
 sklab eval-trace ./my-skill --trace ./execution.jsonl [-f console|json] [-o file.json]
 ```
 
-**Path Defaults:** The `evaluate`, `validate`, `trigger`, and `generate` commands default to the current directory when no skill path is provided. They validate that `SKILL.md` exists in the target directory via the shared `_resolve_skill_path()` helper.
+**Path Defaults:** The `evaluate`, `validate`, `trigger`, `generate`, `info`, and `prompt` commands default to the current directory when no skill path is provided. They validate that `SKILL.md` exists in the target directory via the shared `_resolve_skill_path()` helper.
 
 **Global Flags:**
 - `-v` / `--version`: Show package version
@@ -597,6 +606,8 @@ scenarios:
 | **Shared metric utilities** | `calculate_metrics()` ensures consistent pass/fail calculation across all evaluators |
 | **Custom exception hierarchy** | `SkillLabError` base with `context` and `suggestion` fields for actionable error messages |
 | **T \| None over Optional[T]** | Python 3.10+ union syntax for cleaner, more readable type annotations |
+| **NFKC Unicode normalization** | Naming check normalizes both sides with `unicodedata.normalize("NFKC", ...)` so precomposed/decomposed forms match |
+| **Custom YAML loader** | `_SkillYAMLLoader` prevents `yes`→`True`, `null`→`None` coercion; values stay as strings |
 
 ---
 

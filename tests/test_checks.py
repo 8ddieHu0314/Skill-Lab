@@ -198,6 +198,14 @@ class TestNamingChecks:
         assert not result.passed
         assert result.severity == Severity.ERROR
 
+    def test_name_matches_directory_unicode_normalization(self):
+        """NFKC normalization: precomposed and decomposed forms should match."""
+        check = NameMatchesDirectoryCheck()
+        # caf\u00e9 (precomposed) as name, cafe\u0301 (decomposed) as directory
+        skill = make_skill(name="caf\u00e9", path=Path("/test/cafe\u0301"))
+        result = check.run(skill)
+        assert result.passed
+
 
 class TestDescriptionChecks:
     """Tests for description checks."""

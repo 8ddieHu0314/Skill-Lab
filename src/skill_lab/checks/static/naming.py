@@ -1,5 +1,6 @@
 """Naming checks for skill names and identifiers."""
 
+import unicodedata
 from typing import ClassVar
 
 from skill_lab.checks.base import StaticCheck
@@ -25,8 +26,8 @@ class NameMatchesDirectoryCheck(StaticCheck):
                 location=self._skill_md_location(skill),
             )
 
-        name = skill.metadata.name
-        directory_name = skill.path.name
+        name = unicodedata.normalize("NFKC", skill.metadata.name)
+        directory_name = unicodedata.normalize("NFKC", skill.path.name)
 
         if name != directory_name:
             return self._fail(

@@ -91,6 +91,48 @@ class TestExtractMetadata:
         assert metadata is None
 
 
+class TestYAMLCoercionPrevention:
+    """Tests that the custom YAML loader prevents implicit type coercion."""
+
+    def test_bool_values_stay_as_strings(self):
+        for bool_word in ("yes", "no", "true", "false", "on", "off"):
+            content = f"---\nlicense: {bool_word}\nname: test\ndescription: test\n---\nBody"
+            frontmatter, _, errors = parse_frontmatter(content)
+            assert frontmatter is not None, f"Failed to parse with license: {bool_word}"
+            assert frontmatter["license"] == bool_word, (
+                f"Expected string '{bool_word}', got {frontmatter['license']!r}"
+            )
+            assert len(errors) == 0
+
+    def test_null_stays_as_string(self):
+        content = "---\nlicense: null\nname: test\ndescription: test\n---\nBody"
+        frontmatter, _, errors = parse_frontmatter(content)
+        assert frontmatter is not None
+        assert frontmatter["license"] == "null"
+        assert len(errors) == 0
+
+    def test_empty_value_becomes_empty_string(self):
+        content = "---\ncompatibility: \nname: test\ndescription: test\n---\nBody"
+        frontmatter, _, errors = parse_frontmatter(content)
+        assert frontmatter is not None
+        assert frontmatter["compatibility"] == ""
+        assert len(errors) == 0
+
+    def test_numbers_still_parse(self):
+        content = "---\nname: test\ndescription: test\nmetadata:\n  count: '42'\n---\nBody"
+        frontmatter, _, errors = parse_frontmatter(content)
+        assert frontmatter is not None
+        assert frontmatter["metadata"]["count"] == "42"
+
+    def test_regular_strings_unaffected(self):
+        content = "---\nname: my-skill\ndescription: A great skill\nlicense: MIT\n---\nBody"
+        frontmatter, _, errors = parse_frontmatter(content)
+        assert frontmatter is not None
+        assert frontmatter["name"] == "my-skill"
+        assert frontmatter["license"] == "MIT"
+        assert len(errors) == 0
+
+
 class TestParseSkill:
     """Tests for parse_skill function."""
 
