@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Python CLI tool that evaluates agent skills (SKILL.md files) through static analysis, trigger testing, and LLM-based test generation. Produces a 0-100 quality score based on 24 checks across 4 dimensions.
+Python CLI tool that evaluates agent skills (SKILL.md files) through static analysis, trigger testing, and LLM-based test generation. Produces a 0-100 quality score based on 28 checks across 4 dimensions.
 
-**Current Release:** v0.4.0 on PyPI includes static analysis (24 checks), trigger testing, `sklab generate` for LLM-based trigger test generation, `sklab info` / `sklab prompt` commands, NFKC Unicode normalization, and a custom YAML loader to prevent implicit type coercion. See [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) for the version roadmap.
+**Current Release:** v0.4.0 on PyPI includes static analysis (28 checks), trigger testing, `sklab generate` for LLM-based trigger test generation, `sklab info` / `sklab prompt` commands, NFKC Unicode normalization, and a custom YAML loader to prevent implicit type coercion. See [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) for the version roadmap.
 
 ## Naming Convention
 
@@ -25,14 +25,12 @@ Python CLI tool that evaluates agent skills (SKILL.md files) through static anal
 | Document | Contents |
 |----------|----------|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Tech stack, data flow, CLI commands, design patterns |
-| [docs/CHECKS.md](docs/CHECKS.md) | All 24 checks with descriptions and scoring weights |
 | [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) | Vision, roadmap overview, design decisions |
 | [docs/versions/](docs/versions/) | Detailed specs for each version (v0.1.0 - v1.0.0) |
 
 **After code changes**, update relevant docs:
 - `ARCHITECTURE.md` - New modules, directory changes, CLI commands
-- `CHECKS.md` - Check additions/modifications
-- `docs/versions/vX.X.X-*.md` - Version-specific deliverables and status
+- `docs/versions/vX.X.X.md` - Version-specific deliverables and status
 
 ## Quick Start
 
@@ -65,14 +63,14 @@ For full CLI options, see [ARCHITECTURE.md - CLI Commands](docs/ARCHITECTURE.md#
 
 ## Key Architecture
 
-### Two Check Systems (24 total: 10 spec-required, 14 quality suggestions)
+### Two Check Systems (28 total: 10 spec-required, 18 quality suggestions)
 
 The codebase has **two distinct patterns** for defining static checks:
 
 **1. Behavioral checks** — hand-written classes with `@register_check` decorator:
 - `structure.py` (7 checks): `SkillMdExistsCheck`, `ValidFrontmatterCheck`, `StandardFrontmatterFieldsCheck`, `ScriptsValidCheck`, `ReferencesValidCheck`, `ScriptsNoInteractiveCheck`, `ScriptsSelfContainedCheck`
 - `naming.py` (1 check): `NameMatchesDirectoryCheck`
-- `content.py` (7 checks): `BodyNotEmptyCheck`, `LineBudgetCheck`, `HasExamplesCheck`, `ReferenceDepthCheck`, `ScriptsReferencedCheck`, `ScriptPathsExistCheck`, `CompatibilityPrereqsCheck`
+- `content.py` (11 checks): `BodyNotEmptyCheck`, `LineBudgetCheck`, `HasExamplesCheck`, `ReferenceDepthCheck`, `ScriptsReferencedCheck`, `ScriptPathsExistCheck`, `CompatibilityPrereqsCheck`, `TokenBudgetCheck`, `MetadataTokenBudgetCheck`, `DescriptionActionableCheck`, `AssetPathsExistCheck`
 
 **2. Schema-based checks** — declarative `FieldRule` definitions in `schema.py` (9 checks):
 - Each `FieldRule` in `FRONTMATTER_SCHEMA` list describes a single constraint (field name, type, max length, regex, etc.)
@@ -111,4 +109,4 @@ Same pattern applies to trace handlers (`@register_trace_handler` in `tracecheck
 - **Adding a behavioral check**: See [ARCHITECTURE.md - Adding a New Check](docs/ARCHITECTURE.md#adding-a-new-check)
 - **Adding a schema check**: Append a `FieldRule` to `FRONTMATTER_SCHEMA` in `schema.py`
 - **Understanding data flow**: See [ARCHITECTURE.md - Data Flow](docs/ARCHITECTURE.md#data-flow)
-- **Check details**: See [CHECKS.md](docs/CHECKS.md)
+- **Listing all checks**: Run `sklab list-checks` or `sklab list-checks --dimension structure`

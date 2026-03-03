@@ -5,12 +5,16 @@ from pathlib import Path
 import pytest
 
 from skill_lab.checks.static.content import (
+    AssetPathsExistCheck,
     BodyNotEmptyCheck,
     CompatibilityPrereqsCheck,
+    DescriptionActionableCheck,
     HasExamplesCheck,
     LineBudgetCheck,
+    MetadataTokenBudgetCheck,
     ScriptPathsExistCheck,
     ScriptsReferencedCheck,
+    TokenBudgetCheck,
 )
 from skill_lab.checks.static.naming import (
     NameMatchesDirectoryCheck,
@@ -853,6 +857,149 @@ class TestScriptChecks:
         assert not result.passed
         assert "npx" in result.message
         assert "uvx" in result.message
+
+
+class TestClientImplementerChecks:
+    """Tests for client-implementer-informed checks (token budgets, actionable descriptions, asset paths)."""
+
+    # ── content.token-budget ──────────────────────────────────────────────
+
+    def test_token_budget_pass_short_body(self):
+        skill = make_skill(body="Short body content.")
+        result = TokenBudgetCheck().run(skill)
+        assert result.passed
+
+    def test_token_budget_pass_at_limit(self):
+        # 5000 tokens ≈ 20000 chars with len//4 heuristic
+        skill = make_skill(body="x" * 20000)
+        result = TokenBudgetCheck().run(skill)
+        assert result.passed
+
+    def test_token_budget_fail_exceeds(self):
+        # 5001+ tokens → fail
+        skill = make_skill(body="x" * 20004)
+        result = TokenBudgetCheck().run(skill)
+        assert not result.passed
+        assert result.severity == Severity.WARNING
+        assert "5000" in result.message
+
+    # ── content.metadata-token-budget ─────────────────────────────────────
+
+    def test_metadata_token_budget_pass_short(self):
+        skill = make_skill(name="my-skill", description="Does something useful")
+        result = MetadataTokenBudgetCheck().run(skill)
+        assert result.passed
+
+    def test_metadata_token_budget_pass_at_limit(self):
+        # 150 tokens ≈ 600 chars; name + space + desc = total
+        skill = make_skill(name="sk", description="x" * 597)
+        result = MetadataTokenBudgetCheck().run(skill)
+        assert result.passed
+
+    def test_metadata_token_budget_fail_exceeds(self):
+        skill = make_skill(name="sk", description="x" * 700)
+        result = MetadataTokenBudgetCheck().run(skill)
+        assert not result.passed
+        assert result.severity == Severity.INFO
+        assert "150" in result.message
+
+    def test_metadata_token_budget_no_metadata(self):
+        skill = Skill(
+            path=Path("/test"),
+            metadata=None,
+            body="Body",
+            has_scripts=False,
+            has_references=False,
+            has_assets=False,
+        )
+        result = MetadataTokenBudgetCheck().run(skill)
+        assert result.passed
+
+    # ── content.description-actionable ────────────────────────────────────
+
+    def test_description_actionable_use_when(self):
+        skill = make_skill(description="Use when the user asks for report generation")
+        result = DescriptionActionableCheck().run(skill)
+        assert result.passed
+        assert "use when" in result.message
+
+    def test_description_actionable_designed_for(self):
+        skill = make_skill(description="Designed for building REST APIs from scratch")
+        result = DescriptionActionableCheck().run(skill)
+        assert result.passed
+
+    def test_description_actionable_trigger(self):
+        skill = make_skill(description="Creates reports; will trigger on data summary requests")
+        result = DescriptionActionableCheck().run(skill)
+        assert result.passed
+
+    def test_description_actionable_fail_no_phrase(self):
+        skill = make_skill(description="A tool for generating reports")
+        result = DescriptionActionableCheck().run(skill)
+        assert not result.passed
+        assert result.severity == Severity.INFO
+        assert "activation" in result.message.lower()
+
+    def test_description_actionable_no_metadata(self):
+        skill = Skill(
+            path=Path("/test"),
+            metadata=None,
+            body="Body",
+            has_scripts=False,
+            has_references=False,
+            has_assets=False,
+        )
+        result = DescriptionActionableCheck().run(skill)
+        assert result.passed
+
+    def test_description_actionable_empty_description(self):
+        skill = make_skill(description="   ")
+        result = DescriptionActionableCheck().run(skill)
+        assert result.passed  # Guard: empty desc passes (other checks catch it)
+
+    # ── content.asset-paths-exist ─────────────────────────────────────────
+
+    def test_asset_paths_exist_no_refs(self, tmp_path: Path):
+        skill = _make_tmp_skill(tmp_path, body="No asset references here.")
+        result = AssetPathsExistCheck().run(skill)
+        assert result.passed
+
+    def test_asset_paths_exist_all_resolve(self, tmp_path: Path):
+        assets = tmp_path / "assets"
+        assets.mkdir()
+        (assets / "logo.png").write_text("fake image")
+        skill = _make_tmp_skill(tmp_path, body="See assets/logo.png for the logo.")
+        result = AssetPathsExistCheck().run(skill)
+        assert result.passed
+        assert "1 verified" in result.message
+
+    def test_asset_paths_exist_missing(self, tmp_path: Path):
+        skill = _make_tmp_skill(tmp_path, body="See assets/missing.png for details.")
+        result = AssetPathsExistCheck().run(skill)
+        assert not result.passed
+        assert result.severity == Severity.WARNING
+        assert "assets/missing.png" in result.message
+
+    def test_asset_paths_exist_mixed(self, tmp_path: Path):
+        assets = tmp_path / "assets"
+        assets.mkdir()
+        (assets / "found.csv").write_text("data")
+        skill = _make_tmp_skill(
+            tmp_path,
+            body="Load assets/found.csv and assets/gone.csv for data.",
+        )
+        result = AssetPathsExistCheck().run(skill)
+        assert not result.passed
+        assert "assets/gone.csv" in result.message
+
+    def test_asset_paths_exist_ignores_prefixed_paths(self, tmp_path: Path):
+        """'my-assets/file.png' should NOT match."""
+        skill = _make_tmp_skill(
+            tmp_path,
+            body="See my-assets/file.png and ./assets/other.png for details.",
+        )
+        result = AssetPathsExistCheck().run(skill)
+        assert result.passed  # No references detected → PASS
 
 
 class TestSchemaSync:

@@ -8,9 +8,32 @@ from skill_lab.checks.base import StaticCheck
 from skill_lab.checks.static.structure import VALID_SCRIPT_EXTENSIONS
 from skill_lab.core.models import CheckResult, EvalDimension, Severity, Skill
 from skill_lab.core.registry import register_check
+from skill_lab.core.tokens import estimate_tokens
 
 # Maximum line count for skill body
 MAX_LINE_COUNT = 500
+
+# Maximum token count for skill body (spec recommends ≤5,000)
+MAX_BODY_TOKENS = 5000
+
+# Maximum token count for metadata (name + description) for context-efficient discovery
+MAX_METADATA_TOKENS = 150
+
+# Activation phrases that help agents match tasks to this skill
+_ACTIVATION_PHRASES = (
+    "use when",
+    "use for",
+    "use this",
+    "trigger",
+    "activate",
+    "invoke",
+    "run when",
+    "run this",
+    "helps with",
+    "designed for",
+    "intended for",
+    "works with",
+)
 
 # Patterns that indicate code examples
 CODE_EXAMPLE_PATTERNS = [
@@ -319,5 +342,147 @@ class CompatibilityPrereqsCheck(StaticCheck):
 
         return self._pass(
             "All command runners documented in compatibility field",
+            location=self._skill_md_location(skill),
+        )
+
+
+@register_check
+class TokenBudgetCheck(StaticCheck):
+    """Check that body instructions stay under the spec-recommended 5,000 token budget."""
+
+    check_id: ClassVar[str] = "content.token-budget"
+    check_name: ClassVar[str] = "Token Budget"
+    description: ClassVar[str] = f"Body is under {MAX_BODY_TOKENS} tokens"
+    severity: ClassVar[Severity] = Severity.WARNING
+    dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
+
+    def run(self, skill: Skill) -> CheckResult:
+        tokens = estimate_tokens(skill.body)
+
+        if tokens > MAX_BODY_TOKENS:
+            return self._fail(
+                f"Body exceeds {MAX_BODY_TOKENS} token budget ({tokens} estimated)",
+                details={"estimated_tokens": tokens, "max_tokens": MAX_BODY_TOKENS},
+                location=self._skill_md_location(skill),
+            )
+
+        return self._pass(
+            f"Body within token budget ({tokens}/{MAX_BODY_TOKENS})",
+            location=self._skill_md_location(skill),
+        )
+
+
+@register_check
+class MetadataTokenBudgetCheck(StaticCheck):
+    """Check that metadata (name + description) fits the ~100-token discovery budget."""
+
+    check_id: ClassVar[str] = "content.metadata-token-budget"
+    check_name: ClassVar[str] = "Metadata Token Budget"
+    description: ClassVar[str] = (
+        f"Metadata is under {MAX_METADATA_TOKENS} tokens for efficient discovery"
+    )
+    severity: ClassVar[Severity] = Severity.INFO
+    dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
+
+    def run(self, skill: Skill) -> CheckResult:
+        if skill.metadata is None:
+            return self._pass(
+                "No metadata to check",
+                location=self._skill_md_location(skill),
+            )
+
+        combined = f"{skill.metadata.name} {skill.metadata.description}"
+        tokens = estimate_tokens(combined)
+
+        if tokens > MAX_METADATA_TOKENS:
+            return self._fail(
+                f"Metadata exceeds {MAX_METADATA_TOKENS} token budget ({tokens} estimated)",
+                details={"estimated_tokens": tokens, "max_tokens": MAX_METADATA_TOKENS},
+                location=self._skill_md_location(skill),
+            )
+
+        return self._pass(
+            f"Metadata within token budget ({tokens}/{MAX_METADATA_TOKENS})",
+            location=self._skill_md_location(skill),
+        )
+
+
+@register_check
+class DescriptionActionableCheck(StaticCheck):
+    """Check that description includes activation phrasing for agent matching."""
+
+    check_id: ClassVar[str] = "content.description-actionable"
+    check_name: ClassVar[str] = "Description Actionable"
+    description: ClassVar[str] = "Description explains when to use this skill"
+    severity: ClassVar[Severity] = Severity.INFO
+    dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
+
+    def run(self, skill: Skill) -> CheckResult:
+        if skill.metadata is None or not skill.metadata.description.strip():
+            return self._pass(
+                "No description to check (other checks catch this)",
+                location=self._skill_md_location(skill),
+            )
+
+        desc_lower = skill.metadata.description.lower()
+        for phrase in _ACTIVATION_PHRASES:
+            if phrase in desc_lower:
+                return self._pass(
+                    f"Description contains activation phrase: '{phrase}'",
+                    location=self._skill_md_location(skill),
+                )
+
+        return self._fail(
+            "Description lacks activation phrasing for agent matching",
+            details={
+                "suggestion": "Add 'Use when...' or 'Designed for...' phrasing "
+                "to help agents match tasks to this skill",
+            },
+            location=self._skill_md_location(skill),
+        )
+
+
+# Regex to match assets/<file>.<ext> references in body
+_ASSET_PATH_RE = re.compile(r"(?<![/\w-])assets/[\w.-]+\.\w+\b")
+
+
+@register_check
+class AssetPathsExistCheck(StaticCheck):
+    """Check that asset paths referenced in body exist on disk."""
+
+    check_id: ClassVar[str] = "content.asset-paths-exist"
+    check_name: ClassVar[str] = "Asset Paths Exist"
+    description: ClassVar[str] = "Asset paths referenced in body resolve to files on disk"
+    severity: ClassVar[Severity] = Severity.WARNING
+    dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
+
+    def run(self, skill: Skill) -> CheckResult:
+        refs = _ASSET_PATH_RE.findall(skill.body)
+
+        if not refs:
+            return self._pass(
+                "No asset path references in body",
+                location=self._skill_md_location(skill),
+            )
+
+        # Deduplicate while preserving order
+        seen: set[str] = set()
+        unique_refs: list[str] = []
+        for ref in refs:
+            if ref not in seen:
+                seen.add(ref)
+                unique_refs.append(ref)
+
+        missing = [ref for ref in unique_refs if not (skill.path / ref).exists()]
+
+        if missing:
+            return self._fail(
+                f"Asset path(s) not found on disk: {', '.join(missing)}",
+                details={"missing_paths": missing, "all_references": unique_refs},
+                location=self._skill_md_location(skill),
+            )
+
+        return self._pass(
+            f"All referenced asset paths exist ({len(unique_refs)} verified)",
             location=self._skill_md_location(skill),
         )
