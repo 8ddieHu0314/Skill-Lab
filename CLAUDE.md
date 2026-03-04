@@ -68,15 +68,20 @@ For full CLI options, see [ARCHITECTURE.md - CLI Commands](docs/ARCHITECTURE.md#
 The codebase has **two distinct patterns** for defining static checks:
 
 **1. Behavioral checks** — hand-written classes with `@register_check` decorator:
-- `structure.py` (7 checks): `SkillMdExistsCheck`, `ValidFrontmatterCheck`, `StandardFrontmatterFieldsCheck`, `ScriptsValidCheck`, `ReferencesValidCheck`, `ScriptsNoInteractiveCheck`, `ScriptsSelfContainedCheck`
-- `naming.py` (1 check): `NameMatchesDirectoryCheck`
-- `content.py` (11 checks): `BodyNotEmptyCheck`, `LineBudgetCheck`, `HasExamplesCheck`, `ReferenceDepthCheck`, `ScriptsReferencedCheck`, `ScriptPathsExistCheck`, `CompatibilityPrereqsCheck`, `TokenBudgetCheck`, `MetadataTokenBudgetCheck`, `DescriptionActionableCheck`, `AssetPathsExistCheck`
+- `structure.py` (7), `naming.py` (1), `content.py` (11) — run `sklab list-checks` to see all
 
 **2. Schema-based checks** — declarative `FieldRule` definitions in `schema.py` (9 checks):
 - Each `FieldRule` in `FRONTMATTER_SCHEMA` list describes a single constraint (field name, type, max length, regex, etc.)
 - `_make_schema_check()` factory creates a concrete `StaticCheck` subclass per rule at import time
 - `_validate_rule()` engine interprets the rule and produces `CheckResult` objects
 - To add a schema check: append a `FieldRule` to `FRONTMATTER_SCHEMA` — no class needed
+
+### Scoring Algorithm
+
+- **Severity weights**: ERROR=1.0, WARNING=0.5, INFO=0.25
+- **Dimension weights**: STRUCTURE=30%, NAMING=20%, DESCRIPTION=25%, CONTENT=25%
+- Per-dimension score = `(passed_weight / total_weight) × 100`, then weighted average → 0–100 final score
+- Defined in `core/scoring.py`
 
 ### Auto-Discovery Pattern
 
@@ -91,11 +96,25 @@ Same pattern applies to trace handlers (`@register_trace_handler` in `tracecheck
 
 - `SPEC_FRONTMATTER_FIELDS` set in `structure.py` must stay in sync with `FRONTMATTER_SCHEMA` in `schema.py` when adding new frontmatter fields
 
+### CLI Patterns
+
+- All commands use `_resolve_skill_path()` for path validation and `_cli_error_handler()` context manager for consistent error output
+- Exit codes: 0 = success, 1 = failure (spec-required check failed or error)
+- Custom exceptions inherit from `SkillLabError` in `core/exceptions.py` (`ParseError`, `ValidationError`, `ConfigurationError`, `GenerationError`)
+
 ### Optional Dependencies
 
 - `anthropic` is an optional dep: `pip install skill-lab[generate]`
 - `TriggerGenerator` in `triggers/generator.py` is deliberately **NOT** imported in `triggers/__init__.py` to avoid import errors when `anthropic` is not installed
 - Guard pattern: lazy import inside the `generate` CLI command only
+
+## Code Style
+
+- **Line length**: 100 characters (ruff formatter)
+- **Type checking**: mypy strict mode — all functions need type annotations
+- **Python**: 3.10+ (no 3.9 syntax)
+- **Data models**: frozen dataclasses (`@dataclass(frozen=True)`) for immutability
+- **CI matrix**: Python 3.10–3.13 on Ubuntu/macOS/Windows — code must pass all three
 
 ## Testing Conventions
 
