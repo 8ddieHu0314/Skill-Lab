@@ -13,7 +13,7 @@ from skill_lab.core.models import Skill, SkillMetadata
 FRONTMATTER_PATTERN = re.compile(r"^---[ \t]*\r?\n(.*?)^---[ \t]*\r?\n?", re.DOTALL | re.MULTILINE)
 
 
-class _SkillYAMLLoader(yaml.SafeLoader):  # type: ignore[misc]
+class _SkillYAMLLoader(yaml.SafeLoader):
     """Custom YAML loader that prevents implicit type coercion.
 
     Removes implicit resolvers for bool and null so that values like
