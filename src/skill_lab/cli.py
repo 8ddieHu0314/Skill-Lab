@@ -18,9 +18,9 @@ from rich.table import Table
 
 from skill_lab import __version__
 from skill_lab.core.constants import TESTS_DIR
-from skill_lab.core.telemetry import check_for_update, init_telemetry, record_event
 from skill_lab.core.models import EvalDimension, TriggerReport, TriggerType
 from skill_lab.core.registry import registry
+from skill_lab.core.telemetry import check_for_update, init_telemetry, record_event
 from skill_lab.core.tokens import estimate_tokens
 from skill_lab.evaluators.static_evaluator import StaticEvaluator
 from skill_lab.evaluators.trace_evaluator import TraceEvaluator
@@ -100,11 +100,9 @@ def _cli_error_handler() -> Iterator[None]:
 
 def _record_telemetry(command: str, start: float, exit_code: int) -> None:
     duration_ms = (time.perf_counter() - start) * 1000
-    try:
+    with contextlib.suppress(Exception):
         record_event(command, duration_ms, exit_code)
-    except Exception:
-        pass
-    try:
+    with contextlib.suppress(Exception):
         latest = check_for_update()
         if latest:
             print(
@@ -112,8 +110,6 @@ def _record_telemetry(command: str, start: float, exit_code: int) -> None:
                 f"Run: pip install --upgrade skill-lab",
                 file=sys.stderr,
             )
-    except Exception:
-        pass
 
 
 class OutputFormat(str, Enum):
@@ -190,7 +186,7 @@ def evaluate(
             _exit_code = 1
             raise typer.Exit(code=1)
     except SystemExit as e:
-        _exit_code = e.code or 0
+        _exit_code = e.code if isinstance(e.code, int) else 0
         raise
     finally:
         _record_telemetry("evaluate", _start, _exit_code)
@@ -234,7 +230,7 @@ def validate(
             _exit_code = 1
             raise typer.Exit(code=1)
     except SystemExit as e:
-        _exit_code = e.code or 0
+        _exit_code = e.code if isinstance(e.code, int) else 0
         raise
     finally:
         _record_telemetry("validate", _start, _exit_code)
@@ -431,7 +427,7 @@ def trigger(
             _exit_code = 1
             raise typer.Exit(code=1)
     except SystemExit as e:
-        _exit_code = e.code or 0
+        _exit_code = e.code if isinstance(e.code, int) else 0
         raise
     finally:
         _record_telemetry("trigger", _start, _exit_code)
@@ -600,7 +596,7 @@ def generate(
         console.print(f"\n[dim]Written to:[/dim] {written_path}")
         console.print("[dim]Run[/dim] sklab trigger [dim]to execute them.[/dim]")
     except SystemExit as e:
-        _exit_code = e.code or 0
+        _exit_code = e.code if isinstance(e.code, int) else 0
         raise
     finally:
         _record_telemetry("generate", _start, _exit_code)
@@ -718,7 +714,7 @@ def info(
         panel = Panel("\n".join(lines), title=f"[bold]{name}[/bold]", expand=False)
         console.print(panel)
     except SystemExit as e:
-        _exit_code = e.code or 0
+        _exit_code = e.code if isinstance(e.code, int) else 0
         raise
     finally:
         _record_telemetry("info", _start, _exit_code)
@@ -791,7 +787,7 @@ def prompt(
                 file=sys.stderr,
             )
     except SystemExit as e:
-        _exit_code = e.code or 0
+        _exit_code = e.code if isinstance(e.code, int) else 0
         raise
     finally:
         _record_telemetry("prompt", _start, _exit_code)
@@ -882,7 +878,7 @@ def eval_trace(
             _exit_code = 1
             raise typer.Exit(code=1)
     except SystemExit as e:
-        _exit_code = e.code or 0
+        _exit_code = e.code if isinstance(e.code, int) else 0
         raise
     finally:
         _record_telemetry("eval-trace", _start, _exit_code)

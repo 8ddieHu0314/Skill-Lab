@@ -15,6 +15,7 @@ import urllib.error
 import urllib.request
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 
 from skill_lab import __version__
 from skill_lab.core.constants import SKLAB_CONFIG, SKLAB_DB, SKLAB_HOME
@@ -40,16 +41,17 @@ def _ensure_home() -> None:
     SKLAB_HOME.mkdir(parents=True, exist_ok=True)
 
 
-def _read_config() -> dict:
+def _read_config() -> dict[str, Any]:
     if SKLAB_CONFIG.exists():
         try:
-            return json.loads(SKLAB_CONFIG.read_text(encoding="utf-8"))
+            result: dict[str, Any] = json.loads(SKLAB_CONFIG.read_text(encoding="utf-8"))
+            return result
         except Exception:
             return {}
     return {}
 
 
-def _write_config(config: dict) -> None:
+def _write_config(config: dict[str, Any]) -> None:
     _ensure_home()
     SKLAB_CONFIG.write_text(json.dumps(config, indent=2), encoding="utf-8")
 
