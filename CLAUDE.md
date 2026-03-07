@@ -20,6 +20,8 @@ Python CLI tool that evaluates agent skills (SKILL.md files) via static analysis
 
 After code changes: update `ARCHITECTURE.md` (modules/CLI) and the relevant `docs/versions/vX.X.X.md`.
 
+ALWAYS READ THE DOCS BEFORE ACTIONING
+
 ## Commands
 
 ```bash
@@ -80,8 +82,6 @@ ruff check src/ && ruff format src/
 - Zero context switching required from the user
 - Go fix failing CI tests without being told how
 
----
-
 ## Task Management
 
 1. **Plan First**: Write plan to `tasks/todo.md` with checkable items  
@@ -91,10 +91,38 @@ ruff check src/ && ruff format src/
 5. **Document Results**: Add review section to `tasks/todo.md`  
 6. **Capture Lessons**: Update `.claude/.tasks/lessons.md` after corrections — reusable lessons only and mistakes the AI has made
 
----
-
 ## Core Principles
 
 - **Simplicity First**: Make every change as simple as possible. Impact minimal code.
 - **No Laziness**: Find root causes. No temporary fixes. Senior developer standards.
 - **Minimal Impact**: Changes should only touch what's necessary. Avoid introducing bugs.
+
+---
+
+### Auto-Discovery Pattern
+
+1. Importing a check module registers checks to the global `CheckRegistry` singleton
+2. `StaticEvaluator` imports all check modules (`content`, `naming`, `schema`, `structure`), triggering registration
+3. `registry.get_all()` returns all registered check classes for execution
+4. `Registry.register()` raises `ValueError` on duplicate `check_id`
+
+### CLI Patterns
+
+- All commands use `_resolve_skill_path()` for path validation and `_cli_error_handler()` context manager for consistent error output
+- Exit codes: 0 = success, 1 = failure (spec-required check failed or error)
+- Custom exceptions inherit from `SkillLabError` in `core/exceptions.py` (`ParseError`, `ValidationError`, `ConfigurationError`, `GenerationError`)
+
+## Code Style
+
+- **Line length**: 100 characters (ruff formatter)
+- **Type checking**: mypy strict mode — all functions need type annotations
+- **Python**: 3.10+ (no 3.9 syntax)
+- **Data models**: frozen dataclasses (`@dataclass(frozen=True)`) for immutability
+- **CI matrix**: Python 3.10–3.13 on Ubuntu/macOS/Windows — code must pass all three
+
+## Testing Conventions
+
+- **Fixtures** live in `tests/fixtures/skills/` — each subdirectory is a mock skill with `SKILL.md`
+- **Schema-based checks**: use `_get_check(check_id)` helper (registry lookup) in `test_checks.py`
+- **Behavioral checks**: import the class directly (e.g., `from skill_lab.checks.static.naming import MatchesDirectoryCheck`)
+- **Trigger test files**: `.skill-lab/tests/triggers.yaml` (migrated from `tests/` in v0.3.0)
