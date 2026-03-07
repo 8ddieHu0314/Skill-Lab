@@ -123,7 +123,7 @@ class TriggerGenerator:
         response_text = self._call_api(prompt)
         data = self._parse_response(response_text, skill_name)
 
-        return yaml.dump(data, default_flow_style=False, sort_keys=False, allow_unicode=True)
+        return str(yaml.dump(data, default_flow_style=False, sort_keys=False, allow_unicode=True))
 
     def generate_and_write(self, skill_path: Path, *, force: bool = False) -> Path:
         """Generate trigger tests and write to .skill-lab/tests/triggers.yaml.

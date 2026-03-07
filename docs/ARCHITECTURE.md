@@ -36,9 +36,10 @@ src/skill_lab/
 ├── core/
 │   ├── models.py             # Data classes (Skill, CheckResult, TriggerResult, etc.)
 │   ├── registry.py           # Check auto-discovery system (extends generic Registry[T])
-│   ├── constants.py          # Shared constants (paths, skill patterns)
+│   ├── constants.py          # Shared constants (paths, skill patterns, ~/.sklab paths)
 │   ├── scoring.py            # Quality score calculation and shared metrics
 │   ├── tokens.py             # Token estimation utility (v0.4.0)
+│   ├── telemetry.py          # Usage analytics: opt-in prompt, SQLite, Supabase sync, version check
 │   ├── utils.py              # Shared utilities (generic Registry[T])
 │   └── exceptions.py         # Custom exception hierarchy (SkillLabError, ParseError, etc.)
 ├── parsers/
@@ -419,6 +420,8 @@ sklab eval-trace ./my-skill --trace ./execution.jsonl [-f console|json] [-o file
 
 **Path Defaults:** The `evaluate`, `validate`, `trigger`, `generate`, `info`, and `prompt` commands default to the current directory when no skill path is provided. They validate that `SKILL.md` exists in the target directory via the shared `_resolve_skill_path()` helper.
 
+**Telemetry hooks:** Every command calls `init_telemetry()` at the start (shows the opt-in prompt on first ever run) and `_record_telemetry(command, start, exit_code)` in its `finally` block. `_record_telemetry` writes to local SQLite, fires a Supabase sync, and checks PyPI for updates — all silently. See [DEV_STATS.md](DEV_STATS.md) for the full telemetry spec.
+
 **Global Flags:**
 - `-v` / `--version`: Show package version
 - `-h` / `--help`: Show help (works on all commands)
@@ -608,6 +611,8 @@ scenarios:
 | **T \| None over Optional[T]** | Python 3.10+ union syntax for cleaner, more readable type annotations |
 | **NFKC Unicode normalization** | Naming check normalizes both sides with `unicodedata.normalize("NFKC", ...)` so precomposed/decomposed forms match |
 | **Custom YAML loader** | `_SkillYAMLLoader` prevents `yes`→`True`, `null`→`None` coercion; values stay as strings |
+| **Fire-and-forget telemetry** | All network calls (Supabase sync, PyPI version check) use `timeout=2-3s` and swallow all exceptions — a network failure never crashes the CLI |
+| **Telemetry independent of analytics opt-in** | PyPI version update checks run regardless of whether the user opted into analytics |
 
 ---
 

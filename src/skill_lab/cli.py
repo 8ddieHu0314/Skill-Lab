@@ -1,13 +1,15 @@
 """CLI interface for skill-lab."""
 
 import contextlib
+import functools
 import json as json_module
 import os
 import sys
-from collections.abc import Iterator
+import time
+from collections.abc import Callable, Iterator
 from enum import Enum
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 from rich import box
@@ -19,6 +21,7 @@ from skill_lab import __version__
 from skill_lab.core.constants import TESTS_DIR
 from skill_lab.core.models import EvalDimension, TriggerReport, TriggerType
 from skill_lab.core.registry import registry
+from skill_lab.core.telemetry import check_for_update, init_telemetry, record_event
 from skill_lab.core.tokens import estimate_tokens
 from skill_lab.evaluators.static_evaluator import StaticEvaluator
 from skill_lab.evaluators.trace_evaluator import TraceEvaluator
@@ -96,6 +99,39 @@ def _cli_error_handler() -> Iterator[None]:
         raise typer.Exit(code=1) from None
 
 
+def _record_telemetry(command: str, start: float, exit_code: int) -> None:
+    duration_ms = (time.perf_counter() - start) * 1000
+    with contextlib.suppress(Exception):
+        record_event(command, duration_ms, exit_code)
+    with contextlib.suppress(Exception):
+        latest = check_for_update()
+        if latest:
+            print(
+                f"\nsklab {latest} is available (you have {__version__}). "
+                f"Run: pip install --upgrade skill-lab",
+                file=sys.stderr,
+            )
+
+
+def _with_telemetry(command_name: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    """Decorator that wraps a CLI command with init + timing + event recording."""
+    def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
+        @functools.wraps(fn)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            init_telemetry()
+            start = time.perf_counter()
+            exit_code = 0
+            try:
+                return fn(*args, **kwargs)
+            except SystemExit as e:
+                exit_code = e.code if isinstance(e.code, int) else 0
+                raise
+            finally:
+                _record_telemetry(command_name, start, exit_code)
+        return wrapper
+    return decorator
+
+
 class OutputFormat(str, Enum):
     """Output format options."""
 
@@ -104,6 +140,7 @@ class OutputFormat(str, Enum):
 
 
 @app.command()
+@_with_telemetry("evaluate")
 def evaluate(
     skill_path: Annotated[
         Path | None,
@@ -162,12 +199,12 @@ def evaluate(
         console_reporter = ConsoleReporter(verbose=verbose)
         console_reporter.report(report)
 
-    # Exit with non-zero code if validation failed
     if not report.overall_pass:
         raise typer.Exit(code=1)
 
 
 @app.command()
+@_with_telemetry("validate")
 def validate(
     skill_path: Annotated[
         Path | None,
@@ -278,6 +315,7 @@ def list_checks(
 
 
 @app.command("trigger")
+@_with_telemetry("trigger")
 def trigger(
     skill_path: Annotated[
         Path | None,
@@ -383,7 +421,6 @@ def trigger(
     else:
         _print_trigger_report(report)
 
-    # Exit with non-zero code if tests failed
     if not report.overall_pass:
         raise typer.Exit(code=1)
 
@@ -445,6 +482,7 @@ def _print_trigger_report(report: TriggerReport) -> None:
 
 
 @app.command("generate")
+@_with_telemetry("generate")
 def generate(
     skill_path: Annotated[
         Path | None,
@@ -548,6 +586,7 @@ def generate(
 
 
 @app.command("info")
+@_with_telemetry("info")
 def info(
     skill_path: Annotated[
         Path | None,
@@ -655,6 +694,7 @@ def info(
 
 
 @app.command("prompt")
+@_with_telemetry("prompt")
 def prompt(
     skill_paths: Annotated[
         list[Path] | None,
@@ -705,15 +745,19 @@ def prompt(
 
     print(output)
 
-    # Token estimate summary to stderr
-    token_est = estimate_tokens(" ".join(f"{s['name']} {s['description']}" for s in skills_data))
-    print(
-        f"# {len(skills_data)} skill(s), ~{token_est} discovery tokens",
-        file=sys.stderr,
-    )
+    # Token estimate summary to stderr (skip for JSON — keep output parseable)
+    if format != "json":
+        token_est = estimate_tokens(
+            " ".join(f"{s['name']} {s['description']}" for s in skills_data)
+        )
+        print(
+            f"# {len(skills_data)} skill(s), ~{token_est} discovery tokens",
+            file=sys.stderr,
+        )
 
 
 @app.command("eval-trace", hidden=True)
+@_with_telemetry("eval-trace")
 def eval_trace(
     skill_path: Annotated[
         Path,
@@ -787,7 +831,6 @@ def eval_trace(
         trace_reporter = ConsoleReporter(verbose=True)
         trace_reporter.report_trace(report)
 
-    # Exit with non-zero code if checks failed
     if not report.overall_pass:
         raise typer.Exit(code=1)
 

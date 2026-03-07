@@ -1,7 +1,14 @@
 """Shared constants for the skill-lab framework."""
 
+from pathlib import Path
+
 # Directory paths for .skill-lab artifacts
 SKILLLAB_DIR = ".skill-lab"
+
+# ~/.sklab home directory and config paths
+SKLAB_HOME = Path.home() / ".sklab"
+SKLAB_CONFIG = SKLAB_HOME / "config.json"
+SKLAB_DB = SKLAB_HOME / "usage.db"
 TESTS_DIR = ".skill-lab/tests"
 TRACES_DIR = ".skill-lab/traces"
 
