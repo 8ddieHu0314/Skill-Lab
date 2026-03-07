@@ -1,0 +1,808 @@
+"""Unit tests for skill_lab.triggers.trigger_evaluator.TriggerEvaluator."""
+
+from collections.abc import Iterator
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from skill_lab.core.models import (
+    TraceEvent,
+    TriggerExpectation,
+    TriggerReport,
+    TriggerResult,
+    TriggerTestCase,
+    TriggerType,
+)
+from skill_lab.runtimes.base import RuntimeAdapter
+from skill_lab.triggers.trigger_evaluator import TriggerEvaluator
+
+
+# ─── Test doubles ─────────────────────────────────────────────────────────────
+
+
+class FakeRuntime(RuntimeAdapter):
+    """Deterministic runtime for unit tests — never calls any CLI."""
+
+    def __init__(
+        self,
+        name_: str = "fake",
+        available: bool = True,
+        exit_code: int = 0,
+        events: list[TraceEvent] | None = None,
+    ) -> None:
+        self._name = name_
+        self._available = available
+        self._exit_code = exit_code
+        self._events: list[TraceEvent] = events or []
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    def is_available(self) -> bool:
+        return self._available
+
+    def execute(
+        self,
+        prompt: str,
+        skill_path: Path,
+        trace_path: Path,
+        stop_on_skill: str | None = None,
+        working_dir: Path | None = None,
+    ) -> int:
+        trace_path.parent.mkdir(parents=True, exist_ok=True)
+        trace_path.write_text("")
+        return self._exit_code
+
+    def parse_trace(self, trace_path: Path) -> Iterator[TraceEvent]:
+        return iter(self._events)
+
+
+class MockAnalyzer:
+    """Lightweight stand-in for TraceAnalyzer with configurable answers."""
+
+    def __init__(
+        self,
+        skill_triggered: bool = True,
+        commands_run: list[str] | None = None,
+        files_exist: list[str] | None = None,
+        has_loops: bool = False,
+    ) -> None:
+        self._skill_triggered = skill_triggered
+        self._commands_run = set(commands_run or [])
+        self._files_exist = set(files_exist or [])
+        self._has_loops = has_loops
+
+    def skill_was_triggered(self, name: str) -> bool:
+        return self._skill_triggered
+
+    def command_was_run(self, pattern: str) -> bool:
+        return any(pattern in cmd for cmd in self._commands_run)
+
+    def file_was_created(self, filepath: str, project_dir: Path) -> bool:
+        return filepath in self._files_exist
+
+    def detect_loops(self) -> bool:
+        return self._has_loops
+
+
+# ─── Helpers ──────────────────────────────────────────────────────────────────
+
+
+def _make_test_case(
+    id: str = "test-1",
+    name: str = "Test One",
+    skill_name: str = "my-skill",
+    prompt: str = "do something",
+    trigger_type: TriggerType = TriggerType.EXPLICIT,
+    skill_triggered: bool = True,
+    exit_code: int | None = None,
+    commands_include: tuple[str, ...] = (),
+    files_created: tuple[str, ...] = (),
+    no_loops: bool = False,
+) -> TriggerTestCase:
+    return TriggerTestCase(
+        id=id,
+        name=name,
+        skill_name=skill_name,
+        prompt=prompt,
+        trigger_type=trigger_type,
+        expected=TriggerExpectation(
+            skill_triggered=skill_triggered,
+            exit_code=exit_code,
+            commands_include=commands_include,
+            files_created=files_created,
+            no_loops=no_loops,
+        ),
+    )
+
+
+def _make_trigger_result(passed: bool = True, trigger_type: TriggerType = TriggerType.EXPLICIT) -> TriggerResult:
+    return TriggerResult(
+        test_id="t1",
+        test_name="T1",
+        trigger_type=trigger_type,
+        passed=passed,
+        skill_triggered=passed,
+        expected_trigger=True,
+        message="ok" if passed else "fail",
+    )
+
+
+# ─── _find_project_root ───────────────────────────────────────────────────────
+
+
+class TestFindProjectRoot:
+    def test_finds_root_when_claude_skills_in_ancestor(self, tmp_path: Path):
+        """Skill lives in /project/.claude/skills/my-skill; root = /project."""
+        project = tmp_path / "project"
+        skills_dir = project / ".claude" / "skills"
+        skills_dir.mkdir(parents=True)
+        skill = skills_dir / "my-skill"
+        skill.mkdir()
+
+        evaluator = TriggerEvaluator()
+        result = evaluator._find_project_root(skill)
+        assert result == project
+
+    def test_finds_root_when_inside_skills_directory(self, tmp_path: Path):
+        """Skill path is exactly /project/.claude/skills (the skills dir itself)."""
+        project = tmp_path / "project"
+        skills_dir = project / ".claude" / "skills"
+        skills_dir.mkdir(parents=True)
+
+        evaluator = TriggerEvaluator()
+        result = evaluator._find_project_root(skills_dir)
+        assert result == project
+
+    def test_finds_root_when_claude_skills_is_in_current(self, tmp_path: Path):
+        """Skill's parent directly contains .claude/skills/."""
+        project = tmp_path / "myproject"
+        (project / ".claude" / "skills").mkdir(parents=True)
+        skill = project / "my-skill"
+        skill.mkdir()
+
+        evaluator = TriggerEvaluator()
+        result = evaluator._find_project_root(skill)
+        # skill is a sibling of .claude, not inside .claude/skills/ tree
+        # The first iteration checks (skill / ".claude" / "skills").is_dir() → False
+        # Traversal goes up to project, which has .claude/skills/ → returns project
+        assert result == project
+
+    def test_returns_none_when_no_claude_skills_ancestor(self, tmp_path: Path):
+        skill = tmp_path / "random" / "path" / "skill"
+        skill.mkdir(parents=True)
+
+        evaluator = TriggerEvaluator()
+        result = evaluator._find_project_root(skill)
+        assert result is None
+
+    def test_does_not_loop_infinitely_at_filesystem_root(self, tmp_path: Path):
+        """Must return within bounded iterations even for a shallow path."""
+        skill = tmp_path / "skill"
+        skill.mkdir()
+        evaluator = TriggerEvaluator()
+        # Should complete without hanging
+        result = evaluator._find_project_root(skill)
+        assert result is None or isinstance(result, Path)
+
+    def test_nested_skill_finds_outermost_project(self, tmp_path: Path):
+        """Deep nesting: /p/.claude/skills/a/b → finds /p."""
+        project = tmp_path / "p"
+        (project / ".claude" / "skills").mkdir(parents=True)
+        deep_skill = project / ".claude" / "skills" / "a" / "b"
+        deep_skill.mkdir(parents=True)
+
+        evaluator = TriggerEvaluator()
+        result = evaluator._find_project_root(deep_skill)
+        assert result == project
+
+
+# ─── _get_runtime ─────────────────────────────────────────────────────────────
+
+
+class TestGetRuntime:
+    def test_codex_runtime_selected_by_name(self):
+        evaluator = TriggerEvaluator(runtime="codex")
+        with patch("skill_lab.triggers.trigger_evaluator.CodexRuntime") as MockCodex:
+            evaluator._get_runtime()
+            MockCodex.assert_called_once()
+
+    def test_claude_runtime_selected_by_name(self):
+        evaluator = TriggerEvaluator(runtime="claude")
+        with patch("skill_lab.triggers.trigger_evaluator.ClaudeRuntime") as MockClaude:
+            evaluator._get_runtime()
+            MockClaude.assert_called_once()
+
+    def test_auto_detect_uses_codex_when_available(self):
+        evaluator = TriggerEvaluator(runtime=None)
+        with (
+            patch("skill_lab.triggers.trigger_evaluator.CodexRuntime") as MockCodex,
+            patch("skill_lab.triggers.trigger_evaluator.ClaudeRuntime"),
+        ):
+            mock_codex_instance = MockCodex.return_value
+            mock_codex_instance.is_available.return_value = True
+            runtime = evaluator._get_runtime()
+            assert runtime is mock_codex_instance
+
+    def test_auto_detect_falls_back_to_claude_when_codex_unavailable(self):
+        evaluator = TriggerEvaluator(runtime=None)
+        with (
+            patch("skill_lab.triggers.trigger_evaluator.CodexRuntime") as MockCodex,
+            patch("skill_lab.triggers.trigger_evaluator.ClaudeRuntime") as MockClaude,
+        ):
+            MockCodex.return_value.is_available.return_value = False
+            MockClaude.return_value.is_available.return_value = True
+            runtime = evaluator._get_runtime()
+            assert runtime is MockClaude.return_value
+
+    def test_auto_detect_defaults_to_codex_when_neither_available(self):
+        evaluator = TriggerEvaluator(runtime=None)
+        with (
+            patch("skill_lab.triggers.trigger_evaluator.CodexRuntime") as MockCodex,
+            patch("skill_lab.triggers.trigger_evaluator.ClaudeRuntime") as MockClaude,
+        ):
+            MockCodex.return_value.is_available.return_value = False
+            MockClaude.return_value.is_available.return_value = False
+            runtime = evaluator._get_runtime()
+            # Falls back to codex even when unavailable
+            assert runtime is MockCodex.return_value
+
+
+# ─── _get_skill_name ──────────────────────────────────────────────────────────
+
+
+class TestGetSkillName:
+    def test_returns_skill_name_from_first_test_case(self, tmp_path: Path):
+        evaluator = TriggerEvaluator()
+        tc = _make_test_case(skill_name="report-skill")
+        assert evaluator._get_skill_name(tmp_path / "skill", [tc]) == "report-skill"
+
+    def test_skips_unknown_skill_name(self, tmp_path: Path):
+        evaluator = TriggerEvaluator()
+        tc_unknown = _make_test_case(skill_name="unknown")
+        tc_real = _make_test_case(skill_name="real-skill")
+        result = evaluator._get_skill_name(tmp_path / "skill", [tc_unknown, tc_real])
+        assert result == "real-skill"
+
+    def test_falls_back_to_path_name_when_no_test_cases(self, tmp_path: Path):
+        evaluator = TriggerEvaluator()
+        skill_path = tmp_path / "my-fallback-skill"
+        assert evaluator._get_skill_name(skill_path, []) == "my-fallback-skill"
+
+    def test_falls_back_to_path_name_when_all_unknown(self, tmp_path: Path):
+        evaluator = TriggerEvaluator()
+        tcs = [_make_test_case(skill_name="unknown"), _make_test_case(skill_name="unknown")]
+        skill_path = tmp_path / "path-skill"
+        assert evaluator._get_skill_name(skill_path, tcs) == "path-skill"
+
+    def test_returns_first_non_unknown_name(self, tmp_path: Path):
+        evaluator = TriggerEvaluator()
+        tcs = [
+            _make_test_case(skill_name="unknown"),
+            _make_test_case(skill_name="first-real"),
+            _make_test_case(skill_name="second-real"),
+        ]
+        assert evaluator._get_skill_name(tmp_path / "x", tcs) == "first-real"
+
+
+# ─── _check_expectations ──────────────────────────────────────────────────────
+
+
+class TestCheckExpectations:
+    """Test the expectations logic with a mock analyzer."""
+
+    def _evaluator(self) -> TriggerEvaluator:
+        return TriggerEvaluator()
+
+    def _check(
+        self,
+        skill_triggered: bool = True,
+        expected_triggered: bool = True,
+        exit_code_actual: int = 0,
+        exit_code_expected: int | None = None,
+        commands_include: tuple[str, ...] = (),
+        commands_run: list[str] | None = None,
+        files_created_expected: tuple[str, ...] = (),
+        files_exist: list[str] | None = None,
+        no_loops: bool = False,
+        has_loops: bool = False,
+    ) -> bool:
+        evaluator = self._evaluator()
+        test_case = _make_test_case(
+            skill_triggered=expected_triggered,
+            exit_code=exit_code_expected,
+            commands_include=commands_include,
+            files_created=files_created_expected,
+            no_loops=no_loops,
+        )
+        analyzer = MockAnalyzer(
+            skill_triggered=skill_triggered,
+            commands_run=commands_run,
+            files_exist=files_exist,
+            has_loops=has_loops,
+        )
+        return evaluator._check_expectations(
+            test_case,
+            analyzer,  # type: ignore[arg-type]
+            Path("/fake/skill"),
+            skill_triggered,
+            exit_code_actual,
+        )
+
+    # Skill trigger expectation
+    def test_returns_true_when_skill_triggered_matches_expected(self):
+        assert self._check(skill_triggered=True, expected_triggered=True) is True
+
+    def test_returns_true_when_negative_test_and_not_triggered(self):
+        assert self._check(skill_triggered=False, expected_triggered=False) is True
+
+    def test_returns_false_when_skill_not_triggered_but_expected(self):
+        assert self._check(skill_triggered=False, expected_triggered=True) is False
+
+    def test_returns_false_when_skill_triggered_but_not_expected(self):
+        assert self._check(skill_triggered=True, expected_triggered=False) is False
+
+    # Exit code
+    def test_returns_true_when_exit_code_not_specified(self):
+        assert self._check(exit_code_actual=1, exit_code_expected=None) is True
+
+    def test_returns_true_when_exit_code_matches(self):
+        assert self._check(exit_code_actual=0, exit_code_expected=0) is True
+
+    def test_returns_false_when_exit_code_mismatches(self):
+        assert self._check(exit_code_actual=1, exit_code_expected=0) is False
+
+    def test_nonzero_exit_code_accepted_when_matches(self):
+        assert self._check(exit_code_actual=2, exit_code_expected=2) is True
+
+    # Command inclusion
+    def test_returns_true_when_required_command_run(self):
+        assert self._check(
+            commands_include=("npm install",),
+            commands_run=["npm install", "npm test"],
+        ) is True
+
+    def test_returns_false_when_required_command_missing(self):
+        assert self._check(
+            commands_include=("npm test",),
+            commands_run=["npm install"],
+        ) is False
+
+    def test_returns_false_when_one_of_multiple_commands_missing(self):
+        assert self._check(
+            commands_include=("npm install", "npm test"),
+            commands_run=["npm install"],
+        ) is False
+
+    def test_returns_true_when_all_required_commands_present(self):
+        assert self._check(
+            commands_include=("cmd-a", "cmd-b"),
+            commands_run=["cmd-a", "cmd-b", "cmd-c"],
+        ) is True
+
+    def test_no_required_commands_does_not_block(self):
+        assert self._check(commands_include=(), commands_run=[]) is True
+
+    # File creation
+    def test_returns_true_when_required_file_exists(self):
+        assert self._check(
+            files_created_expected=("output.txt",),
+            files_exist=["output.txt"],
+        ) is True
+
+    def test_returns_false_when_required_file_missing(self):
+        assert self._check(
+            files_created_expected=("report.pdf",),
+            files_exist=[],
+        ) is False
+
+    def test_returns_false_when_one_required_file_missing(self):
+        assert self._check(
+            files_created_expected=("a.txt", "b.txt"),
+            files_exist=["a.txt"],
+        ) is False
+
+    def test_returns_true_when_all_required_files_present(self):
+        assert self._check(
+            files_created_expected=("a.txt", "b.txt"),
+            files_exist=["a.txt", "b.txt"],
+        ) is True
+
+    def test_no_required_files_does_not_block(self):
+        assert self._check(files_created_expected=(), files_exist=[]) is True
+
+    # Loop detection
+    def test_returns_false_when_loops_detected_and_no_loops_true(self):
+        assert self._check(no_loops=True, has_loops=True) is False
+
+    def test_returns_true_when_no_loops_detected_and_no_loops_true(self):
+        assert self._check(no_loops=True, has_loops=False) is True
+
+    def test_ignores_loops_when_no_loops_false(self):
+        # Even if loops present, no_loops=False means we don't care
+        assert self._check(no_loops=False, has_loops=True) is True
+
+    # Combined scenarios
+    def test_all_expectations_pass(self):
+        assert self._check(
+            skill_triggered=True,
+            expected_triggered=True,
+            exit_code_actual=0,
+            exit_code_expected=0,
+            commands_include=("npm install",),
+            commands_run=["npm install"],
+            files_created_expected=("dist/output.js",),
+            files_exist=["dist/output.js"],
+            no_loops=True,
+            has_loops=False,
+        ) is True
+
+    def test_one_failure_causes_overall_false(self):
+        # Everything passes but exit code mismatches
+        assert self._check(
+            skill_triggered=True,
+            expected_triggered=True,
+            exit_code_actual=1,
+            exit_code_expected=0,
+            commands_include=("npm install",),
+            commands_run=["npm install"],
+        ) is False
+
+
+# ─── _run_single_test ─────────────────────────────────────────────────────────
+
+
+class TestRunSingleTest:
+    def test_returns_passing_result_when_expectations_met(self, tmp_path: Path):
+        skill_path = tmp_path / "skill"
+        skill_path.mkdir()
+        # Provide a skill invocation event so skill_was_triggered returns True
+        events = [
+            TraceEvent(
+                type="item.started",
+                item_type="skill_invocation",
+                command="$my-skill run",
+                raw={},
+            )
+        ]
+        runtime = FakeRuntime(events=events)
+        evaluator = TriggerEvaluator()
+        evaluator._trace_dir = tmp_path / ".skill-lab" / "traces"
+
+        test_case = _make_test_case(skill_name="my-skill", skill_triggered=True)
+        result = evaluator._run_single_test(test_case, skill_path, runtime)
+        assert isinstance(result, TriggerResult)
+        assert result.test_id == "test-1"
+
+    def test_returns_result_with_trace_path(self, tmp_path: Path):
+        skill_path = tmp_path / "skill"
+        skill_path.mkdir()
+        runtime = FakeRuntime()
+        evaluator = TriggerEvaluator()
+        evaluator._trace_dir = tmp_path / "traces"
+
+        test_case = _make_test_case(id="my-test", skill_triggered=False)
+        result = evaluator._run_single_test(test_case, skill_path, runtime)
+        assert result.trace_path is not None
+        assert "my-test.jsonl" in str(result.trace_path)
+
+    def test_creates_trace_directory(self, tmp_path: Path):
+        skill_path = tmp_path / "skill"
+        skill_path.mkdir()
+        trace_dir = tmp_path / "traces" / "nested"
+        runtime = FakeRuntime()
+        evaluator = TriggerEvaluator()
+        evaluator._trace_dir = trace_dir
+
+        evaluator._run_single_test(_make_test_case(), skill_path, runtime)
+        assert trace_dir.exists()
+
+    def test_handles_runtime_exception_gracefully(self, tmp_path: Path):
+        skill_path = tmp_path / "skill"
+        skill_path.mkdir()
+
+        class BrokenRuntime(FakeRuntime):
+            def execute(self, *args, **kwargs) -> int:
+                raise RuntimeError("CLI not found")
+
+        evaluator = TriggerEvaluator()
+        evaluator._trace_dir = tmp_path / "traces"
+
+        result = evaluator._run_single_test(_make_test_case(), skill_path, BrokenRuntime())
+        assert result.passed is False
+        assert "CLI not found" in result.message or "execution failed" in result.message.lower()
+
+    def test_result_includes_events_count(self, tmp_path: Path):
+        skill_path = tmp_path / "skill"
+        skill_path.mkdir()
+        events = [
+            TraceEvent(type="item.completed", raw={}),
+            TraceEvent(type="item.completed", raw={}),
+        ]
+        runtime = FakeRuntime(events=events)
+        evaluator = TriggerEvaluator()
+        evaluator._trace_dir = tmp_path / "traces"
+
+        result = evaluator._run_single_test(
+            _make_test_case(skill_triggered=False), skill_path, runtime
+        )
+        assert result.events_count == 2
+
+    def test_result_includes_exit_code(self, tmp_path: Path):
+        skill_path = tmp_path / "skill"
+        skill_path.mkdir()
+        runtime = FakeRuntime(exit_code=42)
+        evaluator = TriggerEvaluator()
+        evaluator._trace_dir = tmp_path / "traces"
+
+        result = evaluator._run_single_test(
+            _make_test_case(skill_triggered=False), skill_path, runtime
+        )
+        assert result.exit_code == 42
+
+    def test_uses_project_root_as_working_dir(self, tmp_path: Path):
+        """When project_root is provided, execute is called from there."""
+        skill_path = tmp_path / "skill"
+        skill_path.mkdir()
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+
+        recorded: list[Path | None] = []
+
+        class RecordingRuntime(FakeRuntime):
+            def execute(self, prompt, skill_path, trace_path, stop_on_skill=None, working_dir=None) -> int:
+                recorded.append(working_dir)
+                trace_path.parent.mkdir(parents=True, exist_ok=True)
+                trace_path.write_text("")
+                return 0
+
+        evaluator = TriggerEvaluator()
+        evaluator._trace_dir = tmp_path / "traces"
+        evaluator._run_single_test(
+            _make_test_case(), skill_path, RecordingRuntime(), project_root=project_root
+        )
+        assert recorded[0] == project_root
+
+    def test_uses_skill_path_as_working_dir_when_no_project_root(self, tmp_path: Path):
+        skill_path = tmp_path / "skill"
+        skill_path.mkdir()
+
+        recorded: list[Path | None] = []
+
+        class RecordingRuntime(FakeRuntime):
+            def execute(self, prompt, skill_path, trace_path, stop_on_skill=None, working_dir=None) -> int:
+                recorded.append(working_dir)
+                trace_path.parent.mkdir(parents=True, exist_ok=True)
+                trace_path.write_text("")
+                return 0
+
+        evaluator = TriggerEvaluator()
+        evaluator._trace_dir = tmp_path / "traces"
+        evaluator._run_single_test(_make_test_case(), skill_path, RecordingRuntime())
+        assert recorded[0] == skill_path
+
+
+# ─── evaluate() ───────────────────────────────────────────────────────────────
+
+
+class TestEvaluate:
+    """High-level evaluate() tests with mocked load_trigger_tests and runtime."""
+
+    _PATCH_LOAD = "skill_lab.triggers.trigger_evaluator.load_trigger_tests"
+
+    def _evaluator_with_runtime(self, runtime: FakeRuntime | None = None) -> TriggerEvaluator:
+        ev = TriggerEvaluator()
+        if runtime is None:
+            runtime = FakeRuntime()
+        ev._get_runtime = lambda: runtime  # type: ignore[method-assign]
+        return ev
+
+    def test_returns_trigger_report(self, tmp_path: Path):
+        tc = _make_test_case(skill_triggered=False)
+        ev = self._evaluator_with_runtime()
+        with patch(self._PATCH_LOAD, return_value=([tc], [])):
+            with patch.object(ev, "_run_single_test", return_value=_make_trigger_result()):
+                report = ev.evaluate(tmp_path / "skill")
+        assert isinstance(report, TriggerReport)
+
+    def test_report_includes_skill_name(self, tmp_path: Path):
+        tc = _make_test_case(skill_name="special-skill")
+        ev = self._evaluator_with_runtime()
+        with patch(self._PATCH_LOAD, return_value=([tc], [])):
+            with patch.object(ev, "_run_single_test", return_value=_make_trigger_result()):
+                report = ev.evaluate(tmp_path / "skill")
+        assert report.skill_name == "special-skill"
+
+    def test_report_overall_pass_when_all_pass(self, tmp_path: Path):
+        tcs = [_make_test_case(id=f"t{i}") for i in range(3)]
+        results = [_make_trigger_result(passed=True) for _ in tcs]
+        ev = self._evaluator_with_runtime()
+        with patch(self._PATCH_LOAD, return_value=(tcs, [])):
+            with patch.object(ev, "_run_single_test", side_effect=results):
+                report = ev.evaluate(tmp_path / "skill")
+        assert report.overall_pass is True
+
+    def test_report_overall_fail_when_any_fail(self, tmp_path: Path):
+        tcs = [_make_test_case(id="t1"), _make_test_case(id="t2")]
+        results = [_make_trigger_result(passed=True), _make_trigger_result(passed=False)]
+        ev = self._evaluator_with_runtime()
+        with patch(self._PATCH_LOAD, return_value=(tcs, [])):
+            with patch.object(ev, "_run_single_test", side_effect=results):
+                report = ev.evaluate(tmp_path / "skill")
+        assert report.overall_pass is False
+
+    def test_report_tests_run_count(self, tmp_path: Path):
+        tcs = [_make_test_case(id=f"t{i}") for i in range(4)]
+        results = [_make_trigger_result() for _ in tcs]
+        ev = self._evaluator_with_runtime()
+        with patch(self._PATCH_LOAD, return_value=(tcs, [])):
+            with patch.object(ev, "_run_single_test", side_effect=results):
+                report = ev.evaluate(tmp_path / "skill")
+        assert report.tests_run == 4
+
+    def test_report_tests_passed_count(self, tmp_path: Path):
+        tcs = [_make_test_case(id=f"t{i}") for i in range(3)]
+        results = [
+            _make_trigger_result(passed=True),
+            _make_trigger_result(passed=False),
+            _make_trigger_result(passed=True),
+        ]
+        ev = self._evaluator_with_runtime()
+        with patch(self._PATCH_LOAD, return_value=(tcs, [])):
+            with patch.object(ev, "_run_single_test", side_effect=results):
+                report = ev.evaluate(tmp_path / "skill")
+        assert report.tests_passed == 2
+        assert report.tests_failed == 1
+
+    def test_report_runtime_name(self, tmp_path: Path):
+        tc = _make_test_case()
+        ev = self._evaluator_with_runtime(FakeRuntime(name_="codex"))
+        with patch(self._PATCH_LOAD, return_value=([tc], [])):
+            with patch.object(ev, "_run_single_test", return_value=_make_trigger_result()):
+                report = ev.evaluate(tmp_path / "skill")
+        assert report.runtime == "codex"
+
+    def test_report_skill_path_is_string(self, tmp_path: Path):
+        skill_path = tmp_path / "my-skill"
+        ev = self._evaluator_with_runtime()
+        with patch(self._PATCH_LOAD, return_value=([], [])):
+            report = ev.evaluate(skill_path)
+        assert report.skill_path == str(skill_path)
+
+    def test_report_has_results_list(self, tmp_path: Path):
+        tcs = [_make_test_case(id=f"t{i}") for i in range(2)]
+        results = [_make_trigger_result() for _ in tcs]
+        ev = self._evaluator_with_runtime()
+        with patch(self._PATCH_LOAD, return_value=(tcs, [])):
+            with patch.object(ev, "_run_single_test", side_effect=results):
+                report = ev.evaluate(tmp_path / "skill")
+        assert len(report.results) == 2
+
+    def test_load_errors_reported_when_no_tests(self, tmp_path: Path):
+        ev = self._evaluator_with_runtime()
+        errors = ["No .skill-lab/tests/ directory found"]
+        with patch(self._PATCH_LOAD, return_value=([], errors)):
+            report = ev.evaluate(tmp_path / "skill")
+        assert report.tests_run == 1  # one error result
+        assert report.overall_pass is False
+        assert report.results[0].test_id == "load-error"
+        assert "No .skill-lab/tests" in report.results[0].message
+
+    def test_multiple_load_errors_create_multiple_results(self, tmp_path: Path):
+        ev = self._evaluator_with_runtime()
+        errors = ["Error A", "Error B"]
+        with patch(self._PATCH_LOAD, return_value=([], errors)):
+            report = ev.evaluate(tmp_path / "skill")
+        assert report.tests_run == 2
+        messages = [r.message for r in report.results]
+        assert "Error A" in messages
+        assert "Error B" in messages
+
+    def test_type_filter_applied(self, tmp_path: Path):
+        explicit_tc = _make_test_case(id="e1", trigger_type=TriggerType.EXPLICIT)
+        implicit_tc = _make_test_case(id="i1", trigger_type=TriggerType.IMPLICIT)
+        ev = self._evaluator_with_runtime()
+        with patch(self._PATCH_LOAD, return_value=([explicit_tc, implicit_tc], [])):
+            with patch.object(ev, "_run_single_test", return_value=_make_trigger_result()) as mock_run:
+                ev.evaluate(tmp_path / "skill", type_filter=TriggerType.EXPLICIT)
+                # Only explicit test was run
+                assert mock_run.call_count == 1
+                called_tc = mock_run.call_args[0][0]
+                assert called_tc.id == "e1"
+
+    def test_type_filter_negative_only(self, tmp_path: Path):
+        tcs = [
+            _make_test_case(id="e", trigger_type=TriggerType.EXPLICIT),
+            _make_test_case(id="n", trigger_type=TriggerType.NEGATIVE),
+        ]
+        ev = self._evaluator_with_runtime()
+        with patch(self._PATCH_LOAD, return_value=(tcs, [])):
+            with patch.object(ev, "_run_single_test", return_value=_make_trigger_result()) as mock_run:
+                ev.evaluate(tmp_path / "skill", type_filter=TriggerType.NEGATIVE)
+                assert mock_run.call_count == 1
+                assert mock_run.call_args[0][0].id == "n"
+
+    def test_progress_callback_called_for_each_test(self, tmp_path: Path):
+        tcs = [_make_test_case(id=f"t{i}", name=f"Test {i}") for i in range(3)]
+        ev = self._evaluator_with_runtime()
+        calls: list[tuple] = []
+        with patch(self._PATCH_LOAD, return_value=(tcs, [])):
+            with patch.object(ev, "_run_single_test", return_value=_make_trigger_result()):
+                ev.evaluate(tmp_path / "skill", progress_callback=lambda c, t, n: calls.append((c, t, n)))
+        assert len(calls) == 3
+        assert calls[0] == (1, 3, "Test 0")
+        assert calls[1] == (2, 3, "Test 1")
+        assert calls[2] == (3, 3, "Test 2")
+
+    def test_progress_callback_none_does_not_crash(self, tmp_path: Path):
+        tc = _make_test_case()
+        ev = self._evaluator_with_runtime()
+        with patch(self._PATCH_LOAD, return_value=([tc], [])):
+            with patch.object(ev, "_run_single_test", return_value=_make_trigger_result()):
+                ev.evaluate(tmp_path / "skill", progress_callback=None)  # must not raise
+
+    def test_report_pass_rate_all_pass(self, tmp_path: Path):
+        tcs = [_make_test_case(id=f"t{i}") for i in range(4)]
+        results = [_make_trigger_result(passed=True) for _ in tcs]
+        ev = self._evaluator_with_runtime()
+        with patch(self._PATCH_LOAD, return_value=(tcs, [])):
+            with patch.object(ev, "_run_single_test", side_effect=results):
+                report = ev.evaluate(tmp_path / "skill")
+        # pass_rate is stored as 0-1 range (converted from percentage)
+        assert abs(report.pass_rate - 1.0) < 0.001
+
+    def test_report_pass_rate_none_pass(self, tmp_path: Path):
+        tcs = [_make_test_case(id="t1")]
+        results = [_make_trigger_result(passed=False)]
+        ev = self._evaluator_with_runtime()
+        with patch(self._PATCH_LOAD, return_value=(tcs, [])):
+            with patch.object(ev, "_run_single_test", side_effect=results):
+                report = ev.evaluate(tmp_path / "skill")
+        assert abs(report.pass_rate - 0.0) < 0.001
+
+    def test_report_pass_rate_zero_when_no_tests(self, tmp_path: Path):
+        ev = self._evaluator_with_runtime()
+        with patch(self._PATCH_LOAD, return_value=([], [])):
+            report = ev.evaluate(tmp_path / "skill")
+        assert report.pass_rate == 0.0
+
+    def test_report_summary_by_type_built(self, tmp_path: Path):
+        tcs = [
+            _make_test_case(id="e1", trigger_type=TriggerType.EXPLICIT),
+            _make_test_case(id="i1", trigger_type=TriggerType.IMPLICIT),
+        ]
+        results = [
+            _make_trigger_result(trigger_type=TriggerType.EXPLICIT),
+            _make_trigger_result(trigger_type=TriggerType.IMPLICIT),
+        ]
+        ev = self._evaluator_with_runtime()
+        with patch(self._PATCH_LOAD, return_value=(tcs, [])):
+            with patch.object(ev, "_run_single_test", side_effect=results):
+                report = ev.evaluate(tmp_path / "skill")
+        assert "explicit" in report.summary_by_type
+        assert "implicit" in report.summary_by_type
+
+    def test_evaluate_accepts_string_path(self, tmp_path: Path):
+        skill_path = str(tmp_path / "skill")
+        ev = self._evaluator_with_runtime()
+        with patch(self._PATCH_LOAD, return_value=([], [])):
+            report = ev.evaluate(skill_path)
+        assert isinstance(report, TriggerReport)
+
+    def test_evaluate_duration_ms_positive(self, tmp_path: Path):
+        tc = _make_test_case()
+        ev = self._evaluator_with_runtime()
+        with patch(self._PATCH_LOAD, return_value=([tc], [])):
+            with patch.object(ev, "_run_single_test", return_value=_make_trigger_result()):
+                report = ev.evaluate(tmp_path / "skill")
+        assert report.duration_ms >= 0
+
+    def test_evaluate_timestamp_is_iso_string(self, tmp_path: Path):
+        ev = self._evaluator_with_runtime()
+        with patch(self._PATCH_LOAD, return_value=([], [])):
+            report = ev.evaluate(tmp_path / "skill")
+        # Basic check: it's a non-empty ISO-like string
+        assert "T" in report.timestamp
+        assert "Z" in report.timestamp or "+" in report.timestamp

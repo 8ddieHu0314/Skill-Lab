@@ -1,112 +1,100 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Python CLI tool that evaluates agent skills (SKILL.md files) via static analysis, trigger testing, and LLM-based test generation. Produces a 0-100 score across 28 checks / 4 dimensions.
 
-## Project Overview
-
-Python CLI tool that evaluates agent skills (SKILL.md files) through static analysis, trigger testing, and LLM-based test generation. Produces a 0-100 quality score based on 28 checks across 4 dimensions.
-
-**Current Release:** v0.4.0 on PyPI includes static analysis (28 checks), trigger testing, `sklab generate` for LLM-based trigger test generation, `sklab info` / `sklab prompt` commands, NFKC Unicode normalization, and a custom YAML loader to prevent implicit type coercion. See [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) for the version roadmap.
-
-## Naming Convention
+## Naming
 
 | Name | Usage |
 |------|-------|
-| **Skill-Lab** | GitHub repo name, project name |
-| **skill-lab** | PyPI package name |
-| **sklab** | CLI command |
+| **Skill-Lab** | GitHub repo / project name |
+| **skill-lab** | PyPI package (`pip install skill-lab`) |
+| **sklab** | CLI command (`sklab evaluate ./my-skill`) |
 
-- GitHub URLs use `Skill-Lab`: `github.com/8ddieHu0314/Skill-Lab`
-- PyPI/pip uses `skill-lab`: `pip install skill-lab`
-- CLI command is `sklab`: `sklab evaluate ./my-skill`
-
-## Documentation
+## Docs
 
 | Document | Contents |
 |----------|----------|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Tech stack, data flow, CLI commands, design patterns |
-| [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) | Vision, roadmap overview, design decisions |
-| [docs/versions/](docs/versions/) | Detailed specs for each version (v0.1.0 - v1.0.0) |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Tech stack, data flow, CLI commands, check systems, design patterns |
+| [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) | Vision, roadmap, design decisions |
+| [docs/versions/](docs/versions/) | Per-version specs (v0.1.0–v1.0.0) |
 
-**After code changes**, update relevant docs:
-- `ARCHITECTURE.md` - New modules, directory changes, CLI commands
-- `docs/versions/vX.X.X.md` - Version-specific deliverables and status
+After code changes: update `ARCHITECTURE.md` (modules/CLI) and the relevant `docs/versions/vX.X.X.md`.
 
-## Quick Start
+## Commands
 
 ```bash
-pip install -e ".[dev]"                    # Install with dev dependencies
-sklab -v                                   # Show version
-sklab evaluate ./my-skill                  # Run static analysis on specific skill
-sklab evaluate                             # Run static analysis on current directory
-sklab evaluate -s                          # Spec-required checks only
-sklab validate                             # Quick pass/fail validation
-sklab info ./my-skill                      # Show skill metadata and token estimates
-sklab info --json                          # Machine-readable JSON output
-sklab info --field name                    # Extract a single field
-sklab prompt ./skill-a ./skill-b           # Export skills as XML prompt (default)
-sklab prompt -f markdown                   # Export as Markdown
-sklab prompt -f json                       # Export as JSON
-sklab trigger                              # Run trigger tests (requires Claude CLI)
-sklab generate                             # Generate trigger tests via LLM (requires anthropic)
-sklab generate --model claude-sonnet-4-5-20250929  # Use a specific model
-pytest tests/ -v                           # Run all tests
-pytest tests/test_naming.py -v             # Run single test file
-pytest tests/test_naming.py::test_name -v  # Run single test
-pytest tests/ --cov=skill_lab              # Run with coverage
-mypy src/                                  # Type check (strict mode)
-ruff check src/                            # Lint
-ruff format src/                           # Format code
+pip install -e ".[dev]"       # install with dev deps
+sklab evaluate ./my-skill     # static analysis
+sklab validate                # quick pass/fail
+sklab info ./my-skill         # metadata + token estimates
+sklab prompt ./skill-a        # export skill as XML prompt
+sklab trigger                 # run trigger tests (requires Claude CLI)
+sklab generate                # generate trigger tests via LLM (requires anthropic)
+pytest tests/ -v              # run tests
+mypy src/                     # type check
+ruff check src/ && ruff format src/
 ```
 
-For full CLI options, see [ARCHITECTURE.md - CLI Commands](docs/ARCHITECTURE.md#cli-commands-clipy).
+## Critical Architecture Notes
 
-## Key Architecture
+- **Two check systems**: behavioral (`@register_check` classes in `structure.py`, `naming.py`, `content.py`) and schema-based (`FieldRule` in `schema.py` — append to add a check, no class needed). See ARCHITECTURE.md for full details.
+- **Sync requirement**: `SPEC_FRONTMATTER_FIELDS` in `structure.py` must stay in sync with `FRONTMATTER_SCHEMA` in `schema.py`.
+- **Optional dep**: `anthropic` is not imported in `triggers/__init__.py` — only lazy-imported inside the `generate` CLI command. Install via `pip install skill-lab[generate]`.
+- **Test fixtures**: `tests/fixtures/skills/` — each subdirectory is a mock skill with `SKILL.md`.
+- **Trigger test files**: `.skill-lab/tests/triggers.yaml`.
 
-### Two Check Systems (28 total: 10 spec-required, 18 quality suggestions)
+## Workflow Orchestration
 
-The codebase has **two distinct patterns** for defining static checks:
+### 1. Plan Node Default
+- Enter plan mode for ANY non-trivial task (3+ steps or architectural decisions)
+- If something goes sideways, STOP and re-plan immediately — don't keep pushing
+- Use plan mode for verification steps, not just building
+- Write detailed specs upfront to reduce ambiguity
 
-**1. Behavioral checks** — hand-written classes with `@register_check` decorator:
-- `structure.py` (7 checks): `SkillMdExistsCheck`, `ValidFrontmatterCheck`, `StandardFrontmatterFieldsCheck`, `ScriptsValidCheck`, `ReferencesValidCheck`, `ScriptsNoInteractiveCheck`, `ScriptsSelfContainedCheck`
-- `naming.py` (1 check): `NameMatchesDirectoryCheck`
-- `content.py` (11 checks): `BodyNotEmptyCheck`, `LineBudgetCheck`, `HasExamplesCheck`, `ReferenceDepthCheck`, `ScriptsReferencedCheck`, `ScriptPathsExistCheck`, `CompatibilityPrereqsCheck`, `TokenBudgetCheck`, `MetadataTokenBudgetCheck`, `DescriptionActionableCheck`, `AssetPathsExistCheck`
+### 2. Subagent Strategy
+- Use subagents liberally to keep main context window clean
+- Offload research, exploration, and parallel analysis to subagents
+- For complex problems, throw more compute at it via subagents
+- One task per subagent for focused execution
 
-**2. Schema-based checks** — declarative `FieldRule` definitions in `schema.py` (9 checks):
-- Each `FieldRule` in `FRONTMATTER_SCHEMA` list describes a single constraint (field name, type, max length, regex, etc.)
-- `_make_schema_check()` factory creates a concrete `StaticCheck` subclass per rule at import time
-- `_validate_rule()` engine interprets the rule and produces `CheckResult` objects
-- To add a schema check: append a `FieldRule` to `FRONTMATTER_SCHEMA` — no class needed
+### 3. Self-Improvement Loop
+- After corrections from the user: update `.claude/.tasks/lessons.md`
+- Only capture lessons that are reusable in future sessions (tool quirks, API gotchas, patterns). Skip one-off mistakes or context-specific decisions.
+- Review lessons at session start for relevant project
 
-### Auto-Discovery Pattern
+### 4. Verification Before Done
+- Never mark a task complete without proving it works
+- Diff behavior between main and your changes when relevant
+- Ask yourself: "Would a staff engineer approve this?"
+- Run tests, check logs, demonstrate correctness
 
-1. Importing a check module registers checks to the global `CheckRegistry` singleton
-2. `StaticEvaluator` imports all check modules (`content`, `naming`, `schema`, `structure`), triggering registration
-3. `registry.get_all()` returns all registered check classes for execution
-4. `Registry.register()` raises `ValueError` on duplicate `check_id`
+### 5. Demand Elegance (Balanced)
+- For non-trivial changes: pause and ask "is there a more elegant way?"
+- If a fix feels hacky: "Knowing everything I know now, implement the elegant solution"
+- Skip this for simple, obvious fixes — don't over-engineer
+- Challenge your own work before presenting it
 
-Same pattern applies to trace handlers (`@register_trace_handler` in `tracechecks/handlers/`).
+### 6. Autonomous Bug Fixing
+- When given a bug report: just fix it. Don't ask for hand-holding
+- Point at logs, errors, failing tests — then resolve them
+- Zero context switching required from the user
+- Go fix failing CI tests without being told how
 
-### Sync Requirements
+---
 
-- `SPEC_FRONTMATTER_FIELDS` set in `structure.py` must stay in sync with `FRONTMATTER_SCHEMA` in `schema.py` when adding new frontmatter fields
+## Task Management
 
-### Optional Dependencies
+1. **Plan First**: Write plan to `tasks/todo.md` with checkable items  
+2. **Verify Plan**: Check in before starting implementation  
+3. **Track Progress**: Mark items complete as you go  
+4. **Explain Changes**: High-level summary at each step  
+5. **Document Results**: Add review section to `tasks/todo.md`  
+6. **Capture Lessons**: Update `.claude/.tasks/lessons.md` after corrections — reusable lessons only and mistakes the AI has made
 
-- `anthropic` is an optional dep: `pip install skill-lab[generate]`
-- `TriggerGenerator` in `triggers/generator.py` is deliberately **NOT** imported in `triggers/__init__.py` to avoid import errors when `anthropic` is not installed
-- Guard pattern: lazy import inside the `generate` CLI command only
+---
 
-## Testing Conventions
+## Core Principles
 
-- **Fixtures** live in `tests/fixtures/skills/` — each subdirectory is a mock skill with `SKILL.md`
-- **Schema-based checks**: use `_get_check(check_id)` helper (registry lookup) in `test_checks.py`
-- **Behavioral checks**: import the class directly (e.g., `from skill_lab.checks.static.naming import MatchesDirectoryCheck`)
-- **Trigger test files**: `.skill-lab/tests/triggers.yaml` (migrated from `tests/` in v0.3.0)
-
-## Common Tasks
-
-- **Adding a behavioral check**: See [ARCHITECTURE.md - Adding a New Check](docs/ARCHITECTURE.md#adding-a-new-check)
-- **Adding a schema check**: Append a `FieldRule` to `FRONTMATTER_SCHEMA` in `schema.py`
-- **Understanding data flow**: See [ARCHITECTURE.md - Data Flow](docs/ARCHITECTURE.md#data-flow)
-- **Listing all checks**: Run `sklab list-checks` or `sklab list-checks --dimension structure`
+- **Simplicity First**: Make every change as simple as possible. Impact minimal code.
+- **No Laziness**: Find root causes. No temporary fixes. Senior developer standards.
+- **Minimal Impact**: Changes should only touch what's necessary. Avoid introducing bugs.

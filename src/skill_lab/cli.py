@@ -1,14 +1,15 @@
 """CLI interface for skill-lab."""
 
 import contextlib
+import functools
 import json as json_module
 import os
 import sys
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from enum import Enum
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 from rich import box
@@ -112,6 +113,25 @@ def _record_telemetry(command: str, start: float, exit_code: int) -> None:
             )
 
 
+def _with_telemetry(command_name: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    """Decorator that wraps a CLI command with init + timing + event recording."""
+    def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
+        @functools.wraps(fn)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            init_telemetry()
+            start = time.perf_counter()
+            exit_code = 0
+            try:
+                return fn(*args, **kwargs)
+            except SystemExit as e:
+                exit_code = e.code if isinstance(e.code, int) else 0
+                raise
+            finally:
+                _record_telemetry(command_name, start, exit_code)
+        return wrapper
+    return decorator
+
+
 class OutputFormat(str, Enum):
     """Output format options."""
 
@@ -120,6 +140,7 @@ class OutputFormat(str, Enum):
 
 
 @app.command()
+@_with_telemetry("evaluate")
 def evaluate(
     skill_path: Annotated[
         Path | None,
@@ -161,38 +182,29 @@ def evaluate(
     ] = False,
 ) -> None:
     """Evaluate a skill and generate a quality report."""
-    init_telemetry()
     skill_path = _resolve_skill_path(skill_path)
-    _start = time.perf_counter()
-    _exit_code = 0
-    try:
-        with _cli_error_handler():
-            evaluator = StaticEvaluator(spec_only=spec_only)
-            report = evaluator.evaluate(skill_path)
 
-        if format == OutputFormat.json:
-            json_reporter = JsonReporter()
-            if output:
-                json_reporter.write_file(report, output)
-                console.print(f"Report written to: {output}")
-            else:
-                console.print(json_reporter.format(report))
+    with _cli_error_handler():
+        evaluator = StaticEvaluator(spec_only=spec_only)
+        report = evaluator.evaluate(skill_path)
+
+    if format == OutputFormat.json:
+        json_reporter = JsonReporter()
+        if output:
+            json_reporter.write_file(report, output)
+            console.print(f"Report written to: {output}")
         else:
-            console_reporter = ConsoleReporter(verbose=verbose)
-            console_reporter.report(report)
+            console.print(json_reporter.format(report))
+    else:
+        console_reporter = ConsoleReporter(verbose=verbose)
+        console_reporter.report(report)
 
-        # Exit with non-zero code if validation failed
-        if not report.overall_pass:
-            _exit_code = 1
-            raise typer.Exit(code=1)
-    except SystemExit as e:
-        _exit_code = e.code if isinstance(e.code, int) else 0
-        raise
-    finally:
-        _record_telemetry("evaluate", _start, _exit_code)
+    if not report.overall_pass:
+        raise typer.Exit(code=1)
 
 
 @app.command()
+@_with_telemetry("validate")
 def validate(
     skill_path: Annotated[
         Path | None,
@@ -210,30 +222,21 @@ def validate(
     ] = False,
 ) -> None:
     """Quick validation that reports only errors."""
-    init_telemetry()
     skill_path = _resolve_skill_path(skill_path)
-    _start = time.perf_counter()
-    _exit_code = 0
-    try:
-        with _cli_error_handler():
-            evaluator = StaticEvaluator(spec_only=spec_only)
-            passed, errors = evaluator.validate(skill_path)
 
-        if passed:
-            console.print("[green]Validation passed![/green]")
-        else:
-            console.print("[red]Validation failed![/red]")
-            console.print()
-            for error in errors:
-                console.print(f"  [red]X[/red] [{error.check_id}] {error.message}")
-            console.print()
-            _exit_code = 1
-            raise typer.Exit(code=1)
-    except SystemExit as e:
-        _exit_code = e.code if isinstance(e.code, int) else 0
-        raise
-    finally:
-        _record_telemetry("validate", _start, _exit_code)
+    with _cli_error_handler():
+        evaluator = StaticEvaluator(spec_only=spec_only)
+        passed, errors = evaluator.validate(skill_path)
+
+    if passed:
+        console.print("[green]Validation passed![/green]")
+    else:
+        console.print("[red]Validation failed![/red]")
+        console.print()
+        for error in errors:
+            console.print(f"  [red]X[/red] [{error.check_id}] {error.message}")
+        console.print()
+        raise typer.Exit(code=1)
 
 
 @app.command("list-checks")
@@ -312,6 +315,7 @@ def list_checks(
 
 
 @app.command("trigger")
+@_with_telemetry("trigger")
 def trigger(
     skill_path: Annotated[
         Path | None,
@@ -363,74 +367,62 @@ def trigger(
 
     Requires test definitions in .skill-lab/tests/scenarios.yaml or .skill-lab/tests/triggers.yaml.
     """
-    init_telemetry()
     skill_path = _resolve_skill_path(skill_path)
-    _start = time.perf_counter()
-    _exit_code = 0
-    try:
-        # Check for trigger test files
-        tests_dir = skill_path / TESTS_DIR
-        has_tests = (
-            tests_dir.exists() and any(f.suffix in (".yaml", ".yml") for f in tests_dir.iterdir())
-            if tests_dir.exists()
-            else False
+
+    # Check for trigger test files
+    tests_dir = skill_path / TESTS_DIR
+    has_tests = (
+        tests_dir.exists() and any(f.suffix in (".yaml", ".yml") for f in tests_dir.iterdir())
+        if tests_dir.exists()
+        else False
+    )
+    if not has_tests:
+        console.print("[yellow]No trigger tests found.[/yellow]")
+        console.print(
+            f"[dim]Run [bold]sklab generate {skill_path}[/bold] to auto-generate "
+            f"trigger tests, or create them manually at "
+            f".skill-lab/tests/triggers.yaml[/dim]"
         )
-        if not has_tests:
-            console.print("[yellow]No trigger tests found.[/yellow]")
-            console.print(
-                f"[dim]Run [bold]sklab generate {skill_path}[/bold] to auto-generate "
-                f"trigger tests, or create them manually at "
-                f".skill-lab/tests/triggers.yaml[/dim]"
-            )
-            _exit_code = 1
-            raise typer.Exit(code=1)
+        raise typer.Exit(code=1)
 
-        # Parse type filter
-        trigger_type: TriggerType | None = None
-        if type_filter:
-            try:
-                trigger_type = TriggerType(type_filter.lower())
-            except ValueError:
-                console.print(f"[red]Invalid trigger type: {type_filter}[/red]")
-                console.print(f"Valid types: {', '.join(t.value for t in TriggerType)}")
-                _exit_code = 1
-                raise typer.Exit(code=1) from None
+    # Parse type filter
+    trigger_type: TriggerType | None = None
+    if type_filter:
+        try:
+            trigger_type = TriggerType(type_filter.lower())
+        except ValueError:
+            console.print(f"[red]Invalid trigger type: {type_filter}[/red]")
+            console.print(f"Valid types: {', '.join(t.value for t in TriggerType)}")
+            raise typer.Exit(code=1) from None
 
-        # Run evaluation with progress display
-        evaluator = TriggerEvaluator(runtime=runtime)
+    # Run evaluation with progress display
+    evaluator = TriggerEvaluator(runtime=runtime)
 
-        with console.status("", spinner="dots") as status:
+    with console.status("", spinner="dots") as status:
 
-            def update_progress(current: int, total: int, test_name: str) -> None:
-                status.update(f"[cyan]Running trigger tests[/cyan] [{current}/{total}]: {test_name}")
+        def update_progress(current: int, total: int, test_name: str) -> None:
+            status.update(f"[cyan]Running trigger tests[/cyan] [{current}/{total}]: {test_name}")
 
-            status.update("[cyan]Loading trigger tests...[/cyan]")
-            report = evaluator.evaluate(
-                skill_path,
-                type_filter=trigger_type,
-                progress_callback=update_progress,
-            )
+        status.update("[cyan]Loading trigger tests...[/cyan]")
+        report = evaluator.evaluate(
+            skill_path,
+            type_filter=trigger_type,
+            progress_callback=update_progress,
+        )
 
-        # Output results
-        if format == OutputFormat.json:
-            report_json = json_module.dumps(report.to_dict(), indent=2)
-            if output:
-                output.write_text(report_json)
-                console.print(f"Report written to: {output}")
-            else:
-                console.print(report_json)
+    # Output results
+    if format == OutputFormat.json:
+        report_json = json_module.dumps(report.to_dict(), indent=2)
+        if output:
+            output.write_text(report_json)
+            console.print(f"Report written to: {output}")
         else:
-            _print_trigger_report(report)
+            console.print(report_json)
+    else:
+        _print_trigger_report(report)
 
-        # Exit with non-zero code if tests failed
-        if not report.overall_pass:
-            _exit_code = 1
-            raise typer.Exit(code=1)
-    except SystemExit as e:
-        _exit_code = e.code if isinstance(e.code, int) else 0
-        raise
-    finally:
-        _record_telemetry("trigger", _start, _exit_code)
+    if not report.overall_pass:
+        raise typer.Exit(code=1)
 
 
 def _format_duration(ms: float) -> str:
@@ -490,6 +482,7 @@ def _print_trigger_report(report: TriggerReport) -> None:
 
 
 @app.command("generate")
+@_with_telemetry("generate")
 def generate(
     skill_path: Annotated[
         Path | None,
@@ -521,88 +514,79 @@ def generate(
 
     Requires the 'anthropic' package: pip install skill-lab[generate]
     """
-    init_telemetry()
     skill_path = _resolve_skill_path(skill_path)
-    _start = time.perf_counter()
-    _exit_code = 0
+
+    # Lazy import — anthropic is an optional dependency
     try:
-        # Lazy import — anthropic is an optional dependency
-        try:
-            from skill_lab.triggers.generator import TriggerGenerator
-        except ImportError:
-            console.print(
-                "[red]Error: The 'anthropic' package is required for test generation.[/red]\n"
-                "[dim]Install it with:[/dim] pip install skill-lab[generate]"
-            )
-            _exit_code = 1
-            raise typer.Exit(code=1) from None
+        from skill_lab.triggers.generator import TriggerGenerator
+    except ImportError:
+        console.print(
+            "[red]Error: The 'anthropic' package is required for test generation.[/red]\n"
+            "[dim]Install it with:[/dim] pip install skill-lab[generate]"
+        )
+        raise typer.Exit(code=1) from None
 
-        # Check API key
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
-        if not api_key:
-            console.print(
-                "[red]Error: ANTHROPIC_API_KEY environment variable is not set.[/red]\n"
-                "[dim]Set it with:[/dim] export ANTHROPIC_API_KEY=sk-..."
-            )
-            _exit_code = 1
-            raise typer.Exit(code=1)
+    # Check API key
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        console.print(
+            "[red]Error: ANTHROPIC_API_KEY environment variable is not set.[/red]\n"
+            "[dim]Set it with:[/dim] export ANTHROPIC_API_KEY=sk-..."
+        )
+        raise typer.Exit(code=1)
 
-        # Check for existing file (prompt unless --force)
-        output_path = skill_path / TESTS_DIR / "triggers.yaml"
-        if output_path.exists() and not force:
-            overwrite = typer.confirm(f"Trigger tests already exist at {output_path}. Overwrite?")
-            if not overwrite:
-                console.print("[dim]Aborted.[/dim]")
-                raise typer.Exit(code=0)
-            force = True
+    # Check for existing file (prompt unless --force)
+    output_path = skill_path / TESTS_DIR / "triggers.yaml"
+    if output_path.exists() and not force:
+        overwrite = typer.confirm(f"Trigger tests already exist at {output_path}. Overwrite?")
+        if not overwrite:
+            console.print("[dim]Aborted.[/dim]")
+            raise typer.Exit(code=0)
+        force = True
 
-        # Resolve model: --model flag > SKLAB_MODEL env var > default
-        resolved_model = model or os.environ.get("SKLAB_MODEL") or None
+    # Resolve model: --model flag > SKLAB_MODEL env var > default
+    resolved_model = model or os.environ.get("SKLAB_MODEL") or None
 
-        with _cli_error_handler():
-            kwargs: dict[str, str] = {}
-            if resolved_model:
-                kwargs["model"] = resolved_model
+    with _cli_error_handler():
+        kwargs: dict[str, str] = {}
+        if resolved_model:
+            kwargs["model"] = resolved_model
 
-            generator = TriggerGenerator(api_key=api_key, **kwargs)
+        generator = TriggerGenerator(api_key=api_key, **kwargs)
 
-            with console.status("[cyan]Generating trigger tests...[/cyan]", spinner="dots"):
-                written_path = generator.generate_and_write(skill_path, force=force)
+        with console.status("[cyan]Generating trigger tests...[/cyan]", spinner="dots"):
+            written_path = generator.generate_and_write(skill_path, force=force)
 
-        # Print summary
-        import yaml
+    # Print summary
+    import yaml
 
-        content = yaml.safe_load(written_path.read_text())
-        test_cases = content.get("test_cases", [])
-        type_counts: dict[str, int] = {}
-        for tc in test_cases:
-            t = tc.get("type", "unknown")
-            type_counts[t] = type_counts.get(t, 0) + 1
+    content = yaml.safe_load(written_path.read_text())
+    test_cases = content.get("test_cases", [])
+    type_counts: dict[str, int] = {}
+    for tc in test_cases:
+        t = tc.get("type", "unknown")
+        type_counts[t] = type_counts.get(t, 0) + 1
 
-        console.print(f"\n[green]Generated {len(test_cases)} trigger tests:[/green]")
-        for type_name, count in sorted(type_counts.items()):
-            console.print(f"  {type_name}: {count}")
+    console.print(f"\n[green]Generated {len(test_cases)} trigger tests:[/green]")
+    for type_name, count in sorted(type_counts.items()):
+        console.print(f"  {type_name}: {count}")
 
-        # Show token usage and cost
-        if generator.last_usage:
-            usage = generator.last_usage
-            cost = usage.total_cost
-            cost_str = f" (${cost:.4f})" if cost is not None else ""
-            console.print(
-                f"\n[dim]Tokens:[/dim] {usage.input_tokens:,} in + "
-                f"{usage.output_tokens:,} out = {usage.total_tokens:,}{cost_str}"
-            )
+    # Show token usage and cost
+    if generator.last_usage:
+        usage = generator.last_usage
+        cost = usage.total_cost
+        cost_str = f" (${cost:.4f})" if cost is not None else ""
+        console.print(
+            f"\n[dim]Tokens:[/dim] {usage.input_tokens:,} in + "
+            f"{usage.output_tokens:,} out = {usage.total_tokens:,}{cost_str}"
+        )
 
-        console.print(f"\n[dim]Written to:[/dim] {written_path}")
-        console.print("[dim]Run[/dim] sklab trigger [dim]to execute them.[/dim]")
-    except SystemExit as e:
-        _exit_code = e.code if isinstance(e.code, int) else 0
-        raise
-    finally:
-        _record_telemetry("generate", _start, _exit_code)
+    console.print(f"\n[dim]Written to:[/dim] {written_path}")
+    console.print("[dim]Run[/dim] sklab trigger [dim]to execute them.[/dim]")
 
 
 @app.command("info")
+@_with_telemetry("info")
 def info(
     skill_path: Annotated[
         Path | None,
@@ -627,100 +611,90 @@ def info(
     ] = None,
 ) -> None:
     """Show skill metadata and token cost estimates."""
-    init_telemetry()
     skill_path = _resolve_skill_path(skill_path)
-    _start = time.perf_counter()
-    _exit_code = 0
-    try:
-        skill = parse_skill(skill_path)
+    skill = parse_skill(skill_path)
 
-        if skill.metadata is None:
-            console.print("[red]Error: Could not parse skill metadata.[/red]")
-            _exit_code = 1
+    if skill.metadata is None:
+        console.print("[red]Error: Could not parse skill metadata.[/red]")
+        raise typer.Exit(code=1)
+
+    # Read full SKILL.md content for activation cost
+    skill_md_content = (skill_path / "SKILL.md").read_text(encoding="utf-8")
+
+    # Compute token estimates
+    name = skill.metadata.name or ""
+    description = skill.metadata.description or ""
+    discovery_text = f"{name} {description}".strip()
+    discovery_tokens = estimate_tokens(discovery_text)
+    activation_tokens = estimate_tokens(skill_md_content)
+
+    # Detect subfolders
+    subfolders = []
+    if skill.has_scripts:
+        subfolders.append("scripts/")
+    if skill.has_references:
+        subfolders.append("references/")
+    if skill.has_assets:
+        subfolders.append("assets/")
+
+    body_lines = len(skill.body.splitlines()) if skill.body else 0
+
+    # Build data dict for JSON/field extraction
+    raw = skill.metadata.raw
+    data: dict[str, object] = {
+        "name": name,
+        "description": description,
+        "license": raw.get("license", ""),
+        "compatibility": raw.get("compatibility", ""),
+        "structure": subfolders,
+        "body_lines": body_lines,
+        "tokens": {
+            "discovery": discovery_tokens,
+            "activation": activation_tokens,
+        },
+    }
+
+    # --field: extract a single value
+    if field is not None:
+        value = data.get(field)
+        if value is None:
+            console.print(f"[red]Unknown field: {field}[/red]")
             raise typer.Exit(code=1)
+        if isinstance(value, (dict, list)):
+            print(json_module.dumps(value))
+        else:
+            print(value)
+        return
 
-        # Read full SKILL.md content for activation cost
-        skill_md_content = (skill_path / "SKILL.md").read_text(encoding="utf-8")
+    # --json: output everything as JSON
+    if json:
+        print(json_module.dumps(data, indent=2))
+        return
 
-        # Compute token estimates
-        name = skill.metadata.name or ""
-        description = skill.metadata.description or ""
-        discovery_text = f"{name} {description}".strip()
-        discovery_tokens = estimate_tokens(discovery_text)
-        activation_tokens = estimate_tokens(skill_md_content)
+    # Default: Rich panel
+    lines: list[str] = []
+    lines.append(f"[bold]Description:[/bold] {description}")
+    license_val = raw.get("license", "")
+    if license_val:
+        lines.append(f"[bold]License:[/bold]     {license_val}")
+    compat_val = raw.get("compatibility", "")
+    if compat_val:
+        lines.append(f"[bold]Compat:[/bold]      {compat_val}")
+    lines.append("")
+    if subfolders:
+        lines.append(f"[bold]Structure:[/bold]   {' '.join(subfolders)}")
+    lines.append(f"[bold]Body:[/bold]        {body_lines} lines")
+    lines.append("")
+    lines.append("[bold]Tokens (estimated):[/bold]")
+    lines.append(f"  Discovery:   ~{discovery_tokens} tokens (name + description)")
+    lines.append(f"  Activation:  ~{activation_tokens} tokens (full SKILL.md)")
 
-        # Detect subfolders
-        subfolders = []
-        if skill.has_scripts:
-            subfolders.append("scripts/")
-        if skill.has_references:
-            subfolders.append("references/")
-        if skill.has_assets:
-            subfolders.append("assets/")
-
-        body_lines = len(skill.body.splitlines()) if skill.body else 0
-
-        # Build data dict for JSON/field extraction
-        raw = skill.metadata.raw
-        data: dict[str, object] = {
-            "name": name,
-            "description": description,
-            "license": raw.get("license", ""),
-            "compatibility": raw.get("compatibility", ""),
-            "structure": subfolders,
-            "body_lines": body_lines,
-            "tokens": {
-                "discovery": discovery_tokens,
-                "activation": activation_tokens,
-            },
-        }
-
-        # --field: extract a single value
-        if field is not None:
-            value = data.get(field)
-            if value is None:
-                console.print(f"[red]Unknown field: {field}[/red]")
-                _exit_code = 1
-                raise typer.Exit(code=1)
-            if isinstance(value, (dict, list)):
-                print(json_module.dumps(value))
-            else:
-                print(value)
-            return
-
-        # --json: output everything as JSON
-        if json:
-            print(json_module.dumps(data, indent=2))
-            return
-
-        # Default: Rich panel
-        lines: list[str] = []
-        lines.append(f"[bold]Description:[/bold] {description}")
-        license_val = raw.get("license", "")
-        if license_val:
-            lines.append(f"[bold]License:[/bold]     {license_val}")
-        compat_val = raw.get("compatibility", "")
-        if compat_val:
-            lines.append(f"[bold]Compat:[/bold]      {compat_val}")
-        lines.append("")
-        if subfolders:
-            lines.append(f"[bold]Structure:[/bold]   {' '.join(subfolders)}")
-        lines.append(f"[bold]Body:[/bold]        {body_lines} lines")
-        lines.append("")
-        lines.append("[bold]Tokens (estimated):[/bold]")
-        lines.append(f"  Discovery:   ~{discovery_tokens} tokens (name + description)")
-        lines.append(f"  Activation:  ~{activation_tokens} tokens (full SKILL.md)")
-
-        panel = Panel("\n".join(lines), title=f"[bold]{name}[/bold]", expand=False)
-        console.print(panel)
-    except SystemExit as e:
-        _exit_code = e.code if isinstance(e.code, int) else 0
-        raise
-    finally:
-        _record_telemetry("info", _start, _exit_code)
+    panel = Panel("\n".join(lines), title=f"[bold]{name}[/bold]", expand=False)
+    console.print(panel)
 
 
 @app.command("prompt")
+@_with_telemetry("prompt")
 def prompt(
     skill_paths: Annotated[
         list[Path] | None,
@@ -738,62 +712,52 @@ def prompt(
     ] = "xml",
 ) -> None:
     """Export skill(s) as a prompt for agent platforms."""
-    init_telemetry()
-    _start = time.perf_counter()
-    _exit_code = 0
-    try:
-        from skill_lab.exporters.prompt_exporter import render_json, render_markdown, render_xml
+    from skill_lab.exporters.prompt_exporter import render_json, render_markdown, render_xml
 
-        if format not in ("xml", "markdown", "json"):
-            console.print(f"[red]Invalid format: {format}[/red]")
-            console.print("[dim]Valid formats: xml, markdown, json[/dim]")
-            _exit_code = 1
+    if format not in ("xml", "markdown", "json"):
+        console.print(f"[red]Invalid format: {format}[/red]")
+        console.print("[dim]Valid formats: xml, markdown, json[/dim]")
+        raise typer.Exit(code=1)
+
+    paths = skill_paths if skill_paths else [Path.cwd()]
+    skills_data: list[dict[str, str]] = []
+
+    for sp in paths:
+        resolved = _resolve_skill_path(sp)
+        skill = parse_skill(resolved)
+        if skill.metadata is None:
+            console.print(f"[red]Error: Could not parse skill metadata in {resolved}[/red]")
             raise typer.Exit(code=1)
+        skills_data.append(
+            {
+                "name": skill.metadata.name or "",
+                "description": skill.metadata.description or "",
+                "location": str(resolved),
+            }
+        )
 
-        paths = skill_paths if skill_paths else [Path.cwd()]
-        skills_data: list[dict[str, str]] = []
+    if format == "xml":
+        output = render_xml(skills_data)
+    elif format == "markdown":
+        output = render_markdown(skills_data)
+    else:
+        output = render_json(skills_data)
 
-        for sp in paths:
-            resolved = _resolve_skill_path(sp)
-            skill = parse_skill(resolved)
-            if skill.metadata is None:
-                console.print(f"[red]Error: Could not parse skill metadata in {resolved}[/red]")
-                _exit_code = 1
-                raise typer.Exit(code=1)
-            skills_data.append(
-                {
-                    "name": skill.metadata.name or "",
-                    "description": skill.metadata.description or "",
-                    "location": str(resolved),
-                }
-            )
+    print(output)
 
-        if format == "xml":
-            output = render_xml(skills_data)
-        elif format == "markdown":
-            output = render_markdown(skills_data)
-        else:
-            output = render_json(skills_data)
-
-        print(output)
-
-        # Token estimate summary to stderr (skip for JSON — keep output parseable)
-        if format != "json":
-            token_est = estimate_tokens(
-                " ".join(f"{s['name']} {s['description']}" for s in skills_data)
-            )
-            print(
-                f"# {len(skills_data)} skill(s), ~{token_est} discovery tokens",
-                file=sys.stderr,
-            )
-    except SystemExit as e:
-        _exit_code = e.code if isinstance(e.code, int) else 0
-        raise
-    finally:
-        _record_telemetry("prompt", _start, _exit_code)
+    # Token estimate summary to stderr (skip for JSON — keep output parseable)
+    if format != "json":
+        token_est = estimate_tokens(
+            " ".join(f"{s['name']} {s['description']}" for s in skills_data)
+        )
+        print(
+            f"# {len(skills_data)} skill(s), ~{token_est} discovery tokens",
+            file=sys.stderr,
+        )
 
 
 @app.command("eval-trace", hidden=True)
+@_with_telemetry("eval-trace")
 def eval_trace(
     skill_path: Annotated[
         Path,
@@ -844,44 +808,31 @@ def eval_trace(
     - loop_detection: Detect excessive command repetition
     - efficiency: Check command count limits
     """
-    init_telemetry()
-    _start = time.perf_counter()
-    _exit_code = 0
     try:
-        try:
-            evaluator = TraceEvaluator()
-            report = evaluator.evaluate(skill_path, trace)
-        except FileNotFoundError as e:
-            console.print(f"[red]Error: {e}[/red]")
-            _exit_code = 1
-            raise typer.Exit(code=1) from None
-        except ValueError as e:
-            console.print(f"[red]Error: {e}[/red]")
-            _exit_code = 1
-            raise typer.Exit(code=1) from None
+        evaluator = TraceEvaluator()
+        report = evaluator.evaluate(skill_path, trace)
+    except FileNotFoundError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(code=1) from None
+    except ValueError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(code=1) from None
 
-        # Output results
-        if format == OutputFormat.json:
-            report_json = json_module.dumps(report.to_dict(), indent=2)
-            if output:
-                output.write_text(report_json)
-                console.print(f"Report written to: {output}")
-            else:
-                console.print(report_json)
+    # Output results
+    if format == OutputFormat.json:
+        report_json = json_module.dumps(report.to_dict(), indent=2)
+        if output:
+            output.write_text(report_json)
+            console.print(f"Report written to: {output}")
         else:
-            # Use verbose=True to show all checks (trace checks are typically few)
-            trace_reporter = ConsoleReporter(verbose=True)
-            trace_reporter.report_trace(report)
+            console.print(report_json)
+    else:
+        # Use verbose=True to show all checks (trace checks are typically few)
+        trace_reporter = ConsoleReporter(verbose=True)
+        trace_reporter.report_trace(report)
 
-        # Exit with non-zero code if checks failed
-        if not report.overall_pass:
-            _exit_code = 1
-            raise typer.Exit(code=1)
-    except SystemExit as e:
-        _exit_code = e.code if isinstance(e.code, int) else 0
-        raise
-    finally:
-        _record_telemetry("eval-trace", _start, _exit_code)
+    if not report.overall_pass:
+        raise typer.Exit(code=1)
 
 
 def main() -> None:

@@ -2,8 +2,8 @@
 
 Collects anonymous command usage data locally (SQLite) and syncs to Supabase.
 All telemetry errors are silently swallowed — network failures never crash the CLI.
-Users opt in on first run via an interactive prompt.
-Set SKLAB_NO_ANALYTICS=1 to skip all telemetry without prompting.
+Telemetry is enabled by default (opt-out); a notice is printed on first run.
+Set SKLAB_NO_ANALYTICS=1 to disable telemetry without any prompt.
 """
 
 import json
@@ -20,17 +20,12 @@ from typing import Any
 from skill_lab import __version__
 from skill_lab.core.constants import SKLAB_CONFIG, SKLAB_DB, SKLAB_HOME
 
-_SUPABASE_URL = "https://uvrzuwsdqfxoocrbnciu.supabase.co"
-_SUPABASE_ANON_KEY = (
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
-    ".eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV2cnp1d3NkcWZ4b29jcmJuY2l1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1ODIzNTYsImV4cCI6MjA4ODE1ODM1Nn0"
-    ".0y5hTH4HVKdYU54kG7bzyFpKnOVPrNMBvffJzNIDfEU"
-)
+_TELEMETRY_ENDPOINT = "https://sklab-telemetry.sklab.workers.dev/v1/events"
 
-_OPT_IN_PROMPT = (
-    "sklab would like to collect anonymous usage data. "
-    "This helps improve the tool and lets you visualise your own command stats. "
-    "No skill content or file paths are collected. Enable analytics?"
+_FIRST_RUN_NOTICE = (
+    "sklab collects anonymous usage data to improve the tool and let you visualise "
+    "your own command stats. No skill content or file paths are collected.\n"
+    "To opt out: set SKLAB_NO_ANALYTICS=1, DO_NOT_TRACK=1, or run `sklab telemetry off`."
 )
 
 # Module-level cache so we only read config once per process
@@ -58,8 +53,7 @@ def _write_config(config: dict[str, Any]) -> None:
 
 def _ensure_db() -> None:
     _ensure_home()
-    conn = sqlite3.connect(SKLAB_DB)
-    try:
+    with sqlite3.connect(SKLAB_DB) as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS events (
                 id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -74,15 +68,16 @@ def _ensure_db() -> None:
                 synced        INTEGER DEFAULT 0
             )
         """)
-        conn.commit()
-    finally:
-        conn.close()
 
 
 def init_telemetry() -> bool:
-    """Return True if analytics is enabled. Show opt-in prompt on first run.
+    """Return True if analytics is enabled. Print a notice on first run.
 
-    Returns False immediately if SKLAB_NO_ANALYTICS=1 is set.
+    Telemetry is enabled by default (opt-out model).
+    Returns False immediately if any opt-out signal is present:
+      - SKLAB_NO_ANALYTICS=1 env var
+      - DO_NOT_TRACK=1 env var (consoledonottrack.com standard)
+      - Non-interactive stdin (CI, piped input, cron) on first run
     Caches the result for the lifetime of the process.
     """
     global _analytics_enabled
@@ -90,27 +85,36 @@ def init_telemetry() -> bool:
     if _analytics_enabled is not None:
         return _analytics_enabled
 
-    # Env var override — skip prompt entirely
+    # Env var overrides — disable without any prompt
     if os.environ.get("SKLAB_NO_ANALYTICS", "").strip() == "1":
+        _analytics_enabled = False
+        return False
+
+    if os.environ.get("DO_NOT_TRACK", "").strip() == "1":
         _analytics_enabled = False
         return False
 
     config = _read_config()
 
     if "analytics_enabled" not in config:
-        # First run — show prompt
+        # Non-interactive context (CI, piped input, cron jobs) — disable silently.
+        # Do NOT write config so the next interactive run still shows the notice.
+        if not sys.stdin.isatty():
+            _analytics_enabled = False
+            return False
+
+        # First interactive run — enable by default and print a notice (opt-out model)
         try:
             import typer
-            enabled = typer.confirm(_OPT_IN_PROMPT, default=True)
+            typer.echo(_FIRST_RUN_NOTICE)
         except Exception:
-            enabled = False
+            print(_FIRST_RUN_NOTICE)  # noqa: T201
 
-        config["analytics_enabled"] = enabled
-        if enabled:
-            config["user_uuid"] = str(uuid.uuid4())
+        config["analytics_enabled"] = True
+        config["user_uuid"] = str(uuid.uuid4())
         _write_config(config)
 
-    _analytics_enabled = bool(config.get("analytics_enabled", False))
+    _analytics_enabled = bool(config.get("analytics_enabled", True))
     return _analytics_enabled
 
 
@@ -128,8 +132,7 @@ def record_event(command: str, duration_ms: float, exit_code: int) -> None:
         py_version = f"{sys.version_info.major}.{sys.version_info.minor}"
         timestamp = datetime.now(timezone.utc).isoformat()
 
-        conn = sqlite3.connect(SKLAB_DB)
-        try:
+        with sqlite3.connect(SKLAB_DB) as conn:
             conn.execute(
                 """
                 INSERT INTO events
@@ -148,9 +151,6 @@ def record_event(command: str, duration_ms: float, exit_code: int) -> None:
                     timestamp,
                 ),
             )
-            conn.commit()
-        finally:
-            conn.close()
 
         _sync_to_supabase()
 
@@ -209,10 +209,9 @@ def _is_newer(latest: str, current: str) -> bool:
 
 
 def _sync_to_supabase() -> None:
-    """POST all unsynced rows to Supabase and mark them synced=1 on success."""
+    """POST all unsynced rows to the telemetry endpoint and mark them synced=1 on success."""
     try:
-        conn = sqlite3.connect(SKLAB_DB)
-        try:
+        with sqlite3.connect(SKLAB_DB) as conn:
             rows = conn.execute(
                 """
                 SELECT id, user_uuid, command, duration_ms, exit_code,
@@ -241,14 +240,9 @@ def _sync_to_supabase() -> None:
 
             data = json.dumps(payload).encode()
             req = urllib.request.Request(
-                f"{_SUPABASE_URL}/rest/v1/usage_events",
+                _TELEMETRY_ENDPOINT,
                 data=data,
-                headers={
-                    "apikey": _SUPABASE_ANON_KEY,
-                    "Authorization": f"Bearer {_SUPABASE_ANON_KEY}",
-                    "Content-Type": "application/json",
-                    "Prefer": "return=minimal",
-                },
+                headers={"Content-Type": "application/json"},
                 method="POST",
             )
             urllib.request.urlopen(req, timeout=3)
@@ -259,9 +253,6 @@ def _sync_to_supabase() -> None:
                 f"UPDATE events SET synced = 1 WHERE id IN ({placeholders})",
                 row_ids,
             )
-            conn.commit()
-        finally:
-            conn.close()
 
     except Exception:
-        pass  # Offline or Supabase unavailable — rows stay unsynced, retry next run
+        pass  # Offline or endpoint unavailable — rows stay unsynced, retry next run
