@@ -134,7 +134,7 @@ class TestRecordEvent:
         """Helper: configure analytics as enabled and suppress Supabase sync."""
         _write_config({"analytics_enabled": True, "user_uuid": "test-uuid"})
         monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
-        monkeypatch.setattr(telemetry_module, "_sync_to_supabase", lambda: None)
+        monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
 
     def test_writes_row_to_sqlite(self, tmp_telemetry, monkeypatch):
         self._enable(tmp_telemetry, monkeypatch)

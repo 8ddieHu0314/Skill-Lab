@@ -152,7 +152,7 @@ def record_event(command: str, duration_ms: float, exit_code: int) -> None:
                 ),
             )
 
-        _sync_to_supabase()
+        _sync_to_endpoint()
 
     except Exception:
         pass  # Never let telemetry crash the CLI
@@ -208,7 +208,7 @@ def _is_newer(latest: str, current: str) -> bool:
         return False
 
 
-def _sync_to_supabase() -> None:
+def _sync_to_endpoint() -> None:
     """POST all unsynced rows to the telemetry endpoint and mark them synced=1 on success."""
     try:
         with sqlite3.connect(SKLAB_DB) as conn:

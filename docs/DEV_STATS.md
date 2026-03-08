@@ -20,12 +20,12 @@ init_telemetry()          ← first-ever run: shows opt-in prompt
      ▼ (finally block)
 _record_telemetry()
      ├── record_event()   → write row to ~/.sklab/usage.db (SQLite)
-     │                    → _sync_to_supabase() (fire-and-forget POST)
+     │                    → _sync_to_endpoint() (fire-and-forget POST)
      └── check_for_update() → fetch pypi.org/pypi/skill-lab/json (once/day)
                            → print nudge to stderr if newer version exists
 ```
 
-All network calls use a short timeout (2–3 s) and swallow every exception. A network failure, Supabase outage, or PyPI timeout never crashes the CLI or affects command output.
+All network calls use a short timeout (2–3 s) and swallow every exception. A network failure, endpoint outage, or PyPI timeout never crashes the CLI or affects command output.
 
 ---
 
@@ -240,12 +240,12 @@ ORDER BY day DESC;
 
 ## Sync Behaviour
 
-Events are written to SQLite first (fast, local), then a sync is attempted immediately after. If the sync fails (offline, timeout, Supabase down), the row stays with `synced = 0`. The next time any sklab command runs, `_sync_to_supabase()` picks up all unsynced rows and batches them into a single POST.
+Events are written to SQLite first (fast, local), then a sync is attempted immediately after. If the sync fails (offline, timeout, endpoint down), the row stays with `synced = 0`. The next time any sklab command runs, `_sync_to_endpoint()` picks up all unsynced rows and batches them into a single POST.
 
 ```
-Run 1 (online)  → write row → POST to Supabase → synced = 1
-Run 2 (offline) → write row → POST fails      → synced = 0
-Run 3 (online)  → write row → POST rows 2+3   → both synced = 1
+Run 1 (online)  → write row → POST to endpoint → synced = 1
+Run 2 (offline) → write row → POST fails       → synced = 0
+Run 3 (online)  → write row → POST rows 2+3    → both synced = 1
 ```
 
 ---
