@@ -21,7 +21,13 @@ from skill_lab import __version__
 from skill_lab.core.constants import TESTS_DIR
 from skill_lab.core.models import EvalDimension, TriggerReport, TriggerType
 from skill_lab.core.registry import registry
-from skill_lab.core.telemetry import check_for_update, init_telemetry, record_event
+from skill_lab.core.telemetry import (
+    check_for_update,
+    init_telemetry,
+    push_telemetry_extra,
+    record_event,
+    _pop_telemetry_extras,
+)
 from skill_lab.core.tokens import estimate_tokens
 from skill_lab.evaluators.static_evaluator import StaticEvaluator
 from skill_lab.evaluators.trace_evaluator import TraceEvaluator
@@ -63,6 +69,32 @@ def app_callback(
     pass
 
 
+def _find_repo_root(start: Path) -> Path | None:
+    """Walk up from start looking for a .git directory."""
+    current = start.resolve()
+    while True:
+        if (current / ".git").exists():
+            return current
+        parent = current.parent
+        if parent == current:
+            return None
+        current = parent
+
+
+def _discover_skills(root: Path) -> list[Path]:
+    """Recursively find all skill directories (containing SKILL.md) under root.
+
+    Skips hidden directories (dot-prefixed) to avoid .git, .claude, etc.
+    """
+    skills: list[Path] = []
+    for path in sorted(root.rglob("SKILL.md")):
+        # Skip hidden dirs in the path (e.g. .claude/.skill/...)
+        if any(part.startswith(".") for part in path.parts):
+            continue
+        skills.append(path.parent)
+    return skills
+
+
 def _resolve_skill_path(skill_path: Path | None) -> Path:
     """Resolve and validate a skill directory path.
 
@@ -101,8 +133,9 @@ def _cli_error_handler() -> Iterator[None]:
 
 def _record_telemetry(command: str, start: float, exit_code: int) -> None:
     duration_ms = (time.perf_counter() - start) * 1000
+    extras = _pop_telemetry_extras()
     with contextlib.suppress(Exception):
-        record_event(command, duration_ms, exit_code)
+        record_event(command, duration_ms, exit_code, **extras)
     with contextlib.suppress(Exception):
         latest = check_for_update()
         if latest:
@@ -119,6 +152,8 @@ def _with_telemetry(command_name: str) -> Callable[[Callable[..., Any]], Callabl
         @functools.wraps(fn)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             init_telemetry()
+            from skill_lab.core.setup import init_hooks_on_first_run
+            init_hooks_on_first_run()
             start = time.perf_counter()
             exit_code = 0
             try:
@@ -137,6 +172,64 @@ class OutputFormat(str, Enum):
 
     json = "json"
     console = "console"
+
+
+def _run_bulk_evaluate(
+    roots: list[Path],
+    verbose: bool,
+    spec_only: bool,
+    format: "OutputFormat",
+) -> None:
+    """Discover and evaluate all skills under the given root directories."""
+    skill_paths: list[Path] = []
+    for root in roots:
+        found = _discover_skills(root)
+        skill_paths.extend(found)
+
+    if not skill_paths:
+        console.print("[yellow]No skill folders found (no SKILL.md files discovered).[/yellow]")
+        raise typer.Exit(code=0)
+
+    console.print(f"[dim]Found {len(skill_paths)} skill(s). Running evaluate...[/dim]\n")
+
+    evaluator = StaticEvaluator(spec_only=spec_only)
+    any_failed = False
+    summary_rows: list[tuple[str, str, str, str]] = []  # name, path, score, status
+
+    for sp in skill_paths:
+        with _cli_error_handler():
+            report = evaluator.evaluate(sp)
+
+        if format == OutputFormat.json:
+            json_reporter = JsonReporter()
+            console.print(json_reporter.format(report))
+        else:
+            console_reporter = ConsoleReporter(verbose=verbose)
+            console_reporter.report(report)
+
+        score_str = f"{report.quality_score:.1f}"
+        status_str = "[green]PASS[/green]" if report.overall_pass else "[red]FAIL[/red]"
+        skill_name = report.skill_name or sp.name
+        rel_path = str(sp.relative_to(Path.cwd())) if sp.is_relative_to(Path.cwd()) else str(sp)
+        summary_rows.append((skill_name, rel_path, score_str, status_str))
+
+        if not report.overall_pass:
+            any_failed = True
+
+    # Summary table
+    if format == OutputFormat.console:
+        console.print()
+        table = Table(title=f"Summary — {len(skill_paths)} skill(s)", box=box.ROUNDED)
+        table.add_column("Skill", style="cyan")
+        table.add_column("Path", style="dim")
+        table.add_column("Score", justify="right")
+        table.add_column("Status", justify="center")
+        for name, path, score, status in summary_rows:
+            table.add_row(name, path, score, status)
+        console.print(table)
+
+    if any_failed:
+        raise typer.Exit(code=1)
 
 
 @app.command()
@@ -180,13 +273,57 @@ def evaluate(
             help="Only run checks required by the Agent Skills spec (skip quality suggestions)",
         ),
     ] = False,
+    all_skills: Annotated[
+        bool,
+        typer.Option(
+            "--all",
+            "-a",
+            help="Discover and evaluate all skills in the current directory (recursive)",
+        ),
+    ] = False,
+    repo: Annotated[
+        bool,
+        typer.Option(
+            "--repo",
+            help="Discover and evaluate all skills from the git repo root (recursive)",
+        ),
+    ] = False,
 ) -> None:
     """Evaluate a skill and generate a quality report."""
+    # --all and --repo are mutually exclusive with a positional path
+    if (all_skills or repo) and skill_path is not None:
+        console.print("[red]Error: Cannot combine --all/--repo with a skill path argument.[/red]")
+        raise typer.Exit(code=1)
+
+    if all_skills and repo:
+        console.print("[red]Error: --all and --repo are mutually exclusive.[/red]")
+        raise typer.Exit(code=1)
+
+    if all_skills:
+        _run_bulk_evaluate([Path.cwd()], verbose, spec_only, format)
+        return
+
+    if repo:
+        repo_root = _find_repo_root(Path.cwd())
+        if repo_root is None:
+            console.print("[red]Error: Not inside a git repository.[/red]")
+            raise typer.Exit(code=1)
+        console.print(f"[dim]Repo root: {repo_root}[/dim]")
+        _run_bulk_evaluate([repo_root], verbose, spec_only, format)
+        return
+
     skill_path = _resolve_skill_path(skill_path)
 
     with _cli_error_handler():
         evaluator = StaticEvaluator(spec_only=spec_only)
         report = evaluator.evaluate(skill_path)
+
+    # Attach skill name, path, and score to the telemetry event recorded by the decorator
+    push_telemetry_extra(
+        skill_name=skill_path.name,
+        score=report.quality_score,
+        skill_path=str(skill_path),
+    )
 
     if format == OutputFormat.json:
         json_reporter = JsonReporter()
@@ -833,6 +970,188 @@ def eval_trace(
 
     if not report.overall_pass:
         raise typer.Exit(code=1)
+
+
+# =============================================================================
+# sklab stats  (sub-app)
+# =============================================================================
+
+stats_app = typer.Typer(
+    name="stats",
+    help="Show personal usage statistics.",
+    invoke_without_command=True,
+    add_completion=False,
+)
+app.add_typer(stats_app)
+
+
+@stats_app.callback(invoke_without_command=True)
+def stats(ctx: typer.Context) -> None:
+    """Show usage statistics overview."""
+    if ctx.invoked_subcommand is not None:
+        return
+
+    from skill_lab.core.stats import get_overview_stats
+    from skill_lab.reporters.stats_reporter import print_stats_overview
+
+    data = get_overview_stats()
+    if data is None:
+        console.print("[yellow]No usage data found yet.[/yellow]")
+        console.print("[dim]Run some sklab commands first, then check back here.[/dim]")
+        return
+    print_stats_overview(data)
+
+
+def _resolve_repo_filter(here: bool) -> Path | None:
+    """Return the repo root if --here is set, else None (global)."""
+    if not here:
+        return None
+    root = _find_repo_root(Path.cwd())
+    return root if root is not None else Path.cwd()
+
+
+@stats_app.command("count")
+def stats_count(
+    here: Annotated[
+        bool,
+        typer.Option("--here", help="Limit to skills in the current git repo."),
+    ] = False,
+) -> None:
+    """Show skill invocation counts for the current month."""
+    from skill_lab.core.stats import get_stats_count
+    from skill_lab.reporters.stats_reporter import print_stats_count
+
+    month_label, rows = get_stats_count(repo_root=_resolve_repo_filter(here))
+    print_stats_count(month_label, rows)
+
+
+@stats_app.command("score")
+def stats_score(
+    here: Annotated[
+        bool,
+        typer.Option("--here", help="Limit to skills in the current git repo."),
+    ] = False,
+) -> None:
+    """Show score trend for all evaluated skills."""
+    from skill_lab.core.stats import get_stats_score
+    from skill_lab.reporters.stats_reporter import print_stats_score
+
+    rows = get_stats_score(repo_root=_resolve_repo_filter(here))
+    print_stats_score(rows)
+
+
+@stats_app.command("tokens")
+def stats_tokens(
+    here: Annotated[
+        bool,
+        typer.Option("--here", help="Limit to skills in the current git repo."),
+    ] = False,
+) -> None:
+    """Show token usage per skill for the current month."""
+    from skill_lab.core.stats import get_stats_tokens
+    from skill_lab.reporters.stats_reporter import print_stats_tokens
+
+    month_label, rows = get_stats_tokens(repo_root=_resolve_repo_filter(here))
+    print_stats_tokens(month_label, rows)
+
+
+# =============================================================================
+# sklab setup
+# =============================================================================
+
+
+@app.command("setup")
+def setup() -> None:
+    """Configure hooks for automatic skill invocation tracking.
+
+    Writes PostToolUse hooks to Claude Code (~/.claude/settings.json) and
+    Cursor (~/.cursor/hooks.json) so that sklab records a row in
+    ~/.sklab/usage.db every time a skill fires. Safe to run multiple times.
+    """
+    from skill_lab.core.setup import run_setup
+
+    console.print("[bold]Setting up sklab skill tracking hooks...[/bold]\n")
+    results = run_setup()
+
+    for tool, status in results.items():
+        if status == "configured":
+            console.print(f"  [green]\u2713[/green] {tool}: hook configured")
+        elif status == "already_configured":
+            console.print(f"  [dim]\u2013[/dim] {tool}: already configured")
+        else:
+            console.print(f"  [dim]\u2013[/dim] {tool}: {status.replace('_', ' ')}")
+
+    newly_configured = [t for t, s in results.items() if s == "configured"]
+    console.print()
+    if newly_configured:
+        console.print(
+            "[green]Done![/green] Skill invocations will be tracked automatically.\n"
+            "[dim]Run [bold]sklab stats[/bold] to view your usage.[/dim]"
+        )
+    else:
+        console.print("[dim]No changes made.[/dim]")
+
+
+# =============================================================================
+# sklab _track-invocation  (hidden — called by PostToolUse hooks)
+# =============================================================================
+
+
+def _find_skill_md(skill_name: str, cwd: str) -> Path | None:
+    """Search common locations for a skill's SKILL.md. Returns path if found."""
+    search_dirs = [
+        Path.home() / ".claude" / "skills" / skill_name,
+        Path.home() / ".cursor" / "skills" / skill_name,
+    ]
+    if cwd:
+        search_dirs += [
+            Path(cwd) / ".claude" / "skills" / skill_name,
+            Path(cwd) / "skills" / skill_name,
+        ]
+    for skill_dir in search_dirs:
+        if (skill_dir / "SKILL.md").exists():
+            return skill_dir
+    return None
+
+
+@app.command("_track-invocation", hidden=True)
+def track_invocation() -> None:
+    """Record a skill invocation from a PostToolUse hook. Reads JSON from stdin."""
+    from skill_lab.core.tokens import estimate_tokens
+
+    try:
+        raw = sys.stdin.read()
+        if not raw.strip():
+            return
+        data = json_module.loads(raw)
+        skill_name: str = data.get("tool_input", {}).get("skill", "")
+        if not skill_name:
+            return
+        cwd: str = data.get("cwd", "")
+        skill_dir = _find_skill_md(skill_name, cwd)
+        tokens: int | None = None
+        skill_path_str: str | None = None
+        if skill_dir is not None:
+            skill_path_str = str(skill_dir)
+            try:
+                tokens = estimate_tokens((skill_dir / "SKILL.md").read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        record_event(
+            command="skill-invoke",
+            duration_ms=0,
+            exit_code=0,
+            skill_name=skill_name,
+            input_tokens=tokens,
+            skill_path=skill_path_str,
+        )
+    except Exception:
+        pass  # Never let the hook crash
+
+
+# =============================================================================
+# Entry point
+# =============================================================================
 
 
 def main() -> None:

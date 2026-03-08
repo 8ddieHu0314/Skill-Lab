@@ -31,6 +31,22 @@ _FIRST_RUN_NOTICE = (
 # Module-level cache so we only read config once per process
 _analytics_enabled: bool | None = None
 
+# Side-channel for commands to attach extra data to the current telemetry event.
+# Commands call push_telemetry_extra(); the decorator pops it via _pop_telemetry_extras().
+_pending_extras: dict[str, Any] = {}
+
+
+def push_telemetry_extra(**kwargs: Any) -> None:
+    """Attach extra data to the next telemetry event recorded by the decorator."""
+    _pending_extras.update(kwargs)
+
+
+def _pop_telemetry_extras() -> dict[str, Any]:
+    """Consume and return any pending extra telemetry data."""
+    extras = dict(_pending_extras)
+    _pending_extras.clear()
+    return extras
+
 
 def _ensure_home() -> None:
     SKLAB_HOME.mkdir(parents=True, exist_ok=True)
@@ -68,6 +84,16 @@ def _ensure_db() -> None:
                 synced        INTEGER DEFAULT 0
             )
         """)
+        # Migrate: add stats columns if they don't exist (idempotent)
+        existing = {row[1] for row in conn.execute("PRAGMA table_info(events)")}
+        for col, dtype in [
+            ("skill_name", "TEXT"),
+            ("score", "REAL"),
+            ("input_tokens", "INTEGER"),
+            ("skill_path", "TEXT"),
+        ]:
+            if col not in existing:
+                conn.execute(f"ALTER TABLE events ADD COLUMN {col} {dtype}")
 
 
 def init_telemetry() -> bool:
@@ -118,7 +144,15 @@ def init_telemetry() -> bool:
     return _analytics_enabled
 
 
-def record_event(command: str, duration_ms: float, exit_code: int) -> None:
+def record_event(
+    command: str,
+    duration_ms: float,
+    exit_code: int,
+    skill_name: str | None = None,
+    score: float | None = None,
+    input_tokens: int | None = None,
+    skill_path: str | None = None,
+) -> None:
     """Write an event to local SQLite, then attempt a fire-and-forget Supabase sync."""
     try:
         if not init_telemetry():
@@ -137,8 +171,9 @@ def record_event(command: str, duration_ms: float, exit_code: int) -> None:
                 """
                 INSERT INTO events
                     (user_uuid, command, duration_ms, exit_code,
-                     sklab_version, platform, python_version, timestamp)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                     sklab_version, platform, python_version, timestamp,
+                     skill_name, score, input_tokens, skill_path)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     user_uuid,
@@ -149,6 +184,10 @@ def record_event(command: str, duration_ms: float, exit_code: int) -> None:
                     platform.system(),
                     py_version,
                     timestamp,
+                    skill_name,
+                    score,
+                    input_tokens,
+                    skill_path,
                 ),
             )
 

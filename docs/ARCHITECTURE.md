@@ -77,10 +77,17 @@ src/skill_lab/
 │   ├── base.py               # RuntimeAdapter abstract base class
 │   ├── codex_runtime.py      # OpenAI Codex CLI adapter
 │   └── claude_runtime.py     # Claude Code CLI adapter
-└── reporters/
-    ├── console_reporter.py   # Rich terminal output
-    └── json_reporter.py      # JSON output
+├── reporters/
+│   ├── console_reporter.py   # Rich terminal output
+│   ├── json_reporter.py      # JSON output
+│   └── stats_reporter.py     # Rich terminal output for sklab stats commands
+└── core/
+    ├── stats.py              # SQLite query functions for usage stats (sklab stats)
+    └── setup.py              # Hook setup for Claude Code / Cursor (sklab setup)
 ```
+
+> **Stats module** (`core/stats.py`): reads `~/.sklab/usage.db` and exposes four query functions — `get_overview_stats`, `get_stats_count`, `get_stats_score`, `get_stats_tokens`. No writes; pure reads.
+> **Setup module** (`core/setup.py`): idempotently writes PostToolUse hooks to `~/.claude/settings.json` (Claude Code) and `~/.cursor/hooks.json` (Cursor).
 
 ### Data Flow
 
@@ -416,6 +423,15 @@ sklab prompt [./skill-a ./skill-b] [-f xml|markdown|json]
 
 # Trace evaluation (hidden)
 sklab eval-trace ./my-skill --trace ./execution.jsonl [-f console|json] [-o file.json]
+
+# Personal usage statistics (v0.5.0)
+sklab stats                   # Overview: invocations this month, avg score, tokens, versions
+sklab stats count             # Table: skill name | use count | tokens used (current month)
+sklab stats score             # Table: skill name | current score | baseline score | delta
+sklab stats tokens            # Table: skill name | tokens/invocation | total tokens (current month)
+
+# One-time hook setup for invocation tracking (v0.5.0)
+sklab setup
 ```
 
 **Path Defaults:** The `evaluate`, `validate`, `trigger`, `generate`, `info`, and `prompt` commands default to the current directory when no skill path is provided. They validate that `SKILL.md` exists in the target directory via the shared `_resolve_skill_path()` helper.
