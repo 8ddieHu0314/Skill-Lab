@@ -14,8 +14,7 @@ _FIRST_RUN_NOTICE = (
     "sklab set up automatic skill tracking. Skill invocations are now recorded "
     "in ~/.sklab/usage.db for use with `sklab stats`.\n"
     "To disable: remove the 'sklab _track-invocation' hook from "
-    "~/.claude/settings.json or ~/.cursor/hooks.json, then set "
-    "hooks_configured=false in ~/.sklab/config.json."
+    "~/.claude/settings.json or ~/.cursor/hooks.json."
 )
 
 # User-scope settings files for each supported tool
