@@ -193,6 +193,14 @@ class TestGetOverviewStats:
         now = datetime.now()
         assert now.strftime("%b %Y") in result.month_label
 
+    def test_month_label_no_platform_specific_format(self, tmp_db: Path) -> None:
+        """Month label must not use %-d (Linux-only) — uses str(day) instead."""
+        from skill_lab.core.stats import _month_label
+        label = _month_label()
+        # Should not raise and should contain the numeric day without zero-padding
+        now = datetime.now()
+        assert str(now.day) in label
+
 
 # ---------------------------------------------------------------------------
 # get_stats_count

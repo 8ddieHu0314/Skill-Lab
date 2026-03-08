@@ -50,8 +50,8 @@ class SkillTokens:
 def _month_label() -> str:
     """Return e.g. 'Mar 2026  (Mar 1 – Mar 7, 2026)' for the current month."""
     now = datetime.now()
-    start = now.strftime(f"%b 1, %Y")
-    today = now.strftime("%b %-d, %Y")
+    start = f"{now.strftime('%b')} 1, {now.year}"
+    today = f"{now.strftime('%b')} {now.day}, {now.year}"
     return f"{now.strftime('%b %Y')}  ({start} \u2013 {today})"
 
 

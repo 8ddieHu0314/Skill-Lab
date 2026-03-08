@@ -223,6 +223,12 @@ def _patch_non_interactive() -> "patch[bool]":  # type: ignore[type-arg]
 
 
 class TestInitHooksOnFirstRun:
+    @pytest.fixture(autouse=True)
+    def reset_process_cache(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Reset the process-level _hooks_initialized flag between tests."""
+        import skill_lab.core.setup as setup_module
+        monkeypatch.setattr(setup_module, "_hooks_initialized", False)
+
     @pytest.fixture()
     def tmp_sklab(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         """Redirect ~/.sklab config to a temp dir."""
@@ -345,6 +351,18 @@ class TestInitHooksOnFirstRun:
         with _patch_interactive():
             with patch("skill_lab.core.setup._get_install_mtime", return_value=1.0):
                 init_hooks_on_first_run()  # Should not raise
+
+    def test_process_cache_prevents_second_run(self, claude_home: Path) -> None:
+        """Second call within the same process is a no-op (cache hit)."""
+        settings_path = claude_home / "settings.json"
+        with _patch_interactive():
+            with patch("skill_lab.core.setup._get_install_mtime", return_value=1.0):
+                init_hooks_on_first_run()
+                # Remove hook to prove second call doesn't re-run setup
+                settings_path.write_text("{}")
+                init_hooks_on_first_run()
+        data = json.loads(settings_path.read_text())
+        assert data == {}  # hook was NOT re-added (cache prevented it)
 
 
 # ---------------------------------------------------------------------------

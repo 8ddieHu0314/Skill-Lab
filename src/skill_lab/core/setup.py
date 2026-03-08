@@ -7,8 +7,12 @@ sklab records a row in ~/.sklab/usage.db every time a skill fires.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
+
+# Process-level cache so double-calling within a single CLI invocation is free.
+_hooks_initialized: bool = False
 
 _FIRST_RUN_NOTICE = (
     "sklab set up automatic skill tracking. Skill invocations are now recorded "
@@ -161,8 +165,12 @@ def init_hooks_on_first_run() -> None:
     Silently skips in non-interactive environments (CI env var set, or
     stdout is not a TTY).
     """
+    global _hooks_initialized
+    if _hooks_initialized:
+        return
+    _hooks_initialized = True
+
     try:
-        import os
         import time
 
         if os.environ.get("CI") or not sys.stdout.isatty():

@@ -125,7 +125,8 @@ def init_telemetry() -> bool:
     if "analytics_enabled" not in config:
         # Non-interactive context (CI, piped input, cron jobs) — disable silently.
         # Do NOT write config so the next interactive run still shows the notice.
-        if not sys.stdin.isatty():
+        # Check stdout (not stdin) — IDE terminals may not allocate a stdin TTY.
+        if not sys.stdout.isatty():
             _analytics_enabled = False
             return False
 
@@ -262,6 +263,10 @@ def _sync_to_supabase() -> None:
             if not rows:
                 return
 
+            # skill_name and score are intentionally excluded: they are personal
+            # workflow data (which skills you use and how they score). Only
+            # anonymous command-level stats are synced to Supabase.
+            # skill_path is excluded entirely (contains filesystem paths).
             payload = [
                 {
                     "user_uuid": r[1],

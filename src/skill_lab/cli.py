@@ -988,6 +988,10 @@ app.add_typer(stats_app)
 @stats_app.callback(invoke_without_command=True)
 def stats(ctx: typer.Context) -> None:
     """Show usage statistics overview."""
+    init_telemetry()
+    from skill_lab.core.setup import init_hooks_on_first_run
+    init_hooks_on_first_run()
+
     if ctx.invoked_subcommand is not None:
         return
 
@@ -1011,6 +1015,7 @@ def _resolve_repo_filter(here: bool) -> Path | None:
 
 
 @stats_app.command("count")
+@_with_telemetry("stats-count")
 def stats_count(
     here: Annotated[
         bool,
@@ -1026,6 +1031,7 @@ def stats_count(
 
 
 @stats_app.command("score")
+@_with_telemetry("stats-score")
 def stats_score(
     here: Annotated[
         bool,
@@ -1041,6 +1047,7 @@ def stats_score(
 
 
 @stats_app.command("tokens")
+@_with_telemetry("stats-tokens")
 def stats_tokens(
     here: Annotated[
         bool,
