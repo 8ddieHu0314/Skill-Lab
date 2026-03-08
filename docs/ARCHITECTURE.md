@@ -40,6 +40,8 @@ src/skill_lab/
 │   ├── scoring.py            # Quality score calculation and shared metrics
 │   ├── tokens.py             # Token estimation utility (v0.4.0)
 │   ├── telemetry.py          # Usage analytics: opt-in prompt, SQLite, Supabase sync, version check
+│   ├── stats.py              # SQLite query functions for usage stats (sklab stats)
+│   ├── setup.py              # Hook setup for Claude Code / Cursor (sklab setup)
 │   ├── utils.py              # Shared utilities (generic Registry[T])
 │   └── exceptions.py         # Custom exception hierarchy (SkillLabError, ParseError, etc.)
 ├── parsers/
@@ -81,13 +83,7 @@ src/skill_lab/
 │   ├── console_reporter.py   # Rich terminal output
 │   ├── json_reporter.py      # JSON output
 │   └── stats_reporter.py     # Rich terminal output for sklab stats commands
-└── core/
-    ├── stats.py              # SQLite query functions for usage stats (sklab stats)
-    └── setup.py              # Hook setup for Claude Code / Cursor (sklab setup)
 ```
-
-> **Stats module** (`core/stats.py`): reads `~/.sklab/usage.db` and exposes four query functions — `get_overview_stats`, `get_stats_count`, `get_stats_score`, `get_stats_tokens`. No writes; pure reads.
-> **Setup module** (`core/setup.py`): idempotently writes PostToolUse hooks to `~/.claude/settings.json` (Claude Code) and `~/.cursor/hooks.json` (Cursor).
 
 ### Data Flow
 

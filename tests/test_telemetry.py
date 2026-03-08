@@ -1,6 +1,7 @@
 """Comprehensive unit tests for skill_lab.core.telemetry."""
 import json
 import sqlite3
+import threading
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -434,3 +435,87 @@ class TestCheckForUpdate:
             result = check_for_update()
             mock_open.assert_not_called()  # served from cache
         assert result is None
+
+
+# ─── _sync_to_supabase / _do_sync ─────────────────────────────────────────────
+
+
+class TestSyncToSupabase:
+    def test_spawns_daemon_thread_targeting_do_sync(self):
+        """_sync_to_supabase must start a daemon thread pointing at _do_sync."""
+        with patch("threading.Thread") as mock_thread_cls:
+            mock_instance = MagicMock()
+            mock_thread_cls.return_value = mock_instance
+
+            telemetry_module._sync_to_supabase()
+
+            mock_thread_cls.assert_called_once_with(
+                target=telemetry_module._do_sync, daemon=True
+            )
+            mock_instance.start.assert_called_once()
+
+    def test_returns_before_sync_completes(self):
+        """_sync_to_supabase must return immediately without blocking on I/O."""
+        started = threading.Event()
+        allow_finish = threading.Event()
+
+        def slow_sync():
+            started.set()
+            allow_finish.wait(timeout=5)
+
+        with patch.object(telemetry_module, "_do_sync", slow_sync):
+            telemetry_module._sync_to_supabase()
+            # If this blocks we never reach assert — the test would hang/timeout
+            returned_before_finish = not allow_finish.is_set()
+
+        allow_finish.set()  # unblock the thread so it can exit cleanly
+        assert returned_before_finish
+
+    def test_do_sync_marks_rows_synced_on_success(self, tmp_telemetry, monkeypatch):
+        """_do_sync marks synced=1 for all unsynced rows when the POST succeeds."""
+        _write_config({"analytics_enabled": True, "user_uuid": "u1"})
+        monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
+        # Bypass the thread so we control when the sync happens
+        monkeypatch.setattr(telemetry_module, "_sync_to_supabase", lambda: None)
+        record_event("evaluate", 100.0, 0)
+        record_event("validate", 50.0, 0)
+
+        with patch("urllib.request.urlopen"):
+            telemetry_module._do_sync()
+
+        conn = sqlite3.connect(tmp_telemetry["db"])
+        unsynced = conn.execute("SELECT COUNT(*) FROM events WHERE synced = 0").fetchone()[0]
+        conn.close()
+        assert unsynced == 0
+
+    def test_do_sync_leaves_rows_unsynced_on_network_error(self, tmp_telemetry, monkeypatch):
+        """_do_sync leaves synced=0 when the POST fails so rows retry next run."""
+        _write_config({"analytics_enabled": True, "user_uuid": "u1"})
+        monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
+        monkeypatch.setattr(telemetry_module, "_sync_to_supabase", lambda: None)
+        record_event("evaluate", 100.0, 0)
+
+        with patch("urllib.request.urlopen", side_effect=OSError("network error")):
+            telemetry_module._do_sync()
+
+        conn = sqlite3.connect(tmp_telemetry["db"])
+        synced = conn.execute("SELECT synced FROM events").fetchone()[0]
+        conn.close()
+        assert synced == 0
+
+    def test_do_sync_noop_when_no_unsynced_rows(self, tmp_telemetry, monkeypatch):
+        """_do_sync makes no HTTP call when there are no unsynced rows."""
+        _write_config({"analytics_enabled": True, "user_uuid": "u1"})
+        monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
+        monkeypatch.setattr(telemetry_module, "_sync_to_supabase", lambda: None)
+        record_event("evaluate", 100.0, 0)
+
+        # Mark the row as already synced
+        conn = sqlite3.connect(tmp_telemetry["db"])
+        conn.execute("UPDATE events SET synced = 1")
+        conn.commit()
+        conn.close()
+
+        with patch("urllib.request.urlopen") as mock_open:
+            telemetry_module._do_sync()
+            mock_open.assert_not_called()

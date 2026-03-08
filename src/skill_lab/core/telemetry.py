@@ -11,6 +11,7 @@ import os
 import platform
 import sqlite3
 import sys
+import threading
 import urllib.error
 import urllib.request
 import uuid
@@ -249,6 +250,12 @@ def _is_newer(latest: str, current: str) -> bool:
 
 
 def _sync_to_supabase() -> None:
+    """Spawn a daemon thread to POST unsynced rows. Returns immediately."""
+    t = threading.Thread(target=_do_sync, daemon=True)
+    t.start()
+
+
+def _do_sync() -> None:
     """POST all unsynced rows to the telemetry endpoint and mark them synced=1 on success."""
     try:
         with sqlite3.connect(SKLAB_DB) as conn:
