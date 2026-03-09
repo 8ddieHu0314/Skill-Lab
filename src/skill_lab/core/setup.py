@@ -184,7 +184,7 @@ def init_hooks_on_first_run() -> None:
 
         # A reinstall is detected when the package METADATA is newer than
         # the last time we recorded successful hook configuration.
-        is_new_install = install_mtime is None or install_mtime > configured_at
+        is_new_install = install_mtime is not None and install_mtime > configured_at
 
         results = run_setup()
         any_configured = any(s == "configured" for s in results.values())
