@@ -257,6 +257,50 @@ Runs regardless of analytics opt-in.
 
 ---
 
+## Possible Analytics
+
+### Command Usage
+- Which commands are used most/least (evaluate, validate, trigger, generate, etc.)
+- Which flags are most commonly combined together
+- Average command duration by command type
+- Success/failure rates per command
+- How command usage changes over time (growth, decline)
+
+### Skill Performance
+- Score distribution across all skill evaluations (histogram of 0–100 scores)
+- Score trends over time per skill — are skills improving after edits?
+- Which skills fail most often or score lowest
+- Token usage per skill (input + output) — which skills are most expensive?
+- Step count and tool call count distributions — which skills are most complex to run?
+
+### User Retention & Engagement
+- Daily/weekly active installs
+- Run frequency per install (heavy vs. casual users)
+- Time between first seen and last seen (how long users stick around)
+- Drop-off: installs that ran once vs. multiple times
+
+### Error Analysis
+- Most common error types and which commands trigger them
+- Which sklab versions introduced or fixed errors
+- Error rate over time (regressions after releases)
+
+### Adoption & Environment
+- OS breakdown (macOS vs. Linux vs. Windows)
+- Python version distribution across users
+- CI vs. local usage split, and which CI providers dominate
+- Version adoption rate after a new release (how quickly users upgrade)
+
+### Session Behavior
+- How many commands are run per session (session depth)
+- Common command sequences within a session (e.g., info → evaluate → validate)
+- Session length distribution
+
+### Sync Health
+- How many rows are stuck unsynced (offline users, endpoint issues)
+- Sync lag across the user base
+
+---
+
 ## Source Files
 
 | File | Role |
