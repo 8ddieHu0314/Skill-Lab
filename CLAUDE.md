@@ -20,6 +20,8 @@ Python CLI tool that evaluates agent skills (SKILL.md files) via static analysis
 
 After code changes: update `ARCHITECTURE.md` (modules/CLI) and the relevant `docs/versions/vX.X.X.md`.
 
+ALWAYS READ THE DOCS BEFORE ACTIONING
+
 ## Commands
 
 ```bash
@@ -80,15 +82,29 @@ ruff check src/ && ruff format src/
 - Zero context switching required from the user
 - Go fix failing CI tests without being told how
 
+### CLI Patterns
+
+- All commands use `_resolve_skill_path()` for path validation and `_cli_error_handler()` context manager for consistent error output
+- Exit codes: 0 = success, 1 = failure (spec-required check failed or error)
+- Custom exceptions inherit from `SkillLabError` in `core/exceptions.py` (`ParseError`, `ValidationError`, `ConfigurationError`, `GenerationError`)
+
+## Code Style
+
+- **Line length**: 100 characters (ruff formatter)
+- **Type checking**: mypy strict mode — all functions need type annotations
+- **Python**: 3.10+ (no 3.9 syntax)
+- **Data models**: frozen dataclasses (`@dataclass(frozen=True)`) for immutability
+- **CI matrix**: Python 3.10–3.13 on Ubuntu/macOS/Windows — code must pass all three
+
 ---
 
 ## Task Management
 
-1. **Plan First**: Write plan to `tasks/todo.md` with checkable items  
-2. **Verify Plan**: Check in before starting implementation  
-3. **Track Progress**: Mark items complete as you go  
-4. **Explain Changes**: High-level summary at each step  
-5. **Document Results**: Add review section to `tasks/todo.md`  
+1. **Plan First**: Write plan to `tasks/todo.md` with checkable items
+2. **Verify Plan**: Check in before starting implementation
+3. **Track Progress**: Mark items complete as you go
+4. **Explain Changes**: High-level summary at each step
+5. **Document Results**: Add review section to `tasks/todo.md`
 6. **Capture Lessons**: Update `.claude/.tasks/lessons.md` after corrections — reusable lessons only and mistakes the AI has made
 
 ---
