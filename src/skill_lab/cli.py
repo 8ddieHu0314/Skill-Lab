@@ -118,7 +118,6 @@ def _maybe_first_run_scan() -> bool:
     console.print(f"[dim]Found {len(skill_paths)} skill(s). Running initial evaluation...[/dim]\n")
 
     evaluator = StaticEvaluator()
-    any_failed = False
     summary_rows: list[tuple[str, str, str, str]] = []
 
     for sp in skill_paths:
@@ -138,9 +137,6 @@ def _maybe_first_run_scan() -> bool:
         except ValueError:
             rel_path = str(sp)
         summary_rows.append((skill_name, rel_path, score_str, status_str))
-
-        if not report.overall_pass:
-            any_failed = True
 
     # Summary table
     console.print()
@@ -164,13 +160,17 @@ def _print_getting_started() -> None:
     guide.add_column(style="bold cyan", no_wrap=True)
     guide.add_column(style="dim")
 
-    guide.add_row("sklab evaluate [green]./my-skill[/green]", "Full quality evaluation (0–100 score)")
+    guide.add_row(
+        "sklab evaluate [green]./my-skill[/green]", "Full quality evaluation (0–100 score)"
+    )
     guide.add_row("  [dim]--verbose / -V[/dim]", "Show all checks, not just failures")
     guide.add_row("  [dim]--spec-only / -s[/dim]", "Only run the 10 spec-required checks")
     guide.add_row("  [dim]--all[/dim]", "Evaluate every skill in the current directory")
     guide.add_row("  [dim]--repo[/dim]", "Evaluate every skill from the git repo root")
     guide.add_row("", "")
-    guide.add_row("sklab validate [green]./my-skill[/green]", "Quick pass/fail — exits 0 or 1 (great for CI)")
+    guide.add_row(
+        "sklab validate [green]./my-skill[/green]", "Quick pass/fail — exits 0 or 1 (great for CI)"
+    )
     guide.add_row("  [dim]--spec-only / -s[/dim]", "Only validate against the Agent Skills spec")
     guide.add_row("", "")
     guide.add_row("sklab list-checks", "Browse all 28 checks across 4 dimensions")
@@ -208,9 +208,8 @@ def app_callback(
     ] = False,
 ) -> None:
     """Evaluate agent skills through static analysis and quality checks."""
-    if ctx.invoked_subcommand is None:
-        if not _maybe_first_run_scan():
-            _print_getting_started()
+    if ctx.invoked_subcommand is None and not _maybe_first_run_scan():
+        _print_getting_started()
 
 
 def _find_repo_root(start: Path) -> Path | None:
@@ -301,11 +300,13 @@ _POSITIONAL_PARAMS = {"skill_path", "skill_paths", "trace"}
 
 def _with_telemetry(command_name: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Decorator that wraps a CLI command with init + timing + event recording."""
+
     def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(fn)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             init_telemetry()
             from skill_lab.core.setup import init_hooks_on_first_run
+
             init_hooks_on_first_run()
 
             # Capture boolean flags explicitly set to True
@@ -330,7 +331,9 @@ def _with_telemetry(command_name: str) -> Callable[[Callable[..., Any]], Callabl
                 raise
             finally:
                 _record_telemetry(command_name, start, exit_code)
+
         return wrapper
+
     return decorator
 
 
@@ -1156,6 +1159,7 @@ def stats(ctx: typer.Context) -> None:
     """Show usage statistics overview."""
     init_telemetry()
     from skill_lab.core.setup import init_hooks_on_first_run
+
     init_hooks_on_first_run()
 
     if ctx.invoked_subcommand is not None:
@@ -1306,10 +1310,10 @@ def track_invocation() -> None:
         skill_path_str: str | None = None
         if skill_dir is not None:
             skill_path_str = str(skill_dir)
-            try:
+            import contextlib
+
+            with contextlib.suppress(Exception):
                 tokens = estimate_tokens((skill_dir / "SKILL.md").read_text(encoding="utf-8"))
-            except Exception:
-                pass
         record_event(
             command="skill-invoke",
             duration_ms=0,

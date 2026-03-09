@@ -69,7 +69,7 @@ def _hook_already_present(hooks_list: list[object], command: str) -> bool:
         if not isinstance(entry, dict):
             continue
         # Claude Code format: entry has a nested "hooks" list
-        for h in entry.get("hooks", []):  # type: ignore[union-attr]
+        for h in entry.get("hooks", []):
             if isinstance(h, dict) and h.get("command") == command:
                 return True
         # Cursor format: entry has "command" directly
@@ -94,7 +94,7 @@ def setup_claude_code() -> str:
         hooks = {}
         settings["hooks"] = hooks
 
-    post_tool_use: list[object] = hooks.get("PostToolUse", [])  # type: ignore[assignment]
+    post_tool_use: list[object] = hooks.get("PostToolUse", [])
     if not isinstance(post_tool_use, list):
         post_tool_use = []
     hooks["PostToolUse"] = post_tool_use
@@ -147,6 +147,7 @@ def _get_install_mtime() -> float | None:
     """
     try:
         import importlib.metadata
+
         dist = importlib.metadata.distribution("skill-lab")
         meta = Path(str(dist.locate_file("METADATA")))
         return meta.stat().st_mtime
@@ -197,6 +198,7 @@ def init_hooks_on_first_run() -> None:
         if should_notify:
             try:
                 import typer
+
                 typer.echo(_FIRST_RUN_NOTICE)
             except Exception:
                 print(_FIRST_RUN_NOTICE)  # noqa: T201

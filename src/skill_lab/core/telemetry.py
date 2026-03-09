@@ -6,6 +6,7 @@ Telemetry is enabled by default (opt-out); a notice is printed on first run.
 Set SKLAB_NO_ANALYTICS=1 to disable telemetry without any prompt.
 """
 
+import contextlib
 import json
 import os
 import platform
@@ -101,6 +102,10 @@ def _read_config() -> dict[str, Any]:
             result: dict[str, Any] = json.loads(SKLAB_CONFIG.read_text(encoding="utf-8"))
             return result
         except Exception:
+            # Config is corrupt — back it up so the UUID isn't silently lost,
+            # then return empty so normal initialization recreates a valid file.
+            with contextlib.suppress(Exception):
+                SKLAB_CONFIG.rename(SKLAB_CONFIG.with_suffix(".json.bak"))
             return {}
     return {}
 
@@ -243,6 +248,7 @@ def init_telemetry() -> bool:
         # First interactive run — enable by default and print a notice (opt-out model)
         try:
             import typer
+
             typer.echo(_FIRST_RUN_NOTICE)
         except Exception:
             print(_FIRST_RUN_NOTICE)  # noqa: T201
@@ -353,9 +359,18 @@ def record_event(
             # Write skill_events row if any skill field is present
             has_skill_data = any(
                 v is not None
-                for v in (skill_name, skill_version, skill_source, skill_path,
-                          score, model_name, input_tokens, output_tokens,
-                          step_count, tool_call_count)
+                for v in (
+                    skill_name,
+                    skill_version,
+                    skill_source,
+                    skill_path,
+                    score,
+                    model_name,
+                    input_tokens,
+                    output_tokens,
+                    step_count,
+                    tool_call_count,
+                )
             )
             if has_skill_data:
                 conn.execute(
@@ -364,8 +379,8 @@ def record_event(
                         (command_event_id, install_uuid, skill_name, skill_version,
                          skill_source, skill_path, score, model_name,
                          input_tokens, output_tokens, step_count, tool_call_count,
-                         timestamp, synced)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                         execution_time_ms, success, timestamp, synced)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
                     """,
                     (
                         command_event_id,
@@ -380,6 +395,8 @@ def record_event(
                         output_tokens,
                         step_count,
                         tool_call_count,
+                        duration_ms,
+                        int(exit_code == 0),
                         timestamp,
                     ),
                 )
@@ -476,9 +493,7 @@ def check_for_update() -> str | None:
 def _is_newer(latest: str, current: str) -> bool:
     """Return True if latest is a strictly higher semver than current."""
     try:
-        return tuple(int(x) for x in latest.split(".")) > tuple(
-            int(x) for x in current.split(".")
-        )
+        return tuple(int(x) for x in latest.split(".")) > tuple(int(x) for x in current.split("."))
     except Exception:
         return False
 

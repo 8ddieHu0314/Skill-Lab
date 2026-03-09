@@ -145,9 +145,7 @@ def get_overview_stats() -> OverviewStats | None:
         )
 
     version_history = [
-        (v, datetime.fromisoformat(ts).strftime("%b %d, %Y"))
-        for v, ts in version_rows
-        if v
+        (v, datetime.fromisoformat(ts).strftime("%b %d, %Y")) for v, ts in version_rows if v
     ]
 
     return OverviewStats(
@@ -235,7 +233,7 @@ def get_stats_score(
             for row in conn.execute(
                 f"""
                 SELECT id, score FROM skill_events
-                WHERE id IN ({','.join('?' * len(skill_ids) * 2)})
+                WHERE id IN ({",".join("?" * len(skill_ids) * 2)})
                   AND score IS NOT NULL
                 """,
                 [sid for _, mn, mx in skill_ids for sid in (mn, mx)],
