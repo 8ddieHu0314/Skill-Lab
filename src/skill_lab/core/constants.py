@@ -9,6 +9,7 @@ SKILLLAB_DIR = ".skill-lab"
 SKLAB_HOME = Path.home() / ".sklab"
 SKLAB_CONFIG = SKLAB_HOME / "config.json"
 SKLAB_DB = SKLAB_HOME / "usage.db"
+SKLAB_INITIALIZED = SKLAB_HOME / ".initialized"
 TESTS_DIR = ".skill-lab/tests"
 TRACES_DIR = ".skill-lab/traces"
 
