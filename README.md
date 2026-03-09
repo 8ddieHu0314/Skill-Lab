@@ -63,10 +63,18 @@ export SKLAB_MODEL=claude-sonnet-4-5-20250929
 
 ## Quick Start
 
+After installing, run `sklab` to scan your repo for skills and see an initial evaluation:
+
+```bash
+sklab                             # First run: scans repo + shows Getting Started guide
+```
+
 ```bash
 # Evaluate a skill (path defaults to current directory)
 sklab evaluate ./my-skill
 sklab evaluate                    # Uses current directory
+sklab evaluate --all              # Evaluate every skill in the current directory
+sklab evaluate --repo             # Evaluate every skill from the git repo root
 
 # Quick validation (pass/fail)
 sklab validate ./my-skill
@@ -109,6 +117,10 @@ sklab evaluate ./my-skill --verbose
 
 # Spec-only (skip quality suggestions)
 sklab evaluate ./my-skill --spec-only
+
+# Bulk evaluation
+sklab evaluate --all              # All skills under current directory
+sklab evaluate --repo             # All skills from git repo root
 ```
 
 ### Quick Validation
@@ -265,6 +277,21 @@ ruff check src/
 # Format code
 ruff format src/
 ```
+
+## Telemetry
+
+sklab collects anonymous usage data to help improve your experience and the tool. On first interactive run a notice is printed. **No skill content, file paths, or flag values are ever collected.**
+
+What is collected: command names, flags used, duration, exit codes, OS, Python version, sklab version, skill names, skill versions, evaluation scores, token counts (input + output), session ID, CI environment, and error types (class name only — no messages or content).
+
+To opt out, set an environment variable before running any `sklab` command:
+
+```bash
+export SKLAB_NO_ANALYTICS=1   # sklab-specific
+export DO_NOT_TRACK=1          # standard cross-tool opt-out
+```
+
+See [docs/PRIVACY.md](docs/PRIVACY.md) for the full privacy policy.
 
 ## License
 

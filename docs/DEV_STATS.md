@@ -6,55 +6,43 @@ Reference for how sklab collects, stores, and syncs usage data.
 
 ## Overview
 
-Every sklab command optionally records an event containing timing, exit code, and environment metadata. Data flows:
+Every sklab command optionally records an event. Data flows:
 
 ```
 sklab command
      │
      ▼
-init_telemetry()          ← first-ever run: shows opt-in prompt
+init_telemetry()          ← first interactive run: shows opt-out notice
      │
      ▼
 [command executes]
      │
-     ▼ (finally block)
+     ▼ (finally block in _with_telemetry decorator)
 _record_telemetry()
-     ├── record_event()   → write row to ~/.sklab/usage.db (SQLite)
-     │                    → _sync_to_supabase() (fire-and-forget POST)
-     └── check_for_update() → fetch pypi.org/pypi/skill-lab/json (once/day)
-                           → print nudge to stderr if newer version exists
+     ├── record_event()   → write rows to ~/.sklab/usage.db (SQLite)
+     │                    → _sync_to_endpoint() (fire-and-forget POST)
+     ├── record_error()   → write to error_events if exception was raised
+     └── check_for_update() → fetch pypi.org once/day, nudge to stderr if newer
 ```
 
-All network calls use a short timeout (2–3 s) and swallow every exception. A network failure, Supabase outage, or PyPI timeout never crashes the CLI or affects command output.
+All network calls use a short timeout (2–3 s) and swallow every exception. A network failure or endpoint outage never crashes the CLI.
 
 ---
 
 ## User Consent
 
-### First-run prompt
-
-On the very first command a user runs, `init_telemetry()` shows:
-
-```
-sklab would like to collect anonymous usage data. This helps improve the tool
-and lets you visualise your own command stats. No skill content or file paths
-are collected. Enable analytics? [Y/n]:
-```
-
-- **Yes** → `analytics_enabled: true` + a fresh UUID written to `~/.sklab/config.json`
-- **No** → `analytics_enabled: false` written; no data ever collected or sent
-
-The prompt only appears once. Subsequent runs read the cached value.
+**Opt-out model** — telemetry is enabled by default on first interactive run. A notice is printed; no confirmation required.
 
 ### Opt-out mechanisms
 
 | Method | Effect |
 |--------|--------|
-| Answer **No** to prompt | `analytics_enabled: false` in config; permanent |
-| `SKLAB_NO_ANALYTICS=1` env var | Skips prompt and all telemetry for that process; config unchanged |
-| Edit `~/.sklab/config.json` | Set `"analytics_enabled": false` manually |
+| `SKLAB_NO_ANALYTICS=1` env var | Disables all telemetry for that process; config unchanged |
+| `DO_NOT_TRACK=1` env var | Same (cross-tool standard) |
+| Edit `~/.sklab/config.json` | Set `"analytics_enabled": false` manually to re-enable or disable permanently |
+| Non-interactive stdout (CI, pipe) | Auto-disabled on first run; config not written |
 
-> **Note:** The PyPI version-update check runs regardless of analytics opt-in — it makes no outbound request with user identity and is standard CLI behaviour.
+> Opted-out users get **no local storage** and no sync. `sklab stats` shows no data.
 
 ---
 
@@ -66,211 +54,206 @@ The prompt only appears once. Subsequent runs read the cached value.
 {
   "user_uuid": "550e8400-e29b-41d4-a716-446655440000",
   "analytics_enabled": true,
-  "last_version_check": "2026-03-04T17:41:30.791951+00:00",
-  "latest_version": "0.4.0"
+  "last_version_check": "2026-03-09T12:00:00+00:00",
+  "latest_version": "0.5.0"
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `user_uuid` | UUID string | Generated once with `uuid.uuid4()` on opt-in. Never linked to a name, email, or machine identity. |
-| `analytics_enabled` | boolean | Written at opt-in time; controls whether events are recorded. |
-| `last_version_check` | ISO 8601 UTC | Timestamp of last PyPI version fetch. Used to rate-limit checks to once per day. |
-| `latest_version` | semver string | Cached result of last PyPI fetch. Compared to `__version__` to decide whether to show a nudge. |
+| Field | Description |
+|-------|-------------|
+| `user_uuid` | Random UUID generated on first run. The `install_uuid` in all tables. |
+| `analytics_enabled` | Written at first run; controls all local storage and sync. |
+| `last_version_check` | ISO 8601 UTC. Rate-limits PyPI checks to once per day. |
+| `latest_version` | Cached PyPI result for version nudge. |
 
 ---
 
-## Local SQLite Database
+## Local SQLite Schema
 
 **Path:** `~/.sklab/usage.db`
 
-**Inspect with:**
-```bash
-sqlite3 ~/.sklab/usage.db "SELECT * FROM events ORDER BY id DESC LIMIT 20;"
-```
+Four normalized tables replaced the old flat `events` table (which is kept untouched for backward compatibility).
 
-### Table: `events`
-
-```sql
-CREATE TABLE IF NOT EXISTS events (
-    id             INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_uuid      TEXT    NOT NULL,
-    command        TEXT    NOT NULL,
-    duration_ms    REAL,
-    exit_code      INTEGER,
-    sklab_version  TEXT,
-    platform       TEXT,
-    python_version TEXT,
-    timestamp      TEXT    NOT NULL,
-    synced         INTEGER DEFAULT 0
-);
-```
-
-### Column Reference
+### `installs` — one row per install UUID
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `id` | INTEGER | Auto-incrementing internal row identifier |
-| `user_uuid` | TEXT | Anonymous UUID from `config.json` |
-| `command` | TEXT | CLI command name: `evaluate`, `validate`, `trigger`, `generate`, `info`, `prompt`, `eval-trace` |
-| `duration_ms` | REAL | Wall-clock time the command took in milliseconds (`time.perf_counter()` diff × 1000) |
-| `exit_code` | INTEGER | `0` = success, `1` = failure/error |
-| `sklab_version` | TEXT | Installed sklab version at time of run (e.g. `"0.4.0"`) |
-| `platform` | TEXT | OS name from `platform.system()`: `"Darwin"`, `"Linux"`, `"Windows"` |
-| `python_version` | TEXT | Python major.minor (e.g. `"3.12"`) |
-| `timestamp` | TEXT | ISO 8601 UTC timestamp of when the command ran |
-| `synced` | INTEGER | `0` = pending sync to Supabase, `1` = successfully POSTed |
+| `install_uuid` | TEXT PK | Anonymous UUID from config.json |
+| `first_seen_at` | TEXT | ISO 8601 UTC of first recorded run |
+| `last_seen_at` | TEXT | ISO 8601 UTC of most recent run |
+| `run_count` | INTEGER | Total opted-in runs (incremented on upsert) |
+| `sklab_version` | TEXT | Version at last run |
+| `os` | TEXT | `platform.system()` — `Darwin`, `Linux`, `Windows` |
+| `python_version` | TEXT | `major.minor` only (e.g. `3.12`) |
+| `is_ci` | INTEGER | `1` if a CI env var was detected |
+| `ci_provider` | TEXT | Provider name or NULL — see CI detection below |
+| `synced` | INTEGER | `0` = pending, `1` = POSTed successfully |
 
-### Useful queries
+### `command_events` — one row per CLI invocation
 
-```bash
-# All events newest first
-sqlite3 ~/.sklab/usage.db \
-  "SELECT id, command, duration_ms, exit_code, sklab_version, synced
-   FROM events ORDER BY id DESC LIMIT 20;"
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | INTEGER PK | Auto-increment |
+| `install_uuid` | TEXT | FK → installs |
+| `session_uuid` | TEXT | UUID generated once per process; groups commands in one terminal session |
+| `sklab_version` | TEXT | Version at time of run |
+| `command` | TEXT | Command name: `evaluate`, `validate`, `trigger`, `generate`, `info`, `prompt`, `stats-count`, etc. |
+| `subcommand` | TEXT | Reserved; currently NULL |
+| `flags` | TEXT | JSON array of boolean flags set to True (e.g. `["--verbose","--spec-only"]`). Names only — no values. |
+| `duration_ms` | REAL | Wall-clock ms |
+| `exit_code` | INTEGER | `0` = success |
+| `success` | INTEGER | `1` if exit_code == 0 |
+| `is_ci` | INTEGER | `1` if CI detected |
+| `ci_provider` | TEXT | Provider name or NULL |
+| `timestamp` | TEXT | ISO 8601 UTC |
+| `synced` | INTEGER | `0` = pending, `1` = synced |
 
-# Commands that failed
-sqlite3 ~/.sklab/usage.db \
-  "SELECT command, timestamp FROM events WHERE exit_code != 0;"
+### `skill_events` — one row per skill evaluation or invocation
 
-# Average duration per command
-sqlite3 ~/.sklab/usage.db \
-  "SELECT command, ROUND(AVG(duration_ms)) AS avg_ms, COUNT(*) AS runs
-   FROM events GROUP BY command ORDER BY runs DESC;"
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | INTEGER PK | Auto-increment |
+| `command_event_id` | INTEGER | FK → command_events.id (nullable) |
+| `install_uuid` | TEXT | FK → installs |
+| `skill_name` | TEXT | Skill name from frontmatter or directory name |
+| `skill_version` | TEXT | Skill version from frontmatter |
+| `skill_source` | TEXT | Reserved |
+| `skill_path` | TEXT | **Local only — never synced to endpoint** |
+| `score` | REAL | Evaluation score 0–100 (evaluate runs only) |
+| `model_name` | TEXT | Model used for invocation |
+| `input_tokens` | INTEGER | Input token count |
+| `output_tokens` | INTEGER | Output token count |
+| `step_count` | INTEGER | Steps in agent run |
+| `tool_call_count` | INTEGER | Tool calls in agent run |
+| `execution_time_ms` | REAL | Skill execution wall-clock time |
+| `success` | INTEGER | `1` = succeeded |
+| `timestamp` | TEXT | ISO 8601 UTC |
+| `synced` | INTEGER | `0` = pending, `1` = synced |
 
-# Unsynced rows (queued for next run)
-sqlite3 ~/.sklab/usage.db \
-  "SELECT * FROM events WHERE synced = 0;"
-```
+### `error_events` — one row per caught exception
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | INTEGER PK | Auto-increment |
+| `command_event_id` | INTEGER | FK → command_events.id (nullable) |
+| `install_uuid` | TEXT | FK → installs |
+| `error_type` | TEXT | Exception class name only (e.g. `FileNotFoundError`) — **no message** |
+| `error_module` | TEXT | Module where the exception class is defined |
+| `command` | TEXT | Command that raised the exception |
+| `sklab_version` | TEXT | Version at time of error |
+| `timestamp` | TEXT | ISO 8601 UTC |
+| `synced` | INTEGER | `0` = pending, `1` = synced |
+
+### Legacy `events` table
+
+The old flat table is preserved so pre-migration data survives. `sklab stats` warns users when it detects rows here via `has_old_data`. No new rows are written to it.
 
 ---
 
-## Supabase
+## What Is Collected vs. Not Collected
 
-**Project URL:** `https://uvrzuwsdqfxoocrbnciu.supabase.co`
+| Collected | Not Collected |
+|-----------|---------------|
+| Command names | Skill content or prompts |
+| Flag names (boolean, True only) | Flag values |
+| Duration, exit code, success | Hostnames, usernames |
+| OS, Python version, sklab version | Full Python version string |
+| Session UUID (groups commands in one shell session) | Environment variable values |
+| CI environment + provider name | Error messages or stack traces |
+| Skill names, versions, scores | File paths (stored locally, never synced) |
+| Token counts (input + output) | |
+| Error class name + module | |
+| Install lifecycle (first seen, last seen, run count) | |
 
-Data is POSTed via a `urllib` REST call — no SDK dependency. The anon key is safe to embed because Row Level Security restricts it to INSERT only; reads require the service key (dashboard only).
+---
 
-### Table: `usage_events`
+## CI Detection
 
-```sql
-CREATE TABLE usage_events (
-    id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_uuid      UUID        NOT NULL,
-    command        TEXT        NOT NULL,
-    duration_ms    FLOAT,
-    exit_code      INTEGER,
-    sklab_version  TEXT,
-    platform       TEXT,
-    python_version TEXT,
-    timestamp      TIMESTAMPTZ NOT NULL,
-    created_at     TIMESTAMPTZ DEFAULT NOW()
-);
-```
+Detected via env vars in priority order:
 
-### Column Reference
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | UUID | Supabase-generated primary key (`gen_random_uuid()`) |
-| `user_uuid` | UUID | Same anonymous UUID stored in `~/.sklab/config.json` |
-| `command` | TEXT | CLI command name |
-| `duration_ms` | FLOAT | Command duration in milliseconds |
-| `exit_code` | INTEGER | `0` = success, `1` = failure |
-| `sklab_version` | TEXT | sklab version string |
-| `platform` | TEXT | OS name |
-| `python_version` | TEXT | Python major.minor |
-| `timestamp` | TIMESTAMPTZ | UTC timestamp from the client machine |
-| `created_at` | TIMESTAMPTZ | UTC timestamp when the row was inserted into Supabase |
-
-### Row Level Security policy
-
-```sql
-ALTER TABLE usage_events ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "allow_insert" ON usage_events FOR INSERT TO anon WITH CHECK (true);
-```
-
-- **Anon key** (embedded in CLI): INSERT only. Cannot read, update, or delete rows.
-- **Service key** (dashboard / developer only): Full access.
-
-### Dashboard queries
-
-Run in the Supabase SQL editor:
-
-```sql
--- Most recent events
-SELECT command, duration_ms, exit_code, sklab_version, platform, timestamp
-FROM usage_events
-ORDER BY created_at DESC
-LIMIT 20;
-
--- Command breakdown
-SELECT command, COUNT(*) AS runs, ROUND(AVG(duration_ms)) AS avg_ms
-FROM usage_events
-GROUP BY command
-ORDER BY runs DESC;
-
--- Failure rate per command
-SELECT
-    command,
-    COUNT(*) AS total,
-    SUM(CASE WHEN exit_code != 0 THEN 1 ELSE 0 END) AS failures,
-    ROUND(100.0 * SUM(CASE WHEN exit_code != 0 THEN 1 ELSE 0 END) / COUNT(*), 1) AS failure_pct
-FROM usage_events
-GROUP BY command
-ORDER BY failure_pct DESC;
-
--- Version distribution
-SELECT sklab_version, COUNT(*) AS events
-FROM usage_events
-GROUP BY sklab_version
-ORDER BY sklab_version DESC;
-
--- Unique users (anonymous)
-SELECT COUNT(DISTINCT user_uuid) AS unique_users FROM usage_events;
-
--- Activity over time (daily)
-SELECT DATE(timestamp) AS day, COUNT(*) AS events
-FROM usage_events
-GROUP BY day
-ORDER BY day DESC;
-```
+| Env Var | Provider |
+|---------|----------|
+| `GITHUB_ACTIONS` | `github_actions` |
+| `GITLAB_CI` | `gitlab_ci` |
+| `TRAVIS` | `travis` |
+| `CIRCLECI` | `circleci` |
+| `JENKINS_URL` | `jenkins` |
+| `BUILDKITE` | `buildkite` |
+| `TF_BUILD` | `azure_pipelines` |
+| `BITBUCKET_BUILD_NUMBER` | `bitbucket` |
+| `CI=true` (any case) | NULL (generic CI) |
 
 ---
 
 ## Sync Behaviour
 
-Events are written to SQLite first (fast, local), then a sync is attempted immediately after. If the sync fails (offline, timeout, Supabase down), the row stays with `synced = 0`. The next time any sklab command runs, `_sync_to_supabase()` picks up all unsynced rows and batches them into a single POST.
+All four tables are batched into a single POST per sync attempt:
+
+```json
+{
+  "installs":       [...],
+  "command_events": [...],
+  "skill_events":   [...],   // skill_path excluded
+  "error_events":   [...]
+}
+```
+
+**Endpoint:** `https://api.skill-lab.dev/v1/events`
+
+Rows with `synced = 0` are retried on the next run. `skill_path` is stored locally in `skill_events` but stripped from the sync payload.
 
 ```
-Run 1 (online)  → write row → POST to Supabase → synced = 1
-Run 2 (offline) → write row → POST fails      → synced = 0
-Run 3 (online)  → write row → POST rows 2+3   → both synced = 1
+Run 1 (online)  → write rows → POST → synced = 1
+Run 2 (offline) → write rows → POST fails → synced = 0
+Run 3 (online)  → write rows → POST rows 2+3 → all synced = 1
+```
+
+---
+
+## Useful SQLite Queries
+
+```bash
+# Recent command history
+sqlite3 ~/.sklab/usage.db \
+  "SELECT command, duration_ms, exit_code, timestamp FROM command_events ORDER BY id DESC LIMIT 20;"
+
+# Skills invoked this month
+sqlite3 ~/.sklab/usage.db \
+  "SELECT se.skill_name, COUNT(*) FROM skill_events se
+   JOIN command_events ce ON se.command_event_id = ce.id
+   WHERE ce.command = 'skill-invoke'
+   GROUP BY se.skill_name ORDER BY 2 DESC;"
+
+# Score history per skill
+sqlite3 ~/.sklab/usage.db \
+  "SELECT skill_name, score, timestamp FROM skill_events WHERE score IS NOT NULL ORDER BY id;"
+
+# Recent errors
+sqlite3 ~/.sklab/usage.db \
+  "SELECT error_type, error_module, command, timestamp FROM error_events ORDER BY id DESC LIMIT 10;"
+
+# Install stats
+sqlite3 ~/.sklab/usage.db \
+  "SELECT install_uuid, run_count, first_seen_at, last_seen_at, sklab_version FROM installs;"
+
+# Unsynced rows
+sqlite3 ~/.sklab/usage.db \
+  "SELECT 'command_events', COUNT(*) FROM command_events WHERE synced=0
+   UNION ALL SELECT 'skill_events', COUNT(*) FROM skill_events WHERE synced=0
+   UNION ALL SELECT 'error_events', COUNT(*) FROM error_events WHERE synced=0;"
 ```
 
 ---
 
 ## Version Update Check
 
-`check_for_update()` in `telemetry.py` fetches `https://pypi.org/pypi/skill-lab/json` and compares `info.version` against the installed `__version__`. Result is cached in `~/.sklab/config.json` for 24 hours so the network is only hit once per day.
-
-If a newer version is available, a one-line nudge is printed to **stderr** after the command completes (so it never corrupts `--json` output):
+`check_for_update()` fetches `https://pypi.org/pypi/skill-lab/json` and compares against `__version__`. Cached in config for 24 hours. If newer, prints to **stderr** after command output (safe for `--json` consumers):
 
 ```
-sklab 0.5.0 is available (you have 0.4.0). Run: pip install --upgrade skill-lab
+sklab 0.6.0 is available (you have 0.5.0). Run: pip install --upgrade skill-lab
 ```
 
-This runs regardless of analytics opt-in.
-
----
-
-## What Is NOT Collected
-
-- Skill names, file paths, or skill content
-- System username or hostname
-- Full Python version string (only `major.minor`)
-- Any argument values passed to commands
-- Environment variables
+Runs regardless of analytics opt-in.
 
 ---
 
@@ -278,6 +261,9 @@ This runs regardless of analytics opt-in.
 
 | File | Role |
 |------|------|
-| `src/skill_lab/core/telemetry.py` | All telemetry logic: config, SQLite, Supabase sync, version check |
+| `src/skill_lab/core/telemetry.py` | All telemetry logic: config, SQLite, sync, version check |
+| `src/skill_lab/core/stats.py` | Query functions for `sklab stats` — reads new tables |
 | `src/skill_lab/core/constants.py` | `SKLAB_HOME`, `SKLAB_CONFIG`, `SKLAB_DB` path constants |
-| `src/skill_lab/cli.py` | `init_telemetry()` + `_record_telemetry()` wired into every command |
+| `src/skill_lab/cli.py` | `_with_telemetry` decorator wired into every command; `_record_telemetry` |
+| `tests/test_telemetry.py` | Unit tests for all telemetry functions |
+| `tests/test_stats.py` | Unit tests for stats queries |

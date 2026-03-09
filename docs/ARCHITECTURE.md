@@ -396,8 +396,13 @@ Built with **Typer** which provides:
 sklab -v, --version              # Show version
 sklab -h, --help                 # Show help
 
+# First-run onboarding: scan repo + show Getting Started guide (subsequent runs: guide only)
+sklab
+
 # Main evaluation command (defaults to current directory if path omitted)
 sklab evaluate [./my-skill] [-f console|json] [-o file.json] [-V] [-s]
+sklab evaluate --all             # Discover + evaluate all skills under cwd (recursive)
+sklab evaluate --repo            # Discover + evaluate all skills from git repo root
 
 # Quick validation (exit 0 or 1, defaults to current directory)
 sklab validate [./my-skill] [-s]
@@ -431,6 +436,13 @@ sklab setup
 ```
 
 **Path Defaults:** The `evaluate`, `validate`, `trigger`, `generate`, `info`, and `prompt` commands default to the current directory when no skill path is provided. They validate that `SKILL.md` exists in the target directory via the shared `_resolve_skill_path()` helper.
+
+**First-run onboarding (`app_callback`):** Running bare `sklab` (no subcommand) checks for `~/.sklab/.initialized`. If absent, it scans the git repo root → `~/.claude/.skill/` → cwd for skills, runs `evaluate` on each, prints a summary table, then shows the Getting Started guide. The sentinel is written before scanning so a crash doesn't re-trigger it. On all subsequent bare `sklab` invocations, only the Getting Started guide is shown.
+
+**Bulk evaluation helpers:**
+- `_find_repo_root(start)` — walks up the directory tree looking for `.git`, returns the repo root or `None`
+- `_discover_skills(root)` — recursively finds all directories containing `SKILL.md` under `root`, skipping hidden directories
+- `_run_bulk_evaluate(roots, ...)` — orchestrates multi-skill evaluation and prints a summary table; used by `--all`, `--repo`, and first-run scan
 
 **Telemetry hooks:** Every command calls `init_telemetry()` at the start (shows the opt-in prompt on first ever run) and `_record_telemetry(command, start, exit_code)` in its `finally` block. `_record_telemetry` writes to local SQLite, fires a Supabase sync, and checks PyPI for updates — all silently. See [DEV_STATS.md](DEV_STATS.md) for the full telemetry spec.
 

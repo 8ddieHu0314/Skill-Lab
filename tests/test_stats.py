@@ -41,8 +41,9 @@ def tmp_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def _create_db(db_path: Path) -> sqlite3.Connection:
-    """Create the events table with all columns."""
+    """Create all telemetry tables."""
     conn = sqlite3.connect(db_path)
+    # Legacy events table — kept for has_old_data check
     conn.execute("""
         CREATE TABLE events (
             id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -59,6 +60,46 @@ def _create_db(db_path: Path) -> sqlite3.Connection:
             score         REAL,
             input_tokens  INTEGER,
             skill_path    TEXT
+        )
+    """)
+    # New normalized tables
+    conn.execute("""
+        CREATE TABLE command_events (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            install_uuid  TEXT NOT NULL,
+            session_uuid  TEXT NOT NULL,
+            sklab_version TEXT,
+            command       TEXT NOT NULL,
+            subcommand    TEXT,
+            flags         TEXT,
+            duration_ms   REAL,
+            exit_code     INTEGER,
+            success       INTEGER,
+            is_ci         INTEGER DEFAULT 0,
+            ci_provider   TEXT,
+            timestamp     TEXT NOT NULL,
+            synced        INTEGER DEFAULT 0
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE skill_events (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            command_event_id INTEGER,
+            install_uuid     TEXT NOT NULL,
+            skill_name       TEXT,
+            skill_version    TEXT,
+            skill_source     TEXT,
+            skill_path       TEXT,
+            score            REAL,
+            model_name       TEXT,
+            input_tokens     INTEGER,
+            output_tokens    INTEGER,
+            step_count       INTEGER,
+            tool_call_count  INTEGER,
+            execution_time_ms REAL,
+            success          INTEGER,
+            timestamp        TEXT NOT NULL,
+            synced           INTEGER DEFAULT 0
         )
     """)
     conn.commit()
@@ -79,29 +120,29 @@ def _insert(
     timestamp: str | None = None,
     skill_path: str | None = None,
 ) -> None:
+    ts = timestamp or _ts()
     conn.execute(
         """
-        INSERT INTO events
-            (user_uuid, command, duration_ms, exit_code,
-             sklab_version, platform, python_version, timestamp,
-             skill_name, score, input_tokens, skill_path)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO command_events
+            (install_uuid, session_uuid, sklab_version, command,
+             duration_ms, exit_code, success, timestamp, synced)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
         """,
-        (
-            "test-uuid",
-            command,
-            100.0,
-            0,
-            sklab_version,
-            "Darwin",
-            "3.12",
-            timestamp or _ts(),
-            skill_name,
-            score,
-            input_tokens,
-            skill_path,
-        ),
+        ("test-uuid", "test-session", sklab_version, command, 100.0, 0, 1, ts),
     )
+    cmd_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+    has_skill_data = any(v is not None for v in (skill_name, score, input_tokens, skill_path))
+    if has_skill_data:
+        conn.execute(
+            """
+            INSERT INTO skill_events
+                (command_event_id, install_uuid, skill_name, score, input_tokens,
+                 skill_path, timestamp, synced)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+            """,
+            (cmd_id, "test-uuid", skill_name, score, input_tokens, skill_path, ts),
+        )
     conn.commit()
 
 
@@ -173,8 +214,12 @@ class TestGetOverviewStats:
 
     def test_detects_old_data(self, tmp_db: Path) -> None:
         conn = _create_db(tmp_db)
-        # Simulate old-style evaluate row without skill_name
-        _insert(conn, "evaluate", skill_name=None, score=None)
+        # Simulate old-style row in the legacy events table (skill_name IS NULL)
+        conn.execute(
+            "INSERT INTO events (user_uuid, command, timestamp) VALUES (?, ?, ?)",
+            ("test-uuid", "evaluate", _ts()),
+        )
+        conn.commit()
         result = get_overview_stats()
         assert result is not None
         assert result.has_old_data is True
