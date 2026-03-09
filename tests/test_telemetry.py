@@ -157,12 +157,16 @@ class TestDetectCI:
         assert provider == "github_actions"
 
     def test_gitlab_ci_detected(self, monkeypatch):
+        for var in telemetry_module._CI_PROVIDERS:
+            monkeypatch.delenv(var, raising=False)
         monkeypatch.setenv("GITLAB_CI", "true")
         is_ci, provider = _detect_ci()
         assert is_ci is True
         assert provider == "gitlab_ci"
 
     def test_circleci_detected(self, monkeypatch):
+        for var in telemetry_module._CI_PROVIDERS:
+            monkeypatch.delenv(var, raising=False)
         monkeypatch.setenv("CIRCLECI", "true")
         is_ci, provider = _detect_ci()
         assert is_ci is True
@@ -184,30 +188,40 @@ class TestDetectCI:
         assert is_ci is True
 
     def test_buildkite_detected(self, monkeypatch):
+        for var in telemetry_module._CI_PROVIDERS:
+            monkeypatch.delenv(var, raising=False)
         monkeypatch.setenv("BUILDKITE", "true")
         is_ci, provider = _detect_ci()
         assert is_ci is True
         assert provider == "buildkite"
 
     def test_azure_pipelines_detected(self, monkeypatch):
+        for var in telemetry_module._CI_PROVIDERS:
+            monkeypatch.delenv(var, raising=False)
         monkeypatch.setenv("TF_BUILD", "True")
         is_ci, provider = _detect_ci()
         assert is_ci is True
         assert provider == "azure_pipelines"
 
     def test_travis_detected(self, monkeypatch):
+        for var in telemetry_module._CI_PROVIDERS:
+            monkeypatch.delenv(var, raising=False)
         monkeypatch.setenv("TRAVIS", "true")
         is_ci, provider = _detect_ci()
         assert is_ci is True
         assert provider == "travis"
 
     def test_jenkins_detected(self, monkeypatch):
+        for var in telemetry_module._CI_PROVIDERS:
+            monkeypatch.delenv(var, raising=False)
         monkeypatch.setenv("JENKINS_URL", "http://jenkins.example.com/")
         is_ci, provider = _detect_ci()
         assert is_ci is True
         assert provider == "jenkins"
 
     def test_bitbucket_detected(self, monkeypatch):
+        for var in telemetry_module._CI_PROVIDERS:
+            monkeypatch.delenv(var, raising=False)
         monkeypatch.setenv("BITBUCKET_BUILD_NUMBER", "42")
         is_ci, provider = _detect_ci()
         assert is_ci is True
@@ -586,6 +600,9 @@ class TestRecordEvent:
 
     def test_ci_fields_written_to_command_events(self, tmp_telemetry, monkeypatch):
         self._enable(tmp_telemetry, monkeypatch)
+        import skill_lab.core.telemetry as _tel
+        for var in _tel._CI_PROVIDERS:
+            monkeypatch.delenv(var, raising=False)
         monkeypatch.setenv("CIRCLECI", "true")
         record_event("evaluate", 10.0, 0)
 

@@ -228,6 +228,7 @@ class TestInitHooksOnFirstRun:
         """Reset the process-level _hooks_initialized flag between tests."""
         import skill_lab.core.setup as setup_module
         monkeypatch.setattr(setup_module, "_hooks_initialized", False)
+        monkeypatch.delenv("CI", raising=False)
 
     @pytest.fixture()
     def tmp_sklab(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
