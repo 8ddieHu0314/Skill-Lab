@@ -171,10 +171,10 @@ def get_stats_count(
     if not Path(SKLAB_DB).exists():
         return label, []
 
-    path_clause = "AND se.skill_path LIKE ?" if repo_root else ""
+    path_clause = "AND REPLACE(se.skill_path, char(92), '/') LIKE ?" if repo_root else ""
     params: list[object] = [_current_ym()]
     if repo_root:
-        params.append(str(repo_root).rstrip("/") + "/%")
+        params.append(repo_root.as_posix().rstrip("/") + "/%")
 
     with _conn() as conn:
         rows = conn.execute(
@@ -208,8 +208,8 @@ def get_stats_score(
     if not Path(SKLAB_DB).exists():
         return []
 
-    path_clause = "AND skill_path LIKE ?" if repo_root else ""
-    path_param = [str(repo_root).rstrip("/") + "/%"] if repo_root else []
+    path_clause = "AND REPLACE(skill_path, char(92), '/') LIKE ?" if repo_root else ""
+    path_param = [repo_root.as_posix().rstrip("/") + "/%"] if repo_root else []
 
     with _conn() as conn:
         skill_ids = conn.execute(
@@ -267,10 +267,10 @@ def get_stats_tokens(
     if not Path(SKLAB_DB).exists():
         return label, []
 
-    path_clause = "AND se.skill_path LIKE ?" if repo_root else ""
+    path_clause = "AND REPLACE(se.skill_path, char(92), '/') LIKE ?" if repo_root else ""
     params: list[object] = [_current_ym()]
     if repo_root:
-        params.append(str(repo_root).rstrip("/") + "/%")
+        params.append(repo_root.as_posix().rstrip("/") + "/%")
 
     with _conn() as conn:
         rows = conn.execute(
