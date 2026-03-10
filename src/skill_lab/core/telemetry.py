@@ -16,6 +16,7 @@ import threading
 import urllib.error
 import urllib.request
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
@@ -23,6 +24,7 @@ from skill_lab import __version__
 from skill_lab.core.constants import SKLAB_CONFIG, SKLAB_DB, SKLAB_HOME
 
 _TELEMETRY_ENDPOINT = "https://api.skill-lab.dev/v1/events"
+_RETENTION_DAYS = 90
 
 _FIRST_RUN_NOTICE = (
     "sklab collects anonymous usage data (command names, flags, duration, exit codes, "
@@ -401,6 +403,7 @@ def record_event(
                     ),
                 )
 
+        _maybe_cleanup()
         _sync_to_endpoint()
         return command_event_id
 
@@ -504,8 +507,46 @@ def _sync_to_endpoint() -> None:
     t.start()
 
 
+def _mark_synced(
+    conn: sqlite3.Connection,
+    install_uuids: list[str],
+    cmd_ids: list[int],
+    skill_ids: list[int],
+    error_ids: list[int],
+) -> None:
+    """Mark rows as synced=1 in all four tables."""
+    if install_uuids:
+        placeholders = ",".join("?" * len(install_uuids))
+        conn.execute(
+            f"UPDATE installs SET synced = 1 WHERE install_uuid IN ({placeholders})",
+            install_uuids,
+        )
+    if cmd_ids:
+        placeholders = ",".join("?" * len(cmd_ids))
+        conn.execute(
+            f"UPDATE command_events SET synced = 1 WHERE id IN ({placeholders})",
+            cmd_ids,
+        )
+    if skill_ids:
+        placeholders = ",".join("?" * len(skill_ids))
+        conn.execute(
+            f"UPDATE skill_events SET synced = 1 WHERE id IN ({placeholders})",
+            skill_ids,
+        )
+    if error_ids:
+        placeholders = ",".join("?" * len(error_ids))
+        conn.execute(
+            f"UPDATE error_events SET synced = 1 WHERE id IN ({placeholders})",
+            error_ids,
+        )
+
+
 def _do_sync() -> None:
-    """POST all unsynced rows to the telemetry endpoint and mark them synced=1 on success."""
+    """POST unsynced rows to telemetry endpoint (fire-and-forget).
+
+    Rows are always marked synced=1 regardless of POST success/failure.
+    Set SKLAB_TELEMETRY_DEBUG=1 to print payload to stderr and skip POST.
+    """
     try:
         with sqlite3.connect(SKLAB_DB) as conn:
             install_rows = conn.execute(
@@ -525,12 +566,12 @@ def _do_sync() -> None:
                 """
             ).fetchall()
 
-            # skill_path excluded — local only, never synced to Supabase
+            # skill_path, skill_name, skill_version, skill_source excluded — local only
             skill_rows = conn.execute(
                 """
-                SELECT id, command_event_id, install_uuid, skill_name, skill_version,
-                       skill_source, score, model_name, input_tokens, output_tokens,
-                       step_count, tool_call_count, execution_time_ms, success, timestamp
+                SELECT id, command_event_id, install_uuid, score, model_name,
+                       input_tokens, output_tokens, step_count, tool_call_count,
+                       execution_time_ms, success, timestamp
                 FROM skill_events WHERE synced = 0
                 """
             ).fetchall()
@@ -545,6 +586,12 @@ def _do_sync() -> None:
 
             if not (install_rows or cmd_rows or skill_rows or error_rows):
                 return
+
+            # Collect IDs before POST attempt
+            install_uuids = [r[0] for r in install_rows]
+            cmd_ids = [r[0] for r in cmd_rows]
+            skill_ids = [r[0] for r in skill_rows]
+            error_ids = [r[0] for r in error_rows]
 
             payload = {
                 "installs": [
@@ -584,18 +631,15 @@ def _do_sync() -> None:
                         "id": r[0],
                         "command_event_id": r[1],
                         "install_uuid": r[2],
-                        "skill_name": r[3],
-                        "skill_version": r[4],
-                        "skill_source": r[5],
-                        "score": r[6],
-                        "model_name": r[7],
-                        "input_tokens": r[8],
-                        "output_tokens": r[9],
-                        "step_count": r[10],
-                        "tool_call_count": r[11],
-                        "execution_time_ms": r[12],
-                        "success": r[13],
-                        "timestamp": r[14],
+                        "score": r[3],
+                        "model_name": r[4],
+                        "input_tokens": r[5],
+                        "output_tokens": r[6],
+                        "step_count": r[7],
+                        "tool_call_count": r[8],
+                        "execution_time_ms": r[9],
+                        "success": r[10],
+                        "timestamp": r[11],
                     }
                     for r in skill_rows
                 ],
@@ -614,44 +658,190 @@ def _do_sync() -> None:
                 ],
             }
 
-            data = json.dumps(payload).encode()
-            req = urllib.request.Request(
-                _TELEMETRY_ENDPOINT,
-                data=data,
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-            urllib.request.urlopen(req, timeout=3)
-
-            # Mark all synced rows
-            if install_rows:
-                install_uuids = [r[0] for r in install_rows]
-                placeholders = ",".join("?" * len(install_uuids))
-                conn.execute(
-                    f"UPDATE installs SET synced = 1 WHERE install_uuid IN ({placeholders})",
-                    install_uuids,
-                )
-            if cmd_rows:
-                cmd_ids = [r[0] for r in cmd_rows]
-                placeholders = ",".join("?" * len(cmd_ids))
-                conn.execute(
-                    f"UPDATE command_events SET synced = 1 WHERE id IN ({placeholders})",
-                    cmd_ids,
-                )
-            if skill_rows:
-                skill_ids = [r[0] for r in skill_rows]
-                placeholders = ",".join("?" * len(skill_ids))
-                conn.execute(
-                    f"UPDATE skill_events SET synced = 1 WHERE id IN ({placeholders})",
-                    skill_ids,
-                )
-            if error_rows:
-                error_ids = [r[0] for r in error_rows]
-                placeholders = ",".join("?" * len(error_ids))
-                conn.execute(
-                    f"UPDATE error_events SET synced = 1 WHERE id IN ({placeholders})",
-                    error_ids,
-                )
+            try:
+                if os.environ.get("SKLAB_TELEMETRY_DEBUG", "").strip() == "1":
+                    print(json.dumps(payload, indent=2), file=sys.stderr)  # noqa: T201
+                else:
+                    data = json.dumps(payload).encode()
+                    req = urllib.request.Request(
+                        _TELEMETRY_ENDPOINT,
+                        data=data,
+                        headers={"Content-Type": "application/json"},
+                        method="POST",
+                    )
+                    urllib.request.urlopen(req, timeout=3)
+            except Exception:
+                pass  # fire-and-forget — accept data loss on failure
+            finally:
+                _mark_synced(conn, install_uuids, cmd_ids, skill_ids, error_ids)
 
     except Exception:
-        pass  # Offline or endpoint unavailable — rows stay unsynced, retry next run
+        pass  # DB unavailable — silently skip
+
+
+# ─── Retention / Cleanup ─────────────────────────────────────────────────────
+
+
+def cleanup_old_data() -> int:
+    """Delete rows older than _RETENTION_DAYS from all tables. Returns count deleted."""
+    if not SKLAB_DB.exists():
+        return 0
+    try:
+        from datetime import timedelta
+
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=_RETENTION_DAYS)).isoformat()
+        total = 0
+        with sqlite3.connect(SKLAB_DB) as conn:
+            for table, ts_col in [
+                ("events", "timestamp"),
+                ("installs", "last_seen_at"),
+                ("command_events", "timestamp"),
+                ("skill_events", "timestamp"),
+                ("error_events", "timestamp"),
+            ]:
+                # Table may not exist if DB is from an older version
+                with contextlib.suppress(sqlite3.OperationalError):
+                    cur = conn.execute(
+                        f"DELETE FROM {table} WHERE {ts_col} < ?",
+                        (cutoff,),  # noqa: S608
+                    )
+                    total += cur.rowcount
+        return total
+    except Exception:
+        return 0
+
+
+def purge_all_data() -> bool:
+    """Delete the entire usage.db file. Returns True on success."""
+    try:
+        if SKLAB_DB.exists():
+            SKLAB_DB.unlink()
+        return True
+    except Exception:
+        return False
+
+
+def _maybe_cleanup() -> None:
+    """Run cleanup_old_data at most once per day, throttled via config.json."""
+    try:
+        from datetime import date
+
+        config = _read_config()
+        last_cleanup = config.get("last_cleanup", "")
+        if last_cleanup:
+            try:
+                last_date = date.fromisoformat(last_cleanup[:10])
+                if last_date >= date.today():
+                    return
+            except Exception:
+                pass
+        cleanup_old_data()
+        config["last_cleanup"] = datetime.now(timezone.utc).isoformat()
+        _write_config(config)
+    except Exception:
+        pass
+
+
+# ─── Public API for `sklab telemetry` commands ───────────────────────────────
+
+
+def enable_telemetry() -> None:
+    """Enable telemetry and persist to config."""
+    global _analytics_enabled
+    config = _read_config()
+    config["analytics_enabled"] = True
+    if "user_uuid" not in config:
+        config["user_uuid"] = str(uuid.uuid4())
+    _write_config(config)
+    _analytics_enabled = True
+
+
+def disable_telemetry() -> None:
+    """Disable telemetry and persist to config."""
+    global _analytics_enabled
+    config = _read_config()
+    config["analytics_enabled"] = False
+    _write_config(config)
+    _analytics_enabled = False
+
+
+def get_telemetry_status() -> dict[str, Any]:
+    """Return telemetry status: enabled state, env overrides, row counts, paths."""
+    config = _read_config()
+    enabled = bool(config.get("analytics_enabled", False))
+
+    env_override: str | None = None
+    if os.environ.get("SKLAB_NO_ANALYTICS", "").strip() == "1":
+        env_override = "SKLAB_NO_ANALYTICS=1"
+        enabled = False
+    elif os.environ.get("DO_NOT_TRACK", "").strip() == "1":
+        env_override = "DO_NOT_TRACK=1"
+        enabled = False
+
+    row_counts: dict[str, int] = {}
+    db_size_bytes = 0
+    if SKLAB_DB.exists():
+        db_size_bytes = SKLAB_DB.stat().st_size
+        try:
+            with sqlite3.connect(SKLAB_DB) as conn:
+                for table in ("installs", "command_events", "skill_events", "error_events"):
+                    with contextlib.suppress(sqlite3.OperationalError):
+                        count: int = conn.execute(
+                            f"SELECT COUNT(*) FROM {table}"  # noqa: S608
+                        ).fetchone()[0]
+                        row_counts[table] = count
+        except Exception:
+            pass
+
+    return {
+        "enabled": enabled,
+        "env_override": env_override,
+        "db_path": str(SKLAB_DB),
+        "db_exists": SKLAB_DB.exists(),
+        "db_size_bytes": db_size_bytes,
+        "row_counts": row_counts,
+    }
+
+
+@dataclass(frozen=True)
+class TelemetryEvent:
+    """A single telemetry event for display."""
+
+    timestamp: str
+    command: str
+    duration_ms: float | None
+    skill_name: str | None
+    score: float | None
+    synced: bool
+
+
+def get_recent_events(limit: int = 20) -> list[TelemetryEvent]:
+    """Return recent events by LEFT JOINing command_events with skill_events."""
+    if not SKLAB_DB.exists():
+        return []
+    try:
+        with sqlite3.connect(SKLAB_DB) as conn:
+            rows = conn.execute(
+                """
+                SELECT c.timestamp, c.command, c.duration_ms,
+                       s.skill_name, s.score, c.synced
+                FROM command_events c
+                LEFT JOIN skill_events s ON s.command_event_id = c.id
+                ORDER BY c.timestamp DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [
+            TelemetryEvent(
+                timestamp=r[0],
+                command=r[1],
+                duration_ms=r[2],
+                skill_name=r[3],
+                score=r[4],
+                synced=bool(r[5]),
+            )
+            for r in rows
+        ]
+    except Exception:
+        return []

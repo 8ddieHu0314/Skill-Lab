@@ -431,6 +431,14 @@ sklab stats count             # Table: skill name | use count | tokens used (cur
 sklab stats score             # Table: skill name | current score | baseline score | delta
 sklab stats tokens            # Table: skill name | tokens/invocation | total tokens (current month)
 
+# Telemetry management
+sklab telemetry               # Show status (same as status)
+sklab telemetry enable        # Enable analytics
+sklab telemetry disable       # Disable analytics
+sklab telemetry status        # Rich panel: enabled/disabled, env overrides, DB path, row counts
+sklab telemetry purge         # Delete local usage.db (with confirmation)
+sklab telemetry show [-n N] [--json]  # View recent events as table or JSON
+
 # One-time hook setup for invocation tracking (v0.5.0)
 sklab setup
 ```
@@ -635,7 +643,10 @@ scenarios:
 | **T \| None over Optional[T]** | Python 3.10+ union syntax for cleaner, more readable type annotations |
 | **NFKC Unicode normalization** | Naming check normalizes both sides with `unicodedata.normalize("NFKC", ...)` so precomposed/decomposed forms match |
 | **Custom YAML loader** | `_SkillYAMLLoader` prevents `yes`→`True`, `null`→`None` coercion; values stay as strings |
-| **Fire-and-forget telemetry** | All network calls (Supabase sync, PyPI version check) use `timeout=2-3s` and swallow all exceptions — a network failure never crashes the CLI |
+| **Fire-and-forget telemetry** | All network calls (Supabase sync, PyPI version check) use `timeout=2-3s` and swallow all exceptions — a network failure never crashes the CLI. Sync marks rows as synced=1 regardless of POST success (no retry accumulation). |
+| **Local-only sensitive fields** | `skill_path`, `skill_name`, `skill_version`, `skill_source` are stored locally but excluded from server sync payloads |
+| **90-day retention** | Local telemetry rows older than 90 days are auto-deleted (throttled to once/day). `sklab telemetry purge` for immediate wipe. |
+| **Telemetry debug mode** | `SKLAB_TELEMETRY_DEBUG=1` prints the JSON payload to stderr and skips the POST — allows users to audit exactly what would be sent |
 | **Telemetry independent of analytics opt-in** | PyPI version update checks run regardless of whether the user opted into analytics |
 
 ---
