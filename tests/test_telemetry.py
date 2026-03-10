@@ -1,4 +1,5 @@
 """Comprehensive unit tests for skill_lab.core.telemetry."""
+
 import json
 import os
 import sqlite3
@@ -150,27 +151,36 @@ class TestDetectCI:
         assert is_ci is False
         assert provider is None
 
-    def test_github_actions_detected(self, monkeypatch):
-        monkeypatch.setenv("GITHUB_ACTIONS", "true")
-        is_ci, provider = _detect_ci()
-        assert is_ci is True
-        assert provider == "github_actions"
-
-    def test_gitlab_ci_detected(self, monkeypatch):
+    @pytest.mark.parametrize(
+        "env_var, env_value, expected_provider",
+        [
+            ("GITHUB_ACTIONS", "true", "github_actions"),
+            ("GITLAB_CI", "true", "gitlab_ci"),
+            ("CIRCLECI", "true", "circleci"),
+            ("BUILDKITE", "true", "buildkite"),
+            ("TF_BUILD", "True", "azure_pipelines"),
+            ("TRAVIS", "true", "travis"),
+            ("JENKINS_URL", "http://jenkins.example.com/", "jenkins"),
+            ("BITBUCKET_BUILD_NUMBER", "42", "bitbucket"),
+        ],
+        ids=[
+            "github-actions",
+            "gitlab-ci",
+            "circleci",
+            "buildkite",
+            "azure-pipelines",
+            "travis",
+            "jenkins",
+            "bitbucket",
+        ],
+    )
+    def test_ci_provider_detected(self, monkeypatch, env_var, env_value, expected_provider):
         for var in telemetry_module._CI_PROVIDERS:
             monkeypatch.delenv(var, raising=False)
-        monkeypatch.setenv("GITLAB_CI", "true")
+        monkeypatch.setenv(env_var, env_value)
         is_ci, provider = _detect_ci()
         assert is_ci is True
-        assert provider == "gitlab_ci"
-
-    def test_circleci_detected(self, monkeypatch):
-        for var in telemetry_module._CI_PROVIDERS:
-            monkeypatch.delenv(var, raising=False)
-        monkeypatch.setenv("CIRCLECI", "true")
-        is_ci, provider = _detect_ci()
-        assert is_ci is True
-        assert provider == "circleci"
+        assert provider == expected_provider
 
     def test_generic_ci_env_no_provider(self, monkeypatch):
         for var in telemetry_module._CI_PROVIDERS:
@@ -186,46 +196,6 @@ class TestDetectCI:
         monkeypatch.setenv("CI", "TRUE")
         is_ci, provider = _detect_ci()
         assert is_ci is True
-
-    def test_buildkite_detected(self, monkeypatch):
-        for var in telemetry_module._CI_PROVIDERS:
-            monkeypatch.delenv(var, raising=False)
-        monkeypatch.setenv("BUILDKITE", "true")
-        is_ci, provider = _detect_ci()
-        assert is_ci is True
-        assert provider == "buildkite"
-
-    def test_azure_pipelines_detected(self, monkeypatch):
-        for var in telemetry_module._CI_PROVIDERS:
-            monkeypatch.delenv(var, raising=False)
-        monkeypatch.setenv("TF_BUILD", "True")
-        is_ci, provider = _detect_ci()
-        assert is_ci is True
-        assert provider == "azure_pipelines"
-
-    def test_travis_detected(self, monkeypatch):
-        for var in telemetry_module._CI_PROVIDERS:
-            monkeypatch.delenv(var, raising=False)
-        monkeypatch.setenv("TRAVIS", "true")
-        is_ci, provider = _detect_ci()
-        assert is_ci is True
-        assert provider == "travis"
-
-    def test_jenkins_detected(self, monkeypatch):
-        for var in telemetry_module._CI_PROVIDERS:
-            monkeypatch.delenv(var, raising=False)
-        monkeypatch.setenv("JENKINS_URL", "http://jenkins.example.com/")
-        is_ci, provider = _detect_ci()
-        assert is_ci is True
-        assert provider == "jenkins"
-
-    def test_bitbucket_detected(self, monkeypatch):
-        for var in telemetry_module._CI_PROVIDERS:
-            monkeypatch.delenv(var, raising=False)
-        monkeypatch.setenv("BITBUCKET_BUILD_NUMBER", "42")
-        is_ci, provider = _detect_ci()
-        assert is_ci is True
-        assert provider == "bitbucket"
 
     def test_ci_equals_1_not_detected(self, monkeypatch):
         """CI=1 is NOT detected — only CI=true matches the generic fallback."""
@@ -274,9 +244,7 @@ class TestUpsertInstall:
         record_event("evaluate", 100.0, 0)
 
         conn = sqlite3.connect(tmp_telemetry["db"])
-        row = conn.execute(
-            "SELECT install_uuid, run_count, is_ci FROM installs"
-        ).fetchone()
+        row = conn.execute("SELECT install_uuid, run_count, is_ci FROM installs").fetchone()
         conn.close()
 
         assert row is not None
@@ -357,6 +325,7 @@ class TestUpsertInstall:
         conn.close()
 
         from skill_lab import __version__
+
         assert ver == __version__
 
 
@@ -399,10 +368,7 @@ class TestRecordEvent:
 
         conn = sqlite3.connect(tmp_telemetry["db"])
         cmds = [
-            r[0]
-            for r in conn.execute(
-                "SELECT command FROM command_events ORDER BY id"
-            ).fetchall()
+            r[0] for r in conn.execute("SELECT command FROM command_events ORDER BY id").fetchall()
         ]
         conn.close()
 
@@ -413,9 +379,7 @@ class TestRecordEvent:
         record_event("info", 10.0, 0)
 
         conn = sqlite3.connect(tmp_telemetry["db"])
-        row = conn.execute(
-            "SELECT sklab_version, session_uuid FROM command_events"
-        ).fetchone()
+        row = conn.execute("SELECT sklab_version, session_uuid FROM command_events").fetchone()
         conn.close()
 
         sklab_ver, sess_uuid = row
@@ -438,9 +402,7 @@ class TestRecordEvent:
         record_event("validate", 10.0, 1)
 
         conn = sqlite3.connect(tmp_telemetry["db"])
-        rows = conn.execute(
-            "SELECT success FROM command_events ORDER BY id"
-        ).fetchall()
+        rows = conn.execute("SELECT success FROM command_events ORDER BY id").fetchall()
         conn.close()
 
         assert rows[0][0] == 1
@@ -485,9 +447,7 @@ class TestRecordEvent:
     def test_exception_is_swallowed(self, tmp_telemetry, monkeypatch):
         """record_event must never raise, even when the DB path is invalid."""
         monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
-        monkeypatch.setattr(
-            telemetry_module, "SKLAB_DB", Path("/nonexistent/path/usage.db")
-        )
+        monkeypatch.setattr(telemetry_module, "SKLAB_DB", Path("/nonexistent/path/usage.db"))
         # Should not raise
         record_event("evaluate", 50.0, 0)
 
@@ -544,7 +504,8 @@ class TestRecordEvent:
 
         conn = sqlite3.connect(tmp_telemetry["db"])
         uuids = [
-            r[0] for r in conn.execute("SELECT session_uuid FROM command_events ORDER BY id").fetchall()
+            r[0]
+            for r in conn.execute("SELECT session_uuid FROM command_events ORDER BY id").fetchall()
         ]
         conn.close()
 
@@ -556,7 +517,9 @@ class TestRecordEvent:
         """Every skill field passed to record_event is written to skill_events."""
         self._enable(tmp_telemetry, monkeypatch)
         record_event(
-            "skill-invoke", 0.0, 0,
+            "skill-invoke",
+            0.0,
+            0,
             skill_name="my-skill",
             skill_version="1.2.0",
             skill_source="local",
@@ -601,6 +564,7 @@ class TestRecordEvent:
     def test_ci_fields_written_to_command_events(self, tmp_telemetry, monkeypatch):
         self._enable(tmp_telemetry, monkeypatch)
         import skill_lab.core.telemetry as _tel
+
         for var in _tel._CI_PROVIDERS:
             monkeypatch.delenv(var, raising=False)
         monkeypatch.setenv("CIRCLECI", "true")
@@ -632,9 +596,7 @@ class TestRecordError:
         record_error(exc, "evaluate", command_event_id=1)
 
         conn = sqlite3.connect(tmp_telemetry["db"])
-        row = conn.execute(
-            "SELECT error_type, error_module, command FROM error_events"
-        ).fetchone()
+        row = conn.execute("SELECT error_type, error_module, command FROM error_events").fetchone()
         conn.close()
 
         assert row[0] == "ValueError"
@@ -656,9 +618,7 @@ class TestRecordError:
         record_error(exc, "evaluate", command_event_id=cmd_id)
 
         conn = sqlite3.connect(tmp_telemetry["db"])
-        stored_id = conn.execute(
-            "SELECT command_event_id FROM error_events"
-        ).fetchone()[0]
+        stored_id = conn.execute("SELECT command_event_id FROM error_events").fetchone()[0]
         conn.close()
 
         assert stored_id == cmd_id
@@ -671,9 +631,7 @@ class TestRecordError:
         record_error(exc, "evaluate")
 
         conn = sqlite3.connect(tmp_telemetry["db"])
-        row = conn.execute(
-            "SELECT error_type, error_module FROM error_events"
-        ).fetchone()
+        row = conn.execute("SELECT error_type, error_module FROM error_events").fetchone()
         conn.close()
 
         # Only the class name, no message content
@@ -684,9 +642,7 @@ class TestRecordError:
     def test_error_swallowed_on_exception(self, tmp_telemetry, monkeypatch):
         """record_error must never raise."""
         monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
-        monkeypatch.setattr(
-            telemetry_module, "SKLAB_DB", Path("/nonexistent/path/usage.db")
-        )
+        monkeypatch.setattr(telemetry_module, "SKLAB_DB", Path("/nonexistent/path/usage.db"))
         exc = RuntimeError("oops")
         # Should not raise
         record_error(exc, "evaluate")
@@ -800,17 +756,32 @@ class TestFlagCapture:
 
 
 class TestInitTelemetry:
-    def test_no_analytics_env_returns_false(self, tmp_telemetry, monkeypatch):
-        monkeypatch.setenv("SKLAB_NO_ANALYTICS", "1")
+    @pytest.mark.parametrize(
+        "env_var", ["SKLAB_NO_ANALYTICS", "DO_NOT_TRACK"], ids=["no-analytics", "do-not-track"]
+    )
+    def test_env_block_returns_false(self, tmp_telemetry, monkeypatch, env_var):
+        monkeypatch.delenv("SKLAB_NO_ANALYTICS", raising=False)
+        monkeypatch.delenv("DO_NOT_TRACK", raising=False)
+        monkeypatch.setenv(env_var, "1")
         assert init_telemetry() is False
 
-    def test_no_analytics_env_caches_false(self, tmp_telemetry, monkeypatch):
-        monkeypatch.setenv("SKLAB_NO_ANALYTICS", "1")
+    @pytest.mark.parametrize(
+        "env_var", ["SKLAB_NO_ANALYTICS", "DO_NOT_TRACK"], ids=["no-analytics", "do-not-track"]
+    )
+    def test_env_block_caches_false(self, tmp_telemetry, monkeypatch, env_var):
+        monkeypatch.delenv("SKLAB_NO_ANALYTICS", raising=False)
+        monkeypatch.delenv("DO_NOT_TRACK", raising=False)
+        monkeypatch.setenv(env_var, "1")
         init_telemetry()
         assert telemetry_module._analytics_enabled is False
 
-    def test_no_analytics_env_with_whitespace(self, tmp_telemetry, monkeypatch):
-        monkeypatch.setenv("SKLAB_NO_ANALYTICS", " 1 ")
+    @pytest.mark.parametrize(
+        "env_var", ["SKLAB_NO_ANALYTICS", "DO_NOT_TRACK"], ids=["no-analytics", "do-not-track"]
+    )
+    def test_env_block_with_whitespace(self, tmp_telemetry, monkeypatch, env_var):
+        monkeypatch.delenv("SKLAB_NO_ANALYTICS", raising=False)
+        monkeypatch.delenv("DO_NOT_TRACK", raising=False)
+        monkeypatch.setenv(env_var, " 1 ")
         assert init_telemetry() is False
 
     def test_no_analytics_env_value_zero_does_not_block(self, tmp_telemetry, monkeypatch):
@@ -875,27 +846,14 @@ class TestInitTelemetry:
     def test_first_run_notice_exception_still_enables(self, tmp_telemetry, monkeypatch):
         monkeypatch.delenv("SKLAB_NO_ANALYTICS", raising=False)
         monkeypatch.delenv("DO_NOT_TRACK", raising=False)
-        with patch("sys.stdout.isatty", return_value=True), patch("typer.echo", side_effect=Exception("no tty")):
+        with (
+            patch("sys.stdout.isatty", return_value=True),
+            patch("typer.echo", side_effect=Exception("no tty")),
+        ):
             result = init_telemetry()
         assert result is True
 
     # ── DO_NOT_TRACK ──────────────────────────────────────────────────────────
-
-    def test_do_not_track_returns_false(self, tmp_telemetry, monkeypatch):
-        monkeypatch.delenv("SKLAB_NO_ANALYTICS", raising=False)
-        monkeypatch.setenv("DO_NOT_TRACK", "1")
-        assert init_telemetry() is False
-
-    def test_do_not_track_caches_false(self, tmp_telemetry, monkeypatch):
-        monkeypatch.delenv("SKLAB_NO_ANALYTICS", raising=False)
-        monkeypatch.setenv("DO_NOT_TRACK", "1")
-        init_telemetry()
-        assert telemetry_module._analytics_enabled is False
-
-    def test_do_not_track_with_whitespace(self, tmp_telemetry, monkeypatch):
-        monkeypatch.delenv("SKLAB_NO_ANALYTICS", raising=False)
-        monkeypatch.setenv("DO_NOT_TRACK", " 1 ")
-        assert init_telemetry() is False
 
     def test_do_not_track_zero_does_not_block(self, tmp_telemetry, monkeypatch):
         monkeypatch.delenv("SKLAB_NO_ANALYTICS", raising=False)
@@ -970,17 +928,19 @@ class TestCheckForUpdate:
 
     def test_caches_after_first_check_no_network_call(self, tmp_telemetry):
         with patch("urllib.request.urlopen", return_value=_pypi_mock("99.0.0")) as mock_open:
-            check_for_update()       # first call — hits network
+            check_for_update()  # first call — hits network
             mock_open.reset_mock()
             result = check_for_update()  # second call — should use cache
             mock_open.assert_not_called()
         assert result == "99.0.0"
 
     def test_stale_cache_triggers_new_network_call(self, tmp_telemetry):
-        _write_config({
-            "last_version_check": "2000-01-01T00:00:00+00:00",
-            "latest_version": "1.0.0",
-        })
+        _write_config(
+            {
+                "last_version_check": "2000-01-01T00:00:00+00:00",
+                "latest_version": "1.0.0",
+            }
+        )
         with patch("urllib.request.urlopen", return_value=_pypi_mock("99.0.0")) as mock_open:
             result = check_for_update()
             mock_open.assert_called_once()
@@ -1008,10 +968,12 @@ class TestCheckForUpdate:
         """Cache hit where cached version is NOT newer — should return None."""
         from datetime import datetime, timezone
 
-        _write_config({
-            "last_version_check": datetime.now(timezone.utc).isoformat(),
-            "latest_version": "0.0.1",
-        })
+        _write_config(
+            {
+                "last_version_check": datetime.now(timezone.utc).isoformat(),
+                "latest_version": "0.0.1",
+            }
+        )
         with patch("urllib.request.urlopen") as mock_open:
             result = check_for_update()
             mock_open.assert_not_called()  # served from cache
@@ -1030,9 +992,7 @@ class TestSyncToEndpoint:
 
             telemetry_module._sync_to_endpoint()
 
-            mock_thread_cls.assert_called_once_with(
-                target=telemetry_module._do_sync, daemon=True
-            )
+            mock_thread_cls.assert_called_once_with(target=telemetry_module._do_sync, daemon=True)
             mock_instance.start.assert_called_once()
 
     def test_returns_before_sync_completes(self):
@@ -1136,8 +1096,11 @@ class TestSyncToEndpoint:
         monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
         monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
         record_event(
-            "skill-invoke", 0.0, 0,
-            skill_name="test", skill_path="/home/user/projects/my-skill",
+            "skill-invoke",
+            0.0,
+            0,
+            skill_name="test",
+            skill_path="/home/user/projects/my-skill",
             input_tokens=500,
         )
 
@@ -1218,8 +1181,6 @@ class TestSyncToEndpoint:
             telemetry_module._do_sync()
 
         conn = sqlite3.connect(tmp_telemetry["db"])
-        unsynced = conn.execute(
-            "SELECT COUNT(*) FROM error_events WHERE synced = 0"
-        ).fetchone()[0]
+        unsynced = conn.execute("SELECT COUNT(*) FROM error_events WHERE synced = 0").fetchone()[0]
         conn.close()
         assert unsynced == 0

@@ -53,7 +53,9 @@ def make_skill(
     """Helper to create a Skill for testing."""
     return Skill(
         path=path or Path("/test/skill"),
-        metadata=SkillMetadata(name=name, description=description, raw={"name": name, "description": description}),
+        metadata=SkillMetadata(
+            name=name, description=description, raw={"name": name, "description": description}
+        ),
         body=body,
         has_scripts=False,
         has_references=False,
@@ -184,7 +186,15 @@ class TestNamingChecks:
     def test_name_format_valid(self):
         check = _get_check("naming.format")
         # Per spec: lowercase alphanumeric + hyphens, no start/end hyphen
-        for valid_name in ["my-skill", "skill123", "a", "creating-reports", "30daysresearch", "123", "1"]:
+        for valid_name in [
+            "my-skill",
+            "skill123",
+            "a",
+            "creating-reports",
+            "30daysresearch",
+            "123",
+            "1",
+        ]:
             skill = make_skill(name=valid_name)
             result = check.run(skill)
             assert result.passed, f"Expected '{valid_name}' to pass"
@@ -192,7 +202,14 @@ class TestNamingChecks:
     def test_name_format_invalid(self):
         check = _get_check("naming.format")
         # Invalid: uppercase, underscores, spaces, start/end with hyphen, consecutive hyphens
-        for invalid_name in ["My_Skill", "UPPERCASE", "spaces here", "-starts-with-hyphen", "ends-with-hyphen-", "has--consecutive-hyphens"]:
+        for invalid_name in [
+            "My_Skill",
+            "UPPERCASE",
+            "spaces here",
+            "-starts-with-hyphen",
+            "ends-with-hyphen-",
+            "has--consecutive-hyphens",
+        ]:
             skill = make_skill(name=invalid_name)
             result = check.run(skill)
             assert not result.passed, f"Expected '{invalid_name}' to fail"
@@ -253,13 +270,14 @@ class TestDescriptionChecks:
         assert not result.passed
 
 
-
 class TestContentChecks:
     """Tests for content checks."""
 
     def test_body_not_empty_pass(self):
         check = BodyNotEmptyCheck()
-        skill = make_skill(body="This is some meaningful content that is long enough to pass the minimum requirement.")
+        skill = make_skill(
+            body="This is some meaningful content that is long enough to pass the minimum requirement."
+        )
         result = check.run(skill)
         assert result.passed
 
@@ -662,112 +680,56 @@ class TestScriptChecks:
         result = ScriptsNoInteractiveCheck().run(skill)
         assert result.passed
 
-    def test_scripts_no_interactive_commented_python(self, tmp_path: Path):
+    @pytest.mark.parametrize(
+        "filename, content",
+        [
+            ("bad.py", "name = input('Enter name: ')\n"),
+            ("bad.sh", "#!/bin/bash\nread -p 'Name: ' name\n"),
+            ("bad.js", "const rl = readline.createInterface();\n"),
+            ("bad.rb", "name = gets.chomp\n"),
+            ("menu.sh", '#!/bin/bash\nselect opt in "a" "b"; do echo $opt; done\n'),
+            ("auth.py", "import getpass\npw = getpass.getpass('Password: ')\n"),
+            ("ask.rb", "line = STDIN.gets\n"),
+            ("read.js", "process.stdin.on('data', (d) => {});\n"),
+            ("ask.js", "const answer = prompt('Question?');\n"),
+        ],
+        ids=[
+            "python-input",
+            "shell-read",
+            "js-readline",
+            "ruby-gets",
+            "shell-select",
+            "python-getpass",
+            "ruby-stdin-gets",
+            "js-process-stdin",
+            "js-prompt",
+        ],
+    )
+    def test_scripts_no_interactive_fail(self, tmp_path: Path, filename: str, content: str):
         scripts = tmp_path / "scripts"
         scripts.mkdir()
-        (scripts / "ok.py").write_text("# input('this is a comment')\nprint('ok')\n")
+        (scripts / filename).write_text(content)
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsNoInteractiveCheck().run(skill)
+        assert not result.passed
+        assert filename in result.message
+
+    @pytest.mark.parametrize(
+        "filename, content",
+        [
+            ("ok.py", "# input('this is a comment')\nprint('ok')\n"),
+            ("ok.js", "// readline is not used\nconsole.log('ok');\n"),
+            ("ok.py", 'print("Create or select a project")\n'),
+        ],
+        ids=["commented-python", "commented-js", "python-select-no-false-positive"],
+    )
+    def test_scripts_no_interactive_pass(self, tmp_path: Path, filename: str, content: str):
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / filename).write_text(content)
         skill = _make_tmp_skill(tmp_path)
         result = ScriptsNoInteractiveCheck().run(skill)
         assert result.passed
-
-    def test_scripts_no_interactive_python_input(self, tmp_path: Path):
-        scripts = tmp_path / "scripts"
-        scripts.mkdir()
-        (scripts / "bad.py").write_text("name = input('Enter name: ')\n")
-        skill = _make_tmp_skill(tmp_path)
-        result = ScriptsNoInteractiveCheck().run(skill)
-        assert not result.passed
-        assert "bad.py" in result.message
-
-    def test_scripts_no_interactive_shell_read(self, tmp_path: Path):
-        scripts = tmp_path / "scripts"
-        scripts.mkdir()
-        (scripts / "bad.sh").write_text("#!/bin/bash\nread -p 'Name: ' name\n")
-        skill = _make_tmp_skill(tmp_path)
-        result = ScriptsNoInteractiveCheck().run(skill)
-        assert not result.passed
-        assert "bad.sh" in result.message
-
-    def test_scripts_no_interactive_js_readline(self, tmp_path: Path):
-        scripts = tmp_path / "scripts"
-        scripts.mkdir()
-        (scripts / "bad.js").write_text("const rl = readline.createInterface();\n")
-        skill = _make_tmp_skill(tmp_path)
-        result = ScriptsNoInteractiveCheck().run(skill)
-        assert not result.passed
-        assert "bad.js" in result.message
-
-    def test_scripts_no_interactive_ruby_gets(self, tmp_path: Path):
-        scripts = tmp_path / "scripts"
-        scripts.mkdir()
-        (scripts / "bad.rb").write_text("name = gets.chomp\n")
-        skill = _make_tmp_skill(tmp_path)
-        result = ScriptsNoInteractiveCheck().run(skill)
-        assert not result.passed
-        assert "bad.rb" in result.message
-
-    def test_scripts_no_interactive_commented_js(self, tmp_path: Path):
-        scripts = tmp_path / "scripts"
-        scripts.mkdir()
-        (scripts / "ok.js").write_text("// readline is not used\nconsole.log('ok');\n")
-        skill = _make_tmp_skill(tmp_path)
-        result = ScriptsNoInteractiveCheck().run(skill)
-        assert result.passed
-
-    def test_scripts_no_interactive_shell_select(self, tmp_path: Path):
-        """Shell 'select' builtin should be detected."""
-        scripts = tmp_path / "scripts"
-        scripts.mkdir()
-        (scripts / "menu.sh").write_text('#!/bin/bash\nselect opt in "a" "b"; do echo $opt; done\n')
-        skill = _make_tmp_skill(tmp_path)
-        result = ScriptsNoInteractiveCheck().run(skill)
-        assert not result.passed
-        assert "menu.sh" in result.message
-
-    def test_scripts_no_interactive_python_select_no_false_positive(self, tmp_path: Path):
-        """Python string containing 'select' should NOT trigger (language-specific patterns)."""
-        scripts = tmp_path / "scripts"
-        scripts.mkdir()
-        (scripts / "ok.py").write_text('print("Create or select a project")\n')
-        skill = _make_tmp_skill(tmp_path)
-        result = ScriptsNoInteractiveCheck().run(skill)
-        assert result.passed
-
-    def test_scripts_no_interactive_python_getpass(self, tmp_path: Path):
-        scripts = tmp_path / "scripts"
-        scripts.mkdir()
-        (scripts / "auth.py").write_text("import getpass\npw = getpass.getpass('Password: ')\n")
-        skill = _make_tmp_skill(tmp_path)
-        result = ScriptsNoInteractiveCheck().run(skill)
-        assert not result.passed
-        assert "auth.py" in result.message
-
-    def test_scripts_no_interactive_ruby_stdin_gets(self, tmp_path: Path):
-        scripts = tmp_path / "scripts"
-        scripts.mkdir()
-        (scripts / "ask.rb").write_text("line = STDIN.gets\n")
-        skill = _make_tmp_skill(tmp_path)
-        result = ScriptsNoInteractiveCheck().run(skill)
-        assert not result.passed
-        assert "ask.rb" in result.message
-
-    def test_scripts_no_interactive_js_process_stdin(self, tmp_path: Path):
-        scripts = tmp_path / "scripts"
-        scripts.mkdir()
-        (scripts / "read.js").write_text("process.stdin.on('data', (d) => {});\n")
-        skill = _make_tmp_skill(tmp_path)
-        result = ScriptsNoInteractiveCheck().run(skill)
-        assert not result.passed
-        assert "read.js" in result.message
-
-    def test_scripts_no_interactive_js_prompt(self, tmp_path: Path):
-        scripts = tmp_path / "scripts"
-        scripts.mkdir()
-        (scripts / "ask.js").write_text("const answer = prompt('Question?');\n")
-        skill = _make_tmp_skill(tmp_path)
-        result = ScriptsNoInteractiveCheck().run(skill)
-        assert not result.passed
-        assert "ask.js" in result.message
 
     # ── structure.scripts-self-contained ─────────────────────────────────
 
@@ -784,33 +746,26 @@ class TestScriptChecks:
         result = ScriptsSelfContainedCheck().run(skill)
         assert result.passed
 
-    def test_scripts_self_contained_fail_requirements(self, tmp_path: Path):
+    @pytest.mark.parametrize(
+        "manifest_file, manifest_content",
+        [
+            ("requirements.txt", "requests==2.31.0"),
+            ("package.json", '{"name": "scripts"}'),
+            ("Gemfile", "source 'https://rubygems.org'"),
+        ],
+        ids=["requirements-txt", "package-json", "gemfile"],
+    )
+    def test_scripts_self_contained_fail_manifest(
+        self, tmp_path: Path, manifest_file: str, manifest_content: str
+    ):
         scripts = tmp_path / "scripts"
         scripts.mkdir()
-        (scripts / "requirements.txt").write_text("requests==2.31.0")
+        (scripts / manifest_file).write_text(manifest_content)
         skill = _make_tmp_skill(tmp_path)
         result = ScriptsSelfContainedCheck().run(skill)
         assert not result.passed
         assert result.severity == Severity.INFO
-        assert "requirements.txt" in result.message
-
-    def test_scripts_self_contained_fail_package_json(self, tmp_path: Path):
-        scripts = tmp_path / "scripts"
-        scripts.mkdir()
-        (scripts / "package.json").write_text('{"name": "scripts"}')
-        skill = _make_tmp_skill(tmp_path)
-        result = ScriptsSelfContainedCheck().run(skill)
-        assert not result.passed
-        assert "package.json" in result.message
-
-    def test_scripts_self_contained_fail_gemfile(self, tmp_path: Path):
-        scripts = tmp_path / "scripts"
-        scripts.mkdir()
-        (scripts / "Gemfile").write_text("source 'https://rubygems.org'")
-        skill = _make_tmp_skill(tmp_path)
-        result = ScriptsSelfContainedCheck().run(skill)
-        assert not result.passed
-        assert "Gemfile" in result.message
+        assert manifest_file in result.message
 
     # ── content.compatibility-prereqs ───────────────────────────────────
 
@@ -917,21 +872,21 @@ class TestClientImplementerChecks:
 
     # ── content.description-actionable ────────────────────────────────────
 
-    def test_description_actionable_use_when(self):
-        skill = make_skill(description="Use when the user asks for report generation")
+    @pytest.mark.parametrize(
+        "description, message_contains",
+        [
+            ("Use when the user asks for report generation", "use when"),
+            ("Designed for building REST APIs from scratch", None),
+            ("Creates reports; will trigger on data summary requests", None),
+        ],
+        ids=["use-when", "designed-for", "trigger-phrase"],
+    )
+    def test_description_actionable_pass(self, description: str, message_contains: str | None):
+        skill = make_skill(description=description)
         result = DescriptionActionableCheck().run(skill)
         assert result.passed
-        assert "use when" in result.message
-
-    def test_description_actionable_designed_for(self):
-        skill = make_skill(description="Designed for building REST APIs from scratch")
-        result = DescriptionActionableCheck().run(skill)
-        assert result.passed
-
-    def test_description_actionable_trigger(self):
-        skill = make_skill(description="Creates reports; will trigger on data summary requests")
-        result = DescriptionActionableCheck().run(skill)
-        assert result.passed
+        if message_contains is not None:
+            assert message_contains in result.message
 
     def test_description_actionable_fail_no_phrase(self):
         skill = make_skill(description="A tool for generating reports")
@@ -1007,9 +962,7 @@ class TestSchemaSync:
 
     def test_spec_fields_cover_all_raw_schema_fields(self):
         """Every field_name with source='raw' in FRONTMATTER_SCHEMA should be a spec field."""
-        schema_raw_fields = {
-            rule.field_name for rule in FRONTMATTER_SCHEMA if rule.source == "raw"
-        }
+        schema_raw_fields = {rule.field_name for rule in FRONTMATTER_SCHEMA if rule.source == "raw"}
         missing = schema_raw_fields - SPEC_FRONTMATTER_FIELDS
         assert not missing, (
             f"FRONTMATTER_SCHEMA has raw fields not in SPEC_FRONTMATTER_FIELDS: {missing}. "

@@ -129,41 +129,41 @@ def _capture(reporter: ConsoleReporter) -> tuple[ConsoleReporter, io.StringIO]:
 
 
 class TestSeverityMappings:
-    def test_styles_has_error(self):
-        assert "error" in SEVERITY_STYLES
+    @pytest.mark.parametrize(
+        "severity, dict_name",
+        [
+            ("error", "SEVERITY_STYLES"),
+            ("warning", "SEVERITY_STYLES"),
+            ("info", "SEVERITY_STYLES"),
+            ("error", "SEVERITY_ICONS"),
+            ("warning", "SEVERITY_ICONS"),
+            ("info", "SEVERITY_ICONS"),
+        ],
+        ids=[
+            "styles-error",
+            "styles-warning",
+            "styles-info",
+            "icons-error",
+            "icons-warning",
+            "icons-info",
+        ],
+    )
+    def test_key_exists(self, severity, dict_name):
+        mapping = SEVERITY_STYLES if dict_name == "SEVERITY_STYLES" else SEVERITY_ICONS
+        assert severity in mapping
 
-    def test_styles_has_warning(self):
-        assert "warning" in SEVERITY_STYLES
-
-    def test_styles_has_info(self):
-        assert "info" in SEVERITY_STYLES
-
-    def test_icons_has_error(self):
-        assert "error" in SEVERITY_ICONS
-
-    def test_icons_has_warning(self):
-        assert "warning" in SEVERITY_ICONS
-
-    def test_icons_has_info(self):
-        assert "info" in SEVERITY_ICONS
-
-    def test_error_icon_is_X(self):
-        assert SEVERITY_ICONS["error"] == "X"
-
-    def test_warning_icon_is_exclamation(self):
-        assert SEVERITY_ICONS["warning"] == "!"
-
-    def test_info_icon_is_i(self):
-        assert SEVERITY_ICONS["info"] == "i"
-
-    def test_error_style_is_bold_red(self):
-        assert SEVERITY_STYLES["error"] == "bold red"
-
-    def test_warning_style_is_yellow(self):
-        assert SEVERITY_STYLES["warning"] == "yellow"
-
-    def test_info_style_is_blue(self):
-        assert SEVERITY_STYLES["info"] == "blue"
+    @pytest.mark.parametrize(
+        "severity, expected_icon, expected_style",
+        [
+            ("error", "X", "bold red"),
+            ("warning", "!", "yellow"),
+            ("info", "i", "blue"),
+        ],
+        ids=["error", "warning", "info"],
+    )
+    def test_values_match(self, severity, expected_icon, expected_style):
+        assert SEVERITY_ICONS[severity] == expected_icon
+        assert SEVERITY_STYLES[severity] == expected_style
 
 
 # ─── ConsoleReporter init & private methods ────────────────────────────────────
@@ -181,17 +181,19 @@ class TestConsoleReporterInit:
 
 
 class TestSeverityStyle:
-    def test_error(self):
-        assert ConsoleReporter()._severity_style(Severity.ERROR) == "bold red"
-
-    def test_warning(self):
-        assert ConsoleReporter()._severity_style(Severity.WARNING) == "yellow"
-
-    def test_info(self):
-        assert ConsoleReporter()._severity_style(Severity.INFO) == "blue"
+    @pytest.mark.parametrize(
+        "severity, expected",
+        [
+            (Severity.ERROR, "bold red"),
+            (Severity.WARNING, "yellow"),
+            (Severity.INFO, "blue"),
+        ],
+        ids=["error", "warning", "info"],
+    )
+    def test_known_severity(self, severity, expected):
+        assert ConsoleReporter()._severity_style(severity) == expected
 
     def test_unknown_value_returns_white(self):
-        # Simulate a Severity-like object whose value is not in the map
         class FakeSeverity:
             value = "nonexistent"
 
@@ -199,14 +201,17 @@ class TestSeverityStyle:
 
 
 class TestSeverityIcon:
-    def test_error(self):
-        assert ConsoleReporter()._severity_icon(Severity.ERROR) == "X"
-
-    def test_warning(self):
-        assert ConsoleReporter()._severity_icon(Severity.WARNING) == "!"
-
-    def test_info(self):
-        assert ConsoleReporter()._severity_icon(Severity.INFO) == "i"
+    @pytest.mark.parametrize(
+        "severity, expected",
+        [
+            (Severity.ERROR, "X"),
+            (Severity.WARNING, "!"),
+            (Severity.INFO, "i"),
+        ],
+        ids=["error", "warning", "info"],
+    )
+    def test_known_severity(self, severity, expected):
+        assert ConsoleReporter()._severity_icon(severity) == expected
 
     def test_unknown_value_returns_question_mark(self):
         class FakeSeverity:
@@ -448,9 +453,7 @@ class TestConsoleReporterReportTrace:
 
     def test_all_passed_shows_count(self):
         reporter, buf = self._reporter()
-        reporter.report_trace(
-            _make_trace_report(overall_pass=True, checks_passed=5, checks_run=5)
-        )
+        reporter.report_trace(_make_trace_report(overall_pass=True, checks_passed=5, checks_run=5))
         output = buf.getvalue()
         assert "5" in output
         assert "passed" in output.lower()
