@@ -715,6 +715,11 @@ def purge_all_data() -> bool:
     """Delete the entire usage.db file. Returns True on success."""
     try:
         if SKLAB_DB.exists():
+            # Explicitly connect and close to release any SQLite file locks
+            # (required on Windows where `with sqlite3.connect(...)` doesn't
+            # call close() and the file remains locked).
+            with contextlib.suppress(Exception):
+                sqlite3.connect(SKLAB_DB).close()
             SKLAB_DB.unlink()
         return True
     except Exception:
