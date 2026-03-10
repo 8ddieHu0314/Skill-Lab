@@ -67,6 +67,7 @@ class CheckResult:
     message: str
     details: dict[str, Any] | None = None
     location: str | None = None
+    fix: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -82,6 +83,8 @@ class CheckResult:
             result["details"] = self.details
         if self.location is not None:
             result["location"] = self.location
+        if self.fix:
+            result["fix"] = self.fix
         return result
 
 

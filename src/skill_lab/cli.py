@@ -459,7 +459,10 @@ def evaluate(
         ),
     ] = False,
 ) -> None:
-    """Evaluate a skill and generate a quality report."""
+    """Evaluate a skill and generate a quality report.
+
+    Run from inside a skill directory, or pass the path as an argument.
+    """
     # --all and --repo are mutually exclusive with a positional path
     if (all_skills or repo) and skill_path is not None:
         console.print("[red]Error: Cannot combine --all/--repo with a skill path argument.[/red]")

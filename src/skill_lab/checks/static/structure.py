@@ -24,6 +24,7 @@ class SkillMdExistsCheck(StaticCheck):
     severity: ClassVar[Severity] = Severity.ERROR
     dimension: ClassVar[EvalDimension] = EvalDimension.STRUCTURE
     spec_required: ClassVar[bool] = True
+    fix: ClassVar[str] = "Create a SKILL.md file in this directory"
 
     def run(self, skill: Skill) -> CheckResult:
         skill_md_path = skill.path / "SKILL.md"
@@ -58,6 +59,7 @@ class ValidFrontmatterCheck(StaticCheck):
     severity: ClassVar[Severity] = Severity.ERROR
     dimension: ClassVar[EvalDimension] = EvalDimension.STRUCTURE
     spec_required: ClassVar[bool] = True
+    fix: ClassVar[str] = "Fix the YAML syntax errors in your SKILL.md frontmatter"
 
     def run(self, skill: Skill) -> CheckResult:
         # Check for parse errors related to frontmatter
@@ -91,6 +93,7 @@ class ScriptsValidCheck(StaticCheck):
     description: ClassVar[str] = "/scripts contains only .py, .sh, .js, .ts, .bash, .rb files"
     severity: ClassVar[Severity] = Severity.WARNING
     dimension: ClassVar[EvalDimension] = EvalDimension.STRUCTURE
+    fix: ClassVar[str] = "Remove invalid files from scripts/ — only .py .sh .js .ts .bash .rb allowed"
 
     def run(self, skill: Skill) -> CheckResult:
         scripts_path = skill.path / "scripts"
@@ -136,6 +139,7 @@ class ReferencesValidCheck(StaticCheck):
     description: ClassVar[str] = "/references contains only .md, .txt, .rst files"
     severity: ClassVar[Severity] = Severity.WARNING
     dimension: ClassVar[EvalDimension] = EvalDimension.STRUCTURE
+    fix: ClassVar[str] = "Remove invalid files from references/ — only .md .txt .rst allowed"
 
     def run(self, skill: Skill) -> CheckResult:
         references_path = skill.path / "references"
@@ -193,6 +197,7 @@ class StandardFrontmatterFieldsCheck(StaticCheck):
     description: ClassVar[str] = "Frontmatter contains only fields defined in the Agent Skills spec"
     severity: ClassVar[Severity] = Severity.WARNING
     dimension: ClassVar[EvalDimension] = EvalDimension.STRUCTURE
+    fix: ClassVar[str] = "Move these non-standard fields into the metadata map"
 
     def run(self, skill: Skill) -> CheckResult:
         # Check if metadata exists
@@ -264,6 +269,7 @@ class ScriptsNoInteractiveCheck(StaticCheck):
     )
     severity: ClassVar[Severity] = Severity.WARNING
     dimension: ClassVar[EvalDimension] = EvalDimension.STRUCTURE
+    fix: ClassVar[str] = "Remove interactive input calls — scripts must run non-interactively"
 
     def run(self, skill: Skill) -> CheckResult:
         scripts_path = skill.path / "scripts"
@@ -330,6 +336,7 @@ class ScriptsSelfContainedCheck(StaticCheck):
     description: ClassVar[str] = "Scripts folder has no loose dependency manifests"
     severity: ClassVar[Severity] = Severity.INFO
     dimension: ClassVar[EvalDimension] = EvalDimension.STRUCTURE
+    fix: ClassVar[str] = "Remove dependency manifests from scripts/ and embed dependencies inline"
 
     def run(self, skill: Skill) -> CheckResult:
         scripts_path = skill.path / "scripts"

@@ -66,6 +66,9 @@ class FieldRule:
     # Extra details to include on type-error failure
     type_fail_details: dict[str, Any] = field(default_factory=dict)
 
+    # Actionable fix instruction for failures
+    fix: str = ""
+
 
 # ---------------------------------------------------------------------------
 # Schema definition — the single source of truth for spec field constraints
@@ -86,6 +89,7 @@ FRONTMATTER_SCHEMA: list[FieldRule] = [
         no_metadata_context="check name",
         fail_message="Name field is missing or empty in frontmatter",
         pass_message="Name field present: '{value}'",
+        fix="Add a name: field to your SKILL.md frontmatter",
     ),
     # --- naming.format ---
     FieldRule(
@@ -109,6 +113,7 @@ FRONTMATTER_SCHEMA: list[FieldRule] = [
         no_metadata_context="validate name",
         fail_message="No name to validate",
         pass_message="Name '{value}' follows format rules",
+        fix="Use lowercase letters, numbers, and hyphens only (e.g., my-skill)",
     ),
     # --- description.required ---
     FieldRule(
@@ -124,6 +129,7 @@ FRONTMATTER_SCHEMA: list[FieldRule] = [
         no_metadata_context="check description",
         fail_message="Description field is missing from frontmatter",
         pass_message="Description field present",
+        fix="Add a description: field to your SKILL.md frontmatter",
     ),
     # --- description.not-empty ---
     FieldRule(
@@ -138,6 +144,7 @@ FRONTMATTER_SCHEMA: list[FieldRule] = [
         not_blank=True,
         blank_fail_message="Description is empty or whitespace-only",
         pass_message="Description has content ({length} characters)",
+        fix="Write a description explaining what this skill does",
     ),
     # --- description.max-length ---
     FieldRule(
@@ -152,6 +159,7 @@ FRONTMATTER_SCHEMA: list[FieldRule] = [
         max_length=1024,
         fail_message="Description exceeds {max_length} characters (got {length})",
         pass_message="Description length OK ({length}/{max_length})",
+        fix="Shorten your description to under 1024 characters",
     ),
     # --- frontmatter.compatibility-length ---
     FieldRule(
@@ -173,6 +181,7 @@ FRONTMATTER_SCHEMA: list[FieldRule] = [
         pass_message="Compatibility field is valid ({length} chars)",
         absent_pass_message="Compatibility field not present (optional)",
         no_metadata_context="check compatibility field",
+        fix="Shorten the compatibility field to under 500 characters",
     ),
     # --- frontmatter.metadata-format ---
     FieldRule(
@@ -192,6 +201,7 @@ FRONTMATTER_SCHEMA: list[FieldRule] = [
         pass_message="Metadata field is valid ({entry_count} entries)",
         absent_pass_message="Metadata field not present (optional)",
         no_metadata_context="check metadata field",
+        fix="Use a string-to-string mapping for the metadata field",
     ),
     # --- frontmatter.license-format ---
     FieldRule(
@@ -209,6 +219,7 @@ FRONTMATTER_SCHEMA: list[FieldRule] = [
         pass_message="License field is valid",
         absent_pass_message="License field not present (optional)",
         no_metadata_context="check license field",
+        fix="Set the license field to a plain string (e.g., MIT)",
     ),
     # --- frontmatter.allowed-tools-format ---
     FieldRule(
@@ -230,6 +241,7 @@ FRONTMATTER_SCHEMA: list[FieldRule] = [
         pass_message="Allowed-tools field is valid (space-delimited string)",
         absent_pass_message="Allowed-tools field not present (optional)",
         no_metadata_context="check allowed-tools field",
+        fix="Use a space-delimited string for allowed-tools (e.g., tool1 tool2)",
     ),
 ]
 
@@ -252,13 +264,15 @@ def _validate_rule(check: StaticCheck, skill: Skill, rule: FieldRule) -> CheckRe
         return fail
     assert skill.metadata is not None
 
+    fix = rule.fix or None
+
     # 2. Extract value
     if rule.source == "raw":
         if rule.field_name not in skill.metadata.raw:
             if rule.optional_pass:
                 return check._pass(rule.absent_pass_message, location=location)
             if rule.required:
-                return check._fail(rule.fail_message, location=location)
+                return check._fail(rule.fail_message, fix=fix, location=location)
         value = skill.metadata.raw[rule.field_name]
     else:  # source == "metadata"
         value = getattr(skill.metadata, rule.field_name, "")
@@ -266,7 +280,7 @@ def _validate_rule(check: StaticCheck, skill: Skill, rule: FieldRule) -> CheckRe
     # 3. Required-absent (for metadata-source fields where empty = absent)
     if rule.source == "metadata" and rule.required and not value:
         # naming.format has a special fail message for missing name
-        return check._fail(rule.fail_message, location=location)
+        return check._fail(rule.fail_message, fix=fix, location=location)
 
     # 4. Type check
     if rule.expected_type is not None and not isinstance(value, rule.expected_type):
@@ -275,17 +289,17 @@ def _validate_rule(check: StaticCheck, skill: Skill, rule: FieldRule) -> CheckRe
         details: dict[str, Any] = {"type": actual_type}
         if rule.type_fail_details:
             details.update(rule.type_fail_details)
-        return check._fail(message, details=details, location=location)
+        return check._fail(message, fix=fix, details=details, location=location)
 
     # 5. Not-blank check (for string values)
     if rule.not_blank and isinstance(value, str) and not value.strip():
-        return check._fail(rule.blank_fail_message, location=location)
+        return check._fail(rule.blank_fail_message, fix=fix, location=location)
 
     # 6. Dict key/value validation (metadata-format special path)
     if (rule.dict_keys_type is not None or rule.dict_values_type is not None) and isinstance(
         value, dict
     ):
-        return _validate_dict(check, value, rule, location)
+        return _validate_dict(check, value, rule, location, fix=fix)
 
     # 7. Accumulate constraint errors (for naming.format multi-error pattern)
     errors: list[str] = []
@@ -302,6 +316,7 @@ def _validate_rule(check: StaticCheck, skill: Skill, rule: FieldRule) -> CheckRe
             )
             return check._fail(
                 message,
+                fix=fix,
                 details={"length": length, "max_length": rule.max_length},
                 location=location,
             )
@@ -319,6 +334,7 @@ def _validate_rule(check: StaticCheck, skill: Skill, rule: FieldRule) -> CheckRe
     if errors:
         return check._fail(
             "; ".join(errors),
+            fix=fix,
             details={"name": value, "errors": errors},
             location=location,
         )
@@ -341,6 +357,7 @@ def _validate_dict(
     value: dict[Any, Any],
     rule: FieldRule,
     location: str,
+    fix: str | None = None,
 ) -> CheckResult:
     """Validate dict key/value types (metadata-format check)."""
     invalid_keys: list[str] = []
@@ -362,6 +379,7 @@ def _validate_dict(
 
         return check._fail(
             "Metadata must be a string-to-string mapping; " + "; ".join(error_parts),
+            fix=fix,
             details={
                 "invalid_keys": invalid_keys,
                 "invalid_values": [{"key": k, "type": t} for k, t in invalid_values],

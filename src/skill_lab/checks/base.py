@@ -22,6 +22,9 @@ class StaticCheck(ABC):
     # Whether this check is required by the Agent Skills spec (default: False = quality suggestion)
     spec_required: ClassVar[bool] = False
 
+    # Actionable instruction shown to users when this check fails (optional)
+    fix: ClassVar[str] = ""
+
     @abstractmethod
     def run(self, skill: Skill) -> CheckResult:
         """Execute the check against a skill.
@@ -85,11 +88,12 @@ class StaticCheck(ABC):
             location=kwargs.get("location"),
         )
 
-    def _fail(self, message: str, **kwargs: Any) -> CheckResult:
+    def _fail(self, message: str, fix: str | None = None, **kwargs: Any) -> CheckResult:
         """Create a failing CheckResult.
 
         Args:
             message: Failure message.
+            fix: Optional actionable fix instruction (overrides class-level fix).
             **kwargs: Additional fields (details, location).
 
         Returns:
@@ -104,6 +108,7 @@ class StaticCheck(ABC):
             message=message,
             details=kwargs.get("details"),
             location=kwargs.get("location"),
+            fix=fix if fix is not None else (self.fix or None),
         )
 
     def __repr__(self) -> str:

@@ -115,11 +115,12 @@ class ConsoleReporter:
                 severity_text = Text(
                     result.severity.value.upper(), style=self._severity_style(result.severity)
                 )
+                display_message = (result.fix or result.message) if not result.passed else result.message
                 table.add_row(
                     status_icon,
                     severity_text,
                     result.check_id,
-                    result.message,
+                    display_message,
                 )
 
             self.console.print(table)
