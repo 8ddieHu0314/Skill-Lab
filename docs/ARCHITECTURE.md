@@ -31,7 +31,16 @@ This document provides a comprehensive overview of Skill-Lab's technology stack 
 
 ```
 src/skill_lab/
-├── cli.py                    # Entry point - Typer CLI commands
+├── cli.py                    # App definition, shared helpers, entry point
+├── commands/                 # CLI command modules
+│   ├── __init__.py           # Imports all command modules
+│   ├── evaluate.py           # evaluate, validate, list-checks
+│   ├── trigger.py            # trigger tests
+│   ├── generate.py           # LLM-based test generation
+│   ├── info.py               # info, prompt, eval-trace
+│   ├── stats.py              # stats subcommands
+│   ├── telemetry.py          # telemetry subcommands
+│   └── setup.py              # setup, track-invocation
 ├── __main__.py               # Allows `python -m skill_lab`
 ├── core/
 │   ├── models.py             # Data classes (Skill, CheckResult, TriggerResult, etc.)
