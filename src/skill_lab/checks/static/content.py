@@ -235,6 +235,47 @@ _SCRIPT_EXT_PATTERN = "|".join(ext.lstrip(".") for ext in sorted(VALID_SCRIPT_EX
 _SCRIPT_PATH_RE = re.compile(rf"(?<![/\w-])scripts/[\w.-]+\.(?:{_SCRIPT_EXT_PATTERN})\b")
 
 
+def _check_paths_exist(
+    check: StaticCheck,
+    skill: Skill,
+    pattern: re.Pattern[str],
+    label: str,
+) -> CheckResult:
+    """Check that paths matching a regex in the body exist on disk.
+
+    Args:
+        check: The check instance (for _pass/_fail helpers).
+        skill: The skill being evaluated.
+        pattern: Regex pattern to find path references in the body.
+        label: Human label for messages (e.g., "script", "asset").
+
+    Returns:
+        CheckResult indicating pass or fail.
+    """
+    refs = pattern.findall(skill.body)
+
+    if not refs:
+        return check._pass(
+            f"No {label} path references in body",
+            location=check._skill_md_location(skill),
+        )
+
+    unique_refs = list(dict.fromkeys(refs))
+    missing = [ref for ref in unique_refs if not (skill.path / ref).exists()]
+
+    if missing:
+        return check._fail(
+            f"{label.capitalize()} path(s) not found on disk: {', '.join(missing)}",
+            details={"missing_paths": missing, "all_references": unique_refs},
+            location=check._skill_md_location(skill),
+        )
+
+    return check._pass(
+        f"All referenced {label} paths exist ({len(unique_refs)} verified)",
+        location=check._skill_md_location(skill),
+    )
+
+
 @register_check
 class ScriptPathsExistCheck(StaticCheck):
     """Check that script paths referenced in body exist on disk."""
@@ -247,35 +288,7 @@ class ScriptPathsExistCheck(StaticCheck):
     fix: ClassVar[str] = "Create the missing script files or fix the paths in your SKILL.md body"
 
     def run(self, skill: Skill) -> CheckResult:
-        refs = _SCRIPT_PATH_RE.findall(skill.body)
-
-        if not refs:
-            return self._pass(
-                "No script path references in body",
-                location=self._skill_md_location(skill),
-            )
-
-        # Deduplicate while preserving order
-        seen: set[str] = set()
-        unique_refs: list[str] = []
-        for ref in refs:
-            if ref not in seen:
-                seen.add(ref)
-                unique_refs.append(ref)
-
-        missing = [ref for ref in unique_refs if not (skill.path / ref).exists()]
-
-        if missing:
-            return self._fail(
-                f"Script path(s) not found on disk: {', '.join(missing)}",
-                details={"missing_paths": missing, "all_references": unique_refs},
-                location=self._skill_md_location(skill),
-            )
-
-        return self._pass(
-            f"All referenced script paths exist ({len(unique_refs)} verified)",
-            location=self._skill_md_location(skill),
-        )
+        return _check_paths_exist(self, skill, _SCRIPT_PATH_RE, "script")
 
 
 # Command runners and their expected runtime mentions in compatibility
@@ -468,32 +481,4 @@ class AssetPathsExistCheck(StaticCheck):
     fix: ClassVar[str] = "Create the missing asset files or fix the paths in your SKILL.md body"
 
     def run(self, skill: Skill) -> CheckResult:
-        refs = _ASSET_PATH_RE.findall(skill.body)
-
-        if not refs:
-            return self._pass(
-                "No asset path references in body",
-                location=self._skill_md_location(skill),
-            )
-
-        # Deduplicate while preserving order
-        seen: set[str] = set()
-        unique_refs: list[str] = []
-        for ref in refs:
-            if ref not in seen:
-                seen.add(ref)
-                unique_refs.append(ref)
-
-        missing = [ref for ref in unique_refs if not (skill.path / ref).exists()]
-
-        if missing:
-            return self._fail(
-                f"Asset path(s) not found on disk: {', '.join(missing)}",
-                details={"missing_paths": missing, "all_references": unique_refs},
-                location=self._skill_md_location(skill),
-            )
-
-        return self._pass(
-            f"All referenced asset paths exist ({len(unique_refs)} verified)",
-            location=self._skill_md_location(skill),
-        )
+        return _check_paths_exist(self, skill, _ASSET_PATH_RE, "asset")

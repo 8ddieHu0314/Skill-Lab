@@ -21,6 +21,15 @@ SEVERITY_ICONS: dict[str, str] = {
 }
 
 
+def score_color(score: float) -> str:
+    """Return a rich color name based on a 0-100 quality score."""
+    if score >= 80:
+        return "green"
+    if score >= 60:
+        return "yellow"
+    return "red"
+
+
 class ConsoleReporter:
     """Reporter that outputs evaluation results to the console."""
 
@@ -52,7 +61,9 @@ class ConsoleReporter:
             )
         elif shown_count == 0:
             self.console.print("[green]All checks passed![/green]")
-            self.console.print("[dim](run [bold]sklab evaluate --verbose ./skill[/bold] to see details)[/dim]")
+            self.console.print(
+                "[dim](run [bold]sklab evaluate --verbose ./skill[/bold] to see details)[/dim]"
+            )
 
     def report(self, report: EvaluationReport) -> None:
         """Print an evaluation report to the console.
@@ -72,18 +83,12 @@ class ConsoleReporter:
         )
 
         # Score and status
-        score_color = (
-            "green"
-            if report.quality_score >= 80
-            else "yellow"
-            if report.quality_score >= 60
-            else "red"
-        )
+        sc = score_color(report.quality_score)
         status = "[green]PASS[/green]" if report.overall_pass else "[red]FAIL[/red]"
 
         self.console.print()
         self.console.print(
-            f"[bold]Quality Score:[/bold] [{score_color}]{report.quality_score:.1f}/100[/{score_color}]"
+            f"[bold]Quality Score:[/bold] [{sc}]{report.quality_score:.1f}/100[/{sc}]"
         )
         self.console.print(f"[bold]Status:[/bold] {status}")
         self.console.print(
@@ -115,7 +120,9 @@ class ConsoleReporter:
                 severity_text = Text(
                     result.severity.value.upper(), style=self._severity_style(result.severity)
                 )
-                display_message = (result.fix or result.message) if not result.passed else result.message
+                display_message = (
+                    (result.fix or result.message) if not result.passed else result.message
+                )
                 table.add_row(
                     status_icon,
                     severity_text,

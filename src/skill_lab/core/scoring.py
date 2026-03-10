@@ -45,15 +45,6 @@ class EvaluationMetrics:
     failed: int
     pass_rate: float
 
-    def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary."""
-        return {
-            "total": self.total,
-            "passed": self.passed,
-            "failed": self.failed,
-            "pass_rate": self.pass_rate,
-        }
-
 
 def calculate_metrics(results: list[T]) -> EvaluationMetrics:
     """Calculate common metrics from any list of results with 'passed' attribute.

@@ -1,6 +1,8 @@
 # CLAUDE.md
 
-Python CLI tool that evaluates agent skills (SKILL.md files) via static analysis, trigger testing, and LLM-based test generation. Produces a 0-100 score across 28 checks / 4 dimensions.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+Python CLI tool that evaluates agent skills (SKILL.md files) via static analysis, trigger testing, and LLM-based test generation. Produces a 0-100 score across 28 checks / 5 dimensions.
 
 ## Naming
 
@@ -32,7 +34,11 @@ sklab info ./my-skill         # metadata + token estimates
 sklab prompt ./skill-a        # export skill as XML prompt
 sklab trigger                 # run trigger tests (requires Claude CLI)
 sklab generate                # generate trigger tests via LLM (requires anthropic)
-pytest tests/ -v              # run tests
+sklab stats                   # usage statistics
+sklab setup                   # configure hooks for Claude Code/Cursor
+pytest tests/ -v                            # run all tests
+pytest tests/test_checks.py -v              # run single test file
+pytest tests/test_checks.py -k "keyword" -v # filter by keyword
 mypy src/                     # type check
 ruff check src/ && ruff format src/
 ```
@@ -40,7 +46,9 @@ ruff check src/ && ruff format src/
 ## Critical Architecture Notes
 
 - **Two check systems**: behavioral (`@register_check` classes in `structure.py`, `naming.py`, `content.py`) and schema-based (`FieldRule` in `schema.py` — append to add a check, no class needed). See ARCHITECTURE.md for full details.
+- **Side-effect registration**: `StaticEvaluator.__init__()` imports check modules (`content`, `naming`, `schema`, `structure`) to trigger `@register_check` decorators. All checks must be registered before `registry.get_all()` is called.
 - **Sync requirement**: `SPEC_FRONTMATTER_FIELDS` in `structure.py` must stay in sync with `FRONTMATTER_SCHEMA` in `schema.py`.
+- **Scoring**: Weighted across 5 dimensions (Structure, Naming, Description, Content, Execution) by severity (ERROR > WARNING > INFO). Execution is trace-based (`tracechecks/`) and scored separately. See `scoring.py` for exact weights.
 - **Optional dep**: `anthropic` is not imported in `triggers/__init__.py` — only lazy-imported inside the `generate` CLI command. Install via `pip install skill-lab[generate]`.
 - **Test fixtures**: `tests/fixtures/skills/` — each subdirectory is a mock skill with `SKILL.md`.
 - **Trigger test files**: `.skill-lab/tests/triggers.yaml`.

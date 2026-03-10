@@ -63,6 +63,26 @@ def _conn() -> sqlite3.Connection:
     return sqlite3.connect(SKLAB_DB)
 
 
+def _path_filter(
+    repo_root: Path | None,
+    column: str = "se.skill_path",
+) -> tuple[str, list[object]]:
+    """Build a SQL clause and params for filtering by skill_path prefix.
+
+    Args:
+        repo_root: If given, filter to skills under this directory.
+        column: SQL column expression (e.g., "se.skill_path" or "skill_path").
+
+    Returns:
+        (sql_clause, params) — clause is empty string if no filter.
+    """
+    if not repo_root:
+        return "", []
+    clause = f"AND REPLACE({column}, char(92), '/') LIKE ?"
+    param = repo_root.as_posix().rstrip("/") + "/%"
+    return clause, [param]
+
+
 def get_overview_stats() -> OverviewStats | None:
     """Return overview stats, or None if the DB doesn't exist yet."""
     if not Path(SKLAB_DB).exists():
@@ -171,10 +191,8 @@ def get_stats_count(
     if not Path(SKLAB_DB).exists():
         return label, []
 
-    path_clause = "AND REPLACE(se.skill_path, char(92), '/') LIKE ?" if repo_root else ""
-    params: list[object] = [_current_ym()]
-    if repo_root:
-        params.append(repo_root.as_posix().rstrip("/") + "/%")
+    path_clause, path_params = _path_filter(repo_root)
+    params: list[object] = [_current_ym(), *path_params]
 
     with _conn() as conn:
         rows = conn.execute(
@@ -208,8 +226,7 @@ def get_stats_score(
     if not Path(SKLAB_DB).exists():
         return []
 
-    path_clause = "AND REPLACE(skill_path, char(92), '/') LIKE ?" if repo_root else ""
-    path_param = [repo_root.as_posix().rstrip("/") + "/%"] if repo_root else []
+    path_clause, path_params = _path_filter(repo_root, "skill_path")
 
     with _conn() as conn:
         skill_ids = conn.execute(
@@ -222,7 +239,7 @@ def get_stats_score(
             GROUP BY skill_name
             ORDER BY skill_name
             """,
-            path_param,
+            path_params,
         ).fetchall()
 
         if not skill_ids:
@@ -267,10 +284,8 @@ def get_stats_tokens(
     if not Path(SKLAB_DB).exists():
         return label, []
 
-    path_clause = "AND REPLACE(se.skill_path, char(92), '/') LIKE ?" if repo_root else ""
-    params: list[object] = [_current_ym()]
-    if repo_root:
-        params.append(repo_root.as_posix().rstrip("/") + "/%")
+    path_clause, path_params = _path_filter(repo_root)
+    params: list[object] = [_current_ym(), *path_params]
 
     with _conn() as conn:
         rows = conn.execute(
