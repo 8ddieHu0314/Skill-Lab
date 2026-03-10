@@ -123,7 +123,7 @@ class TestStructureChecks:
         )
         result = check.run(skill)
         assert result.passed
-        assert result.severity == Severity.WARNING
+        assert result.severity == Severity.MEDIUM
 
     def test_standard_frontmatter_fields_fail_non_standard(self):
         """Test that non-standard fields trigger a warning."""
@@ -148,7 +148,7 @@ class TestStructureChecks:
         )
         result = check.run(skill)
         assert not result.passed
-        assert result.severity == Severity.WARNING
+        assert result.severity == Severity.MEDIUM
         assert "argument-hint" in result.message
         assert "context" in result.message
         assert "disable-model-invocation" in result.message
@@ -225,7 +225,7 @@ class TestNamingChecks:
         skill = make_skill(name="different-name", path=Path("/test/my-skill"))
         result = check.run(skill)
         assert not result.passed
-        assert result.severity == Severity.ERROR
+        assert result.severity == Severity.HIGH
 
     def test_name_matches_directory_unicode_normalization(self):
         """NFKC normalization: precomposed and decomposed forms should match."""
@@ -286,7 +286,7 @@ class TestContentChecks:
         skill = make_skill(body="")
         result = check.run(skill)
         assert not result.passed
-        assert result.severity == Severity.WARNING  # Quality suggestion, spec allows empty body
+        assert result.severity == Severity.MEDIUM  # Quality suggestion, spec allows empty body
 
     def test_body_too_short(self):
         check = BodyNotEmptyCheck()
@@ -612,7 +612,7 @@ class TestScriptChecks:
         skill = _make_tmp_skill(tmp_path, body="No mention of any scripts here.")
         result = ScriptsReferencedCheck().run(skill)
         assert not result.passed
-        assert result.severity == Severity.WARNING
+        assert result.severity == Severity.MEDIUM
 
     # ── content.script-paths-exist ──────────────────────────────────────
 
@@ -764,7 +764,7 @@ class TestScriptChecks:
         skill = _make_tmp_skill(tmp_path)
         result = ScriptsSelfContainedCheck().run(skill)
         assert not result.passed
-        assert result.severity == Severity.INFO
+        assert result.severity == Severity.LOW
         assert manifest_file in result.message
 
     # ── content.compatibility-prereqs ───────────────────────────────────
@@ -799,7 +799,7 @@ class TestScriptChecks:
         )
         result = CompatibilityPrereqsCheck().run(skill)
         assert not result.passed
-        assert result.severity == Severity.INFO
+        assert result.severity == Severity.LOW
         assert "npx" in result.message
         assert "Node.js" in result.message
 
@@ -835,7 +835,7 @@ class TestClientImplementerChecks:
         skill = make_skill(body="x" * 20004)
         result = TokenBudgetCheck().run(skill)
         assert not result.passed
-        assert result.severity == Severity.WARNING
+        assert result.severity == Severity.MEDIUM
         assert "5000" in result.message
 
     # ── content.metadata-token-budget ─────────────────────────────────────
@@ -855,7 +855,7 @@ class TestClientImplementerChecks:
         skill = make_skill(name="sk", description="x" * 700)
         result = MetadataTokenBudgetCheck().run(skill)
         assert not result.passed
-        assert result.severity == Severity.INFO
+        assert result.severity == Severity.LOW
         assert "150" in result.message
 
     def test_metadata_token_budget_no_metadata(self):
@@ -892,7 +892,7 @@ class TestClientImplementerChecks:
         skill = make_skill(description="A tool for generating reports")
         result = DescriptionActionableCheck().run(skill)
         assert not result.passed
-        assert result.severity == Severity.INFO
+        assert result.severity == Severity.LOW
         assert "activation" in result.message.lower()
 
     def test_description_actionable_no_metadata(self):
@@ -932,7 +932,7 @@ class TestClientImplementerChecks:
         skill = _make_tmp_skill(tmp_path, body="See assets/missing.png for details.")
         result = AssetPathsExistCheck().run(skill)
         assert not result.passed
-        assert result.severity == Severity.WARNING
+        assert result.severity == Severity.MEDIUM
         assert "assets/missing.png" in result.message
 
     def test_asset_paths_exist_mixed(self, tmp_path: Path):

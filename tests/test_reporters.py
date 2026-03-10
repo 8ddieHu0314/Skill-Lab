@@ -30,7 +30,7 @@ def _make_check_result(
     check_id: str = "check-1",
     check_name: str = "Check One",
     passed: bool = True,
-    severity: Severity = Severity.ERROR,
+    severity: Severity = Severity.HIGH,
     dimension: EvalDimension = EvalDimension.STRUCTURE,
     message: str = "All good",
 ) -> CheckResult:
@@ -132,20 +132,20 @@ class TestSeverityMappings:
     @pytest.mark.parametrize(
         "severity, dict_name",
         [
-            ("error", "SEVERITY_STYLES"),
-            ("warning", "SEVERITY_STYLES"),
-            ("info", "SEVERITY_STYLES"),
-            ("error", "SEVERITY_ICONS"),
-            ("warning", "SEVERITY_ICONS"),
-            ("info", "SEVERITY_ICONS"),
+            ("high", "SEVERITY_STYLES"),
+            ("medium", "SEVERITY_STYLES"),
+            ("low", "SEVERITY_STYLES"),
+            ("high", "SEVERITY_ICONS"),
+            ("medium", "SEVERITY_ICONS"),
+            ("low", "SEVERITY_ICONS"),
         ],
         ids=[
-            "styles-error",
-            "styles-warning",
-            "styles-info",
-            "icons-error",
-            "icons-warning",
-            "icons-info",
+            "styles-high",
+            "styles-medium",
+            "styles-low",
+            "icons-high",
+            "icons-medium",
+            "icons-low",
         ],
     )
     def test_key_exists(self, severity, dict_name):
@@ -155,11 +155,11 @@ class TestSeverityMappings:
     @pytest.mark.parametrize(
         "severity, expected_icon, expected_style",
         [
-            ("error", "X", "bold red"),
-            ("warning", "!", "yellow"),
-            ("info", "i", "blue"),
+            ("high", "X", "bold red"),
+            ("medium", "!", "yellow"),
+            ("low", "i", "blue"),
         ],
-        ids=["error", "warning", "info"],
+        ids=["high", "medium", "low"],
     )
     def test_values_match(self, severity, expected_icon, expected_style):
         assert SEVERITY_ICONS[severity] == expected_icon
@@ -184,11 +184,11 @@ class TestSeverityStyle:
     @pytest.mark.parametrize(
         "severity, expected",
         [
-            (Severity.ERROR, "bold red"),
-            (Severity.WARNING, "yellow"),
-            (Severity.INFO, "blue"),
+            (Severity.HIGH, "bold red"),
+            (Severity.MEDIUM, "yellow"),
+            (Severity.LOW, "blue"),
         ],
-        ids=["error", "warning", "info"],
+        ids=["high", "medium", "low"],
     )
     def test_known_severity(self, severity, expected):
         assert ConsoleReporter()._severity_style(severity) == expected
@@ -204,11 +204,11 @@ class TestSeverityIcon:
     @pytest.mark.parametrize(
         "severity, expected",
         [
-            (Severity.ERROR, "X"),
-            (Severity.WARNING, "!"),
-            (Severity.INFO, "i"),
+            (Severity.HIGH, "X"),
+            (Severity.MEDIUM, "!"),
+            (Severity.LOW, "i"),
         ],
-        ids=["error", "warning", "info"],
+        ids=["high", "medium", "low"],
     )
     def test_known_severity(self, severity, expected):
         assert ConsoleReporter()._severity_icon(severity) == expected
@@ -640,9 +640,9 @@ class TestJsonReporterFormat:
         assert result["results"][0]["check_id"] == "sentinel-id"
 
     def test_result_severity_serialized_as_string(self):
-        results = [_make_check_result(severity=Severity.WARNING)]
+        results = [_make_check_result(severity=Severity.MEDIUM)]
         result = json.loads(JsonReporter().format(_make_eval_report(results=results)))
-        assert result["results"][0]["severity"] == "warning"
+        assert result["results"][0]["severity"] == "medium"
 
     def test_schema_version_is_first_key(self):
         result = json.loads(JsonReporter().format(_make_eval_report()))

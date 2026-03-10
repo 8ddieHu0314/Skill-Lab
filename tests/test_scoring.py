@@ -12,7 +12,7 @@ from skill_lab.core.scoring import (
 
 def make_result(
     passed: bool,
-    severity: Severity = Severity.ERROR,
+    severity: Severity = Severity.HIGH,
     dimension: EvalDimension = EvalDimension.STRUCTURE,
 ) -> CheckResult:
     """Helper to create a CheckResult for testing."""
@@ -31,24 +31,24 @@ class TestCalculateDimensionScore:
 
     def test_all_passed(self):
         results = [
-            make_result(passed=True, severity=Severity.ERROR),
-            make_result(passed=True, severity=Severity.WARNING),
+            make_result(passed=True, severity=Severity.HIGH),
+            make_result(passed=True, severity=Severity.MEDIUM),
         ]
         score = calculate_dimension_score(results)
         assert score == 100.0
 
     def test_all_failed(self):
         results = [
-            make_result(passed=False, severity=Severity.ERROR),
-            make_result(passed=False, severity=Severity.WARNING),
+            make_result(passed=False, severity=Severity.HIGH),
+            make_result(passed=False, severity=Severity.MEDIUM),
         ]
         score = calculate_dimension_score(results)
         assert score == 0.0
 
     def test_mixed_results(self):
         results = [
-            make_result(passed=True, severity=Severity.ERROR),
-            make_result(passed=False, severity=Severity.ERROR),
+            make_result(passed=True, severity=Severity.HIGH),
+            make_result(passed=False, severity=Severity.HIGH),
         ]
         score = calculate_dimension_score(results)
         assert score == 50.0
@@ -62,8 +62,8 @@ class TestCalculateDimensionScore:
         # Total weight = 1.5, passed weight = 0.5
         # Score = 0.5 / 1.5 * 100 = 33.33
         results = [
-            make_result(passed=False, severity=Severity.ERROR),
-            make_result(passed=True, severity=Severity.WARNING),
+            make_result(passed=False, severity=Severity.HIGH),
+            make_result(passed=True, severity=Severity.MEDIUM),
         ]
         score = calculate_dimension_score(results)
         assert 33.0 <= score <= 34.0
@@ -102,18 +102,18 @@ class TestBuildSummary:
 
     def test_summary_structure(self):
         results = [
-            make_result(passed=True, severity=Severity.ERROR, dimension=EvalDimension.STRUCTURE),
-            make_result(passed=False, severity=Severity.WARNING, dimension=EvalDimension.NAMING),
+            make_result(passed=True, severity=Severity.HIGH, dimension=EvalDimension.STRUCTURE),
+            make_result(passed=False, severity=Severity.MEDIUM, dimension=EvalDimension.NAMING),
         ]
         summary = build_summary(results)
 
         assert "by_severity" in summary
         assert "by_dimension" in summary
 
-        assert summary["by_severity"]["error"]["passed"] == 1
-        assert summary["by_severity"]["error"]["failed"] == 0
-        assert summary["by_severity"]["warning"]["passed"] == 0
-        assert summary["by_severity"]["warning"]["failed"] == 1
+        assert summary["by_severity"]["high"]["passed"] == 1
+        assert summary["by_severity"]["high"]["failed"] == 0
+        assert summary["by_severity"]["medium"]["passed"] == 0
+        assert summary["by_severity"]["medium"]["failed"] == 1
 
         assert summary["by_dimension"]["structure"]["passed"] == 1
         assert summary["by_dimension"]["naming"]["failed"] == 1

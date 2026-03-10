@@ -9,9 +9,9 @@ from typing import Any
 class Severity(str, Enum):
     """Severity levels for check results."""
 
-    ERROR = "error"  # Must fix
-    WARNING = "warning"  # Should fix
-    INFO = "info"  # Suggestion
+    HIGH = "high"  # Must fix
+    MEDIUM = "medium"  # Should fix
+    LOW = "low"  # Suggestion
 
 
 class EvalDimension(str, Enum):

@@ -9,15 +9,15 @@ from skill_lab.core.models import EvaluationReport, Severity, TraceReport
 
 # Shared severity display mappings — keyed by Severity.value string
 SEVERITY_STYLES: dict[str, str] = {
-    "error": "bold red",
-    "warning": "yellow",
-    "info": "blue",
+    "high": "bold red",
+    "medium": "yellow",
+    "low": "blue",
 }
 
 SEVERITY_ICONS: dict[str, str] = {
-    "error": "X",
-    "warning": "!",
-    "info": "i",
+    "high": "X",
+    "medium": "!",
+    "low": "i",
 }
 
 

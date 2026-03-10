@@ -88,7 +88,7 @@ class MyNewCheck(StaticCheck):
     check_id = "category.my-check"
     check_name = "My Check"
     description = "Description of what this check does"
-    severity = Severity.WARNING
+    severity = Severity.MEDIUM
     dimension = EvalDimension.CONTENT
 
     def run(self, skill: Skill) -> CheckResult:

@@ -533,7 +533,7 @@ def validate(
         ),
     ] = False,
 ) -> None:
-    """Quick validation that reports only errors."""
+    """Quick validation that reports only high-severity failures."""
     skill_path = _resolve_skill_path(skill_path)
 
     with _cli_error_handler():

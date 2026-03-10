@@ -103,8 +103,8 @@ class StaticEvaluator:
 
         metrics = calculate_metrics(results)
 
-        # Determine overall pass (no ERROR-level failures)
-        error_failures = [r for r in results if not r.passed and r.severity == Severity.ERROR]
+        # Determine overall pass (no HIGH-severity failures)
+        error_failures = [r for r in results if not r.passed and r.severity == Severity.HIGH]
         overall_pass = len(error_failures) == 0
 
         # Calculate quality score
@@ -128,7 +128,7 @@ class StaticEvaluator:
         )
 
     def validate(self, skill_path: str | Path) -> tuple[bool, list[CheckResult]]:
-        """Quick validation that returns only ERROR-level failures.
+        """Quick validation that returns only HIGH-severity failures.
 
         Args:
             skill_path: Path to the skill directory.
@@ -137,5 +137,5 @@ class StaticEvaluator:
             Tuple of (passed, error_results).
         """
         report = self.evaluate(skill_path)
-        error_results = [r for r in report.results if not r.passed and r.severity == Severity.ERROR]
+        error_results = [r for r in report.results if not r.passed and r.severity == Severity.HIGH]
         return report.overall_pass, error_results

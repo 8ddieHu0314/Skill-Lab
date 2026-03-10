@@ -146,9 +146,9 @@ src/skill_lab/
 
 ```python
 class Severity(str, Enum):
-    ERROR = "error"      # Must fix (weight: 1.0)
-    WARNING = "warning"  # Should fix (weight: 0.5)
-    INFO = "info"        # Suggestion (weight: 0.25)
+    HIGH = "high"        # Must fix (weight: 1.0)
+    MEDIUM = "medium"    # Should fix (weight: 0.5)
+    LOW = "low"          # Suggestion (weight: 0.25)
 
 class EvalDimension(str, Enum):
     STRUCTURE = "structure"      # 30% weight
@@ -248,7 +248,7 @@ def register_check(check_class):
 class SkillMdExistsCheck(StaticCheck):
     check_id = "structure.skill-md-exists"
     check_name = "SKILL.md Exists"
-    severity = Severity.ERROR
+    severity = Severity.HIGH
     dimension = EvalDimension.STRUCTURE
 
     def run(self, skill: Skill) -> CheckResult:
@@ -316,9 +316,9 @@ from skill_lab.checks.static import content, description, naming, schema, struct
 For each dimension, calculate: `(passed_weight / total_weight) * 100`
 
 Weights by severity:
-- ERROR = 1.0
-- WARNING = 0.5
-- INFO = 0.25
+- HIGH = 1.0
+- MEDIUM = 0.5
+- LOW = 0.25
 
 #### Step 2: Weighted Average
 
@@ -337,9 +337,9 @@ DIMENSION_WEIGHTS = {
 
 ```
 Structure: 5 checks, all pass       → 100 × 0.30 = 30.0
-Naming: 5 checks, 1 ERROR fails     →  80 × 0.20 = 16.0
+Naming: 5 checks, 1 HIGH fails      →  80 × 0.20 = 16.0
 Description: 5 checks, all pass     → 100 × 0.25 = 25.0
-Content: 6 checks, 1 WARNING fails  →  90 × 0.25 = 22.5
+Content: 6 checks, 1 MEDIUM fails   →  90 × 0.25 = 22.5
 ──────────────────────────────────────────────────────
 Final Score: 93.5
 ```
@@ -699,7 +699,7 @@ class MyNewCheck(StaticCheck):
     check_id: ClassVar[str] = "dimension.my-check"
     check_name: ClassVar[str] = "My Check Name"
     description: ClassVar[str] = "What this check verifies"
-    severity: ClassVar[Severity] = Severity.WARNING
+    severity: ClassVar[Severity] = Severity.MEDIUM
     dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
     spec_required: ClassVar[bool] = False  # True if required by Agent Skills spec
 
@@ -710,8 +710,8 @@ class MyNewCheck(StaticCheck):
 ```
 
 **Check Categories:**
-- **Spec-required checks** (10): Must pass to be valid per the Agent Skills spec. Use `spec_required = True` and `Severity.ERROR`.
-- **Quality suggestions** (18): Best practices that improve skill quality. Use `spec_required = False` (default) with `Severity.WARNING` or `Severity.INFO`.
+- **Spec-required checks** (10): Must pass to be valid per the Agent Skills spec. Use `spec_required = True` and `Severity.HIGH`.
+- **Quality suggestions** (18): Best practices that improve skill quality. Use `spec_required = False` (default) with `Severity.MEDIUM` or `Severity.LOW`.
 
 ---
 

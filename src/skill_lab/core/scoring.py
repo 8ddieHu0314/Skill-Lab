@@ -19,9 +19,9 @@ DIMENSION_WEIGHTS: dict[EvalDimension, float] = {
 
 # Weights for severity levels when calculating dimension scores
 SEVERITY_WEIGHTS: dict[Severity, float] = {
-    Severity.ERROR: 1.0,
-    Severity.WARNING: 0.5,
-    Severity.INFO: 0.25,
+    Severity.HIGH: 1.0,
+    Severity.MEDIUM: 0.5,
+    Severity.LOW: 0.25,
 }
 
 
