@@ -55,6 +55,7 @@ class BodyNotEmptyCheck(StaticCheck):
     description: ClassVar[str] = "SKILL.md body has meaningful content"
     severity: ClassVar[Severity] = Severity.WARNING
     dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
+    fix: ClassVar[str] = "Add instructions and context to your SKILL.md body"
 
     def run(self, skill: Skill) -> CheckResult:
         body = skill.body.strip()
@@ -88,6 +89,7 @@ class LineBudgetCheck(StaticCheck):
     description: ClassVar[str] = f"Body is under {MAX_LINE_COUNT} lines"
     severity: ClassVar[Severity] = Severity.WARNING
     dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
+    fix: ClassVar[str] = "Trim your SKILL.md body to under 500 lines"
 
     def run(self, skill: Skill) -> CheckResult:
         lines = skill.body.split("\n")
@@ -115,6 +117,7 @@ class HasExamplesCheck(StaticCheck):
     description: ClassVar[str] = "Content contains code examples"
     severity: ClassVar[Severity] = Severity.INFO
     dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
+    fix: ClassVar[str] = "Add code examples using fenced code blocks"
 
     def run(self, skill: Skill) -> CheckResult:
         body = skill.body
@@ -142,6 +145,7 @@ class ReferenceDepthCheck(StaticCheck):
     description: ClassVar[str] = f"References are max {MAX_REFERENCE_DEPTH} level deep"
     severity: ClassVar[Severity] = Severity.WARNING
     dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
+    fix: ClassVar[str] = "Flatten your references/ folder — keep it to 1 level deep"
 
     def run(self, skill: Skill) -> CheckResult:
         references_path = skill.path / "references"
@@ -187,6 +191,7 @@ class ScriptsReferencedCheck(StaticCheck):
     description: ClassVar[str] = "Scripts in scripts/ are mentioned in the SKILL.md body"
     severity: ClassVar[Severity] = Severity.WARNING
     dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
+    fix: ClassVar[str] = "Mention your script filenames in the SKILL.md body"
 
     def run(self, skill: Skill) -> CheckResult:
         scripts_path = skill.path / "scripts"
@@ -239,6 +244,7 @@ class ScriptPathsExistCheck(StaticCheck):
     description: ClassVar[str] = "Script paths referenced in body resolve to files on disk"
     severity: ClassVar[Severity] = Severity.WARNING
     dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
+    fix: ClassVar[str] = "Create the missing script files or fix the paths in your SKILL.md body"
 
     def run(self, skill: Skill) -> CheckResult:
         refs = _SCRIPT_PATH_RE.findall(skill.body)
@@ -298,6 +304,7 @@ class CompatibilityPrereqsCheck(StaticCheck):
     description: ClassVar[str] = "Command runners in body are documented in compatibility field"
     severity: ClassVar[Severity] = Severity.INFO
     dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
+    fix: ClassVar[str] = "Add required runtimes to the compatibility: field"
 
     def run(self, skill: Skill) -> CheckResult:
         matches = _RUNNER_RE.findall(skill.body)
@@ -355,6 +362,7 @@ class TokenBudgetCheck(StaticCheck):
     description: ClassVar[str] = f"Body is under {MAX_BODY_TOKENS} tokens"
     severity: ClassVar[Severity] = Severity.WARNING
     dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
+    fix: ClassVar[str] = "Trim your SKILL.md body to under 5000 tokens"
 
     def run(self, skill: Skill) -> CheckResult:
         tokens = estimate_tokens(skill.body)
@@ -383,6 +391,7 @@ class MetadataTokenBudgetCheck(StaticCheck):
     )
     severity: ClassVar[Severity] = Severity.INFO
     dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
+    fix: ClassVar[str] = "Shorten your name or description to under 150 tokens"
 
     def run(self, skill: Skill) -> CheckResult:
         if skill.metadata is None:
@@ -416,6 +425,7 @@ class DescriptionActionableCheck(StaticCheck):
     description: ClassVar[str] = "Description explains when to use this skill"
     severity: ClassVar[Severity] = Severity.INFO
     dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
+    fix: ClassVar[str] = "Add 'Use when...' phrasing to describe when to trigger this skill"
 
     def run(self, skill: Skill) -> CheckResult:
         if skill.metadata is None or not skill.metadata.description.strip():
@@ -455,6 +465,7 @@ class AssetPathsExistCheck(StaticCheck):
     description: ClassVar[str] = "Asset paths referenced in body resolve to files on disk"
     severity: ClassVar[Severity] = Severity.WARNING
     dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
+    fix: ClassVar[str] = "Create the missing asset files or fix the paths in your SKILL.md body"
 
     def run(self, skill: Skill) -> CheckResult:
         refs = _ASSET_PATH_RE.findall(skill.body)

@@ -48,11 +48,11 @@ class ConsoleReporter:
         hidden = total_count - shown_count
         if hidden > 0:
             self.console.print(
-                f"[dim]({hidden} passing checks hidden, run with --verbose to see all)[/dim]"
+                f"[dim]({hidden} passing checks hidden, run [bold]sklab evaluate --verbose ./skill[/bold] to see all)[/dim]"
             )
         elif shown_count == 0:
             self.console.print("[green]All checks passed![/green]")
-            self.console.print("[dim](run with --verbose to see details)[/dim]")
+            self.console.print("[dim](run [bold]sklab evaluate --verbose ./skill[/bold] to see details)[/dim]")
 
     def report(self, report: EvaluationReport) -> None:
         """Print an evaluation report to the console.
@@ -115,11 +115,12 @@ class ConsoleReporter:
                 severity_text = Text(
                     result.severity.value.upper(), style=self._severity_style(result.severity)
                 )
+                display_message = (result.fix or result.message) if not result.passed else result.message
                 table.add_row(
                     status_icon,
                     severity_text,
                     result.check_id,
-                    result.message,
+                    display_message,
                 )
 
             self.console.print(table)

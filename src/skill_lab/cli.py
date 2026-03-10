@@ -179,6 +179,9 @@ def _print_getting_started() -> None:
     guide.add_row("  [dim]--suggestions-only[/dim]", "Only quality suggestions")
     guide.add_row("", "")
     guide.add_row("sklab stats", "Your personal usage history and score trends")
+    guide.add_row("  [dim]count[/dim]", "Skill invocation counts for the current month")
+    guide.add_row("  [dim]score[/dim]", "Score trend for all evaluated skills")
+    guide.add_row("  [dim]tokens[/dim]", "Token usage per skill for the current month")
     guide.add_row("", "")
     guide.add_row("sklab", "Re-run this guide anytime")
 
@@ -459,7 +462,10 @@ def evaluate(
         ),
     ] = False,
 ) -> None:
-    """Evaluate a skill and generate a quality report."""
+    """Evaluate a skill and generate a quality report.
+
+    Run from inside a skill directory, or pass the path as an argument.
+    """
     # --all and --repo are mutually exclusive with a positional path
     if (all_skills or repo) and skill_path is not None:
         console.print("[red]Error: Cannot combine --all/--repo with a skill path argument.[/red]")
