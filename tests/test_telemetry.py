@@ -1027,7 +1027,7 @@ class TestBuildEventPayload:
         assert "sklab_version" in payload
 
     def test_excludes_sensitive_fields(self):
-        """Payload must never contain skill_name, skill_path, skill_version, skill_source."""
+        """Payload must never contain skill_path, skill_version, skill_source."""
         from skill_lab.core.telemetry import _build_event_payload
 
         payload = _build_event_payload(
@@ -1038,9 +1038,10 @@ class TestBuildEventPayload:
             timestamp="2024-01-01T00:00:00+00:00",
             is_ci=False,
             ci_provider=None,
+            skill_name="my-skill",
             score=85.0,
         )
-        assert "skill_name" not in payload
+        assert payload["skill_name"] == "my-skill"
         assert "skill_path" not in payload
         assert "skill_version" not in payload
         assert "skill_source" not in payload
@@ -1336,7 +1337,7 @@ class TestRetryStaleEvents:
         assert len(captured) == 1
         assert captured[0]["event_kind"] == "command"
         assert captured[0]["command"] == "evaluate"
-        assert "skill_name" not in captured[0]
+        assert captured[0]["skill_name"] == "test"
         assert "skill_path" not in captured[0]
 
     def test_noop_when_no_stale_events(self, tmp_telemetry, monkeypatch):

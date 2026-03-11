@@ -29,7 +29,7 @@ _RETENTION_DAYS = 90
 _FIRST_RUN_NOTICE = (
     "sklab collects anonymous usage data (command names, flags, duration, exit codes, "
     "OS, Python version, skill names, scores, token counts). "
-    "No skill content, file paths, or flag values are collected.\n"
+    "No skill content, source paths, or flag values are collected.\n"
     "To opt out: set SKLAB_NO_ANALYTICS=1 or DO_NOT_TRACK=1.\n"
     "Privacy policy: docs/PRIVACY.md"
 )
@@ -415,6 +415,7 @@ def record_event(
             is_ci=is_ci,
             ci_provider=ci_provider,
             flags=flags,
+            skill_name=skill_name,
             score=score,
             model_name=model_name,
             input_tokens=input_tokens,
@@ -549,6 +550,7 @@ def _build_event_payload(
     is_ci: bool,
     ci_provider: str | None,
     flags: list[str] | None = None,
+    skill_name: str | None = None,
     score: float | None = None,
     model_name: str | None = None,
     input_tokens: int | None = None,
@@ -558,7 +560,7 @@ def _build_event_payload(
 ) -> dict[str, Any]:
     """Build a flat event payload from in-memory args (no DB query).
 
-    Excludes sensitive fields (skill_name, skill_path, skill_version, skill_source).
+    Excludes sensitive fields (skill_path, skill_version, skill_source).
     """
     return {
         "event_kind": "command",
@@ -574,6 +576,7 @@ def _build_event_payload(
         "duration_ms": duration_ms,
         "exit_code": exit_code,
         "timestamp": timestamp,
+        "skill_name": skill_name,
         "score": score,
         "model_name": model_name,
         "input_tokens": input_tokens,
@@ -650,7 +653,8 @@ def _retry_stale_events() -> None:
                 SELECT c.id, c.install_uuid, c.session_uuid, c.sklab_version,
                        c.command, c.flags, c.duration_ms, c.exit_code,
                        c.is_ci, c.ci_provider, c.timestamp,
-                       s.score, s.model_name, s.input_tokens, s.output_tokens,
+                       s.skill_name, s.score, s.model_name,
+                       s.input_tokens, s.output_tokens,
                        s.step_count, s.tool_call_count,
                        i.os, i.python_version
                 FROM command_events c
@@ -668,8 +672,8 @@ def _retry_stale_events() -> None:
                     "install_uuid": row[1],
                     "session_uuid": row[2],
                     "sklab_version": row[3],
-                    "os": row[17],
-                    "python_version": row[18],
+                    "os": row[18],
+                    "python_version": row[19],
                     "is_ci": bool(row[8]),
                     "ci_provider": row[9],
                     "command": row[4],
@@ -677,12 +681,13 @@ def _retry_stale_events() -> None:
                     "duration_ms": row[6],
                     "exit_code": row[7],
                     "timestamp": row[10],
-                    "score": row[11],
-                    "model_name": row[12],
-                    "input_tokens": row[13],
-                    "output_tokens": row[14],
-                    "step_count": row[15],
-                    "tool_call_count": row[16],
+                    "skill_name": row[11],
+                    "score": row[12],
+                    "model_name": row[13],
+                    "input_tokens": row[14],
+                    "output_tokens": row[15],
+                    "step_count": row[16],
+                    "tool_call_count": row[17],
                 }
                 if _post_event(payload):
                     cmd_id = row[0]

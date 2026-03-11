@@ -653,7 +653,7 @@ scenarios:
 | **NFKC Unicode normalization** | Naming check normalizes both sides with `unicodedata.normalize("NFKC", ...)` so precomposed/decomposed forms match |
 | **Custom YAML loader** | `_SkillYAMLLoader` prevents `yes`→`True`, `null`→`None` coercion; values stay as strings |
 | **Inline per-event sync** | Each `record_event()` / `record_error()` call builds a flat JSON payload (`_build_event_payload`) and POSTs it inline via `_post_event()` (2s timeout). Rows are marked `synced=1` only on success. A daemon thread (`_retry_stale_events`) retries unsynced events older than 1 hour. All exceptions silently swallowed — network failures never crash the CLI. |
-| **Local-only sensitive fields** | `skill_path`, `skill_name`, `skill_version`, `skill_source` are stored locally but excluded from server sync payloads |
+| **Local-only sensitive fields** | `skill_path`, `skill_version`, `skill_source` are stored locally but excluded from server sync payloads. `skill_name` is synced for product analytics. |
 | **90-day retention** | Local telemetry rows older than 90 days are auto-deleted (throttled to once/day). `sklab telemetry purge` for immediate wipe. |
 | **Telemetry debug mode** | `SKLAB_TELEMETRY_DEBUG=1` prints the JSON payload to stderr and skips the POST — allows users to audit exactly what would be sent |
 | **Telemetry independent of analytics opt-in** | PyPI version update checks run regardless of whether the user opted into analytics |
