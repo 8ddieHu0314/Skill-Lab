@@ -239,6 +239,7 @@ class TestUpsertInstall:
         _write_config({"analytics_enabled": True, "user_uuid": "install-uuid"})
         monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
         monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
+        monkeypatch.setattr(telemetry_module, "_post_event", lambda *a, **kw: False)
 
     def test_first_run_creates_row(self, tmp_telemetry, monkeypatch):
         self._enable(tmp_telemetry, monkeypatch)
@@ -339,6 +340,7 @@ class TestRecordEvent:
         _write_config({"analytics_enabled": True, "user_uuid": "test-uuid"})
         monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
         monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
+        monkeypatch.setattr(telemetry_module, "_post_event", lambda *a, **kw: False)
 
     def test_writes_row_to_command_events(self, tmp_telemetry, monkeypatch):
         self._enable(tmp_telemetry, monkeypatch)
@@ -587,6 +589,7 @@ class TestRecordError:
         _write_config({"analytics_enabled": True, "user_uuid": "test-uuid"})
         monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
         monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
+        monkeypatch.setattr(telemetry_module, "_post_event", lambda *a, **kw: False)
 
     def test_error_written_to_error_events(self, tmp_telemetry, monkeypatch):
         self._enable(tmp_telemetry, monkeypatch)
@@ -707,6 +710,7 @@ class TestFlagCapture:
         _write_config({"analytics_enabled": True, "user_uuid": "test-uuid"})
         monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
         monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
+        monkeypatch.setattr(telemetry_module, "_post_event", lambda *a, **kw: False)
 
         # Simulate the flag capture logic from the decorator
         kwargs = {"verbose": True, "spec_only": False, "skill_path": None}
@@ -981,19 +985,228 @@ class TestCheckForUpdate:
         assert result is None
 
 
-# ─── _sync_to_endpoint / _do_sync ─────────────────────────────────────────────
+# ─── Sync helpers (_build_event_payload, _post_event, _inline_sync) ───────────
+
+
+class TestBuildEventPayload:
+    def test_returns_flat_dict_with_event_kind(self):
+        from skill_lab.core.telemetry import _build_event_payload
+
+        payload = _build_event_payload(
+            install_uuid="u1",
+            command="evaluate",
+            duration_ms=100.0,
+            exit_code=0,
+            timestamp="2024-01-01T00:00:00+00:00",
+            is_ci=False,
+            ci_provider=None,
+        )
+        assert payload["event_kind"] == "command"
+        assert payload["install_uuid"] == "u1"
+        assert payload["command"] == "evaluate"
+        assert payload["duration_ms"] == 100.0
+        assert payload["exit_code"] == 0
+        assert payload["is_ci"] is False
+        assert payload["ci_provider"] is None
+
+    def test_includes_system_info(self):
+        from skill_lab.core.telemetry import _build_event_payload
+
+        payload = _build_event_payload(
+            install_uuid="u1",
+            command="evaluate",
+            duration_ms=0.0,
+            exit_code=0,
+            timestamp="2024-01-01T00:00:00+00:00",
+            is_ci=False,
+            ci_provider=None,
+        )
+        assert "os" in payload
+        assert "python_version" in payload
+        assert "session_uuid" in payload
+        assert "sklab_version" in payload
+
+    def test_excludes_sensitive_fields(self):
+        """Payload must never contain skill_name, skill_path, skill_version, skill_source."""
+        from skill_lab.core.telemetry import _build_event_payload
+
+        payload = _build_event_payload(
+            install_uuid="u1",
+            command="evaluate",
+            duration_ms=0.0,
+            exit_code=0,
+            timestamp="2024-01-01T00:00:00+00:00",
+            is_ci=False,
+            ci_provider=None,
+            score=85.0,
+        )
+        assert "skill_name" not in payload
+        assert "skill_path" not in payload
+        assert "skill_version" not in payload
+        assert "skill_source" not in payload
+
+    def test_includes_optional_fields(self):
+        from skill_lab.core.telemetry import _build_event_payload
+
+        payload = _build_event_payload(
+            install_uuid="u1",
+            command="evaluate",
+            duration_ms=100.0,
+            exit_code=0,
+            timestamp="2024-01-01T00:00:00+00:00",
+            is_ci=True,
+            ci_provider="github_actions",
+            flags=["--verbose"],
+            score=90.0,
+            model_name="claude-sonnet-4-6",
+            input_tokens=1000,
+            output_tokens=500,
+            step_count=5,
+            tool_call_count=10,
+        )
+        assert payload["flags"] == ["--verbose"]
+        assert payload["score"] == 90.0
+        assert payload["model_name"] == "claude-sonnet-4-6"
+        assert payload["input_tokens"] == 1000
+        assert payload["output_tokens"] == 500
+        assert payload["step_count"] == 5
+        assert payload["tool_call_count"] == 10
+
+    def test_none_flags_become_empty_list(self):
+        from skill_lab.core.telemetry import _build_event_payload
+
+        payload = _build_event_payload(
+            install_uuid="u1",
+            command="evaluate",
+            duration_ms=0.0,
+            exit_code=0,
+            timestamp="2024-01-01T00:00:00+00:00",
+            is_ci=False,
+            ci_provider=None,
+            flags=None,
+        )
+        assert payload["flags"] == []
+
+
+class TestPostEvent:
+    def test_returns_true_on_success(self):
+        from skill_lab.core.telemetry import _post_event
+
+        with patch("urllib.request.urlopen"):
+            assert _post_event({"event_kind": "command"}) is True
+
+    def test_returns_false_on_network_error(self):
+        from skill_lab.core.telemetry import _post_event
+
+        with patch("urllib.request.urlopen", side_effect=OSError("network error")):
+            assert _post_event({"event_kind": "command"}) is False
+
+    def test_debug_mode_prints_to_stderr_and_returns_true(self, monkeypatch, capsys):
+        from skill_lab.core.telemetry import _post_event
+
+        monkeypatch.setenv("SKLAB_TELEMETRY_DEBUG", "1")
+        payload = {"event_kind": "command", "command": "evaluate"}
+        result = _post_event(payload)
+        assert result is True
+        captured = capsys.readouterr()
+        parsed = json.loads(captured.err)
+        assert parsed["event_kind"] == "command"
+
+    def test_debug_mode_skips_network_post(self, monkeypatch):
+        from skill_lab.core.telemetry import _post_event
+
+        monkeypatch.setenv("SKLAB_TELEMETRY_DEBUG", "1")
+        with patch("urllib.request.urlopen") as mock_open:
+            _post_event({"event_kind": "command"})
+            mock_open.assert_not_called()
+
+    def test_sends_json_body(self):
+        from skill_lab.core.telemetry import _post_event
+
+        captured_req: list[object] = []
+
+        def mock_urlopen(req, timeout=None):  # type: ignore[no-untyped-def]
+            captured_req.append(req)
+            return MagicMock(__enter__=lambda s: s, __exit__=MagicMock(return_value=False))
+
+        with patch("urllib.request.urlopen", side_effect=mock_urlopen):
+            _post_event({"event_kind": "command", "command": "evaluate"})
+
+        assert len(captured_req) == 1
+        body = json.loads(captured_req[0].data.decode())  # type: ignore[union-attr]
+        assert body["event_kind"] == "command"
+
+
+class TestInlineSync:
+    def test_marks_command_event_synced_on_success(self, tmp_telemetry, monkeypatch):
+        from skill_lab.core.telemetry import _inline_sync
+
+        _write_config({"analytics_enabled": True, "user_uuid": "u1"})
+        monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
+        monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
+        monkeypatch.setattr(telemetry_module, "_post_event", lambda *a, **kw: False)
+        record_event("evaluate", 100.0, 0)
+
+        with patch.object(telemetry_module, "_post_event", return_value=True):
+            _inline_sync({"event_kind": "command"}, 1, False)
+
+        conn = sqlite3.connect(tmp_telemetry["db"])
+        synced = conn.execute("SELECT synced FROM command_events WHERE id = 1").fetchone()[0]
+        conn.close()
+        assert synced == 1
+
+    def test_marks_skill_event_synced_on_success(self, tmp_telemetry, monkeypatch):
+        from skill_lab.core.telemetry import _inline_sync
+
+        _write_config({"analytics_enabled": True, "user_uuid": "u1"})
+        monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
+        monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
+        monkeypatch.setattr(telemetry_module, "_post_event", lambda *a, **kw: False)
+        record_event("evaluate", 100.0, 0, skill_name="test", score=80.0)
+
+        with patch.object(telemetry_module, "_post_event", return_value=True):
+            _inline_sync({"event_kind": "command"}, 1, True)
+
+        conn = sqlite3.connect(tmp_telemetry["db"])
+        synced = conn.execute(
+            "SELECT synced FROM skill_events WHERE command_event_id = 1"
+        ).fetchone()[0]
+        conn.close()
+        assert synced == 1
+
+    def test_does_not_mark_synced_on_failure(self, tmp_telemetry, monkeypatch):
+        from skill_lab.core.telemetry import _inline_sync
+
+        _write_config({"analytics_enabled": True, "user_uuid": "u1"})
+        monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
+        monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
+        monkeypatch.setattr(telemetry_module, "_post_event", lambda *a, **kw: False)
+        record_event("evaluate", 100.0, 0)
+
+        with patch.object(telemetry_module, "_post_event", return_value=False):
+            _inline_sync({"event_kind": "command"}, 1, False)
+
+        conn = sqlite3.connect(tmp_telemetry["db"])
+        synced = conn.execute("SELECT synced FROM command_events WHERE id = 1").fetchone()[0]
+        conn.close()
+        assert synced == 0
+
+
+# ─── _sync_to_endpoint / _retry_stale_events ─────────────────────────────────
 
 
 class TestSyncToEndpoint:
-    def test_spawns_daemon_thread_targeting_do_sync(self):
-        """_sync_to_endpoint must start a daemon thread pointing at _do_sync."""
+    def test_spawns_daemon_thread_targeting_retry_stale_events(self):
+        """_sync_to_endpoint must start a daemon thread pointing at _retry_stale_events."""
         with patch("threading.Thread") as mock_thread_cls:
             mock_instance = MagicMock()
             mock_thread_cls.return_value = mock_instance
 
             telemetry_module._sync_to_endpoint()
 
-            mock_thread_cls.assert_called_once_with(target=telemetry_module._do_sync, daemon=True)
+            mock_thread_cls.assert_called_once_with(
+                target=telemetry_module._retry_stale_events, daemon=True
+            )
             mock_instance.start.assert_called_once()
 
     def test_returns_before_sync_completes(self):
@@ -1005,230 +1218,181 @@ class TestSyncToEndpoint:
             started.set()
             allow_finish.wait(timeout=5)
 
-        with patch.object(telemetry_module, "_do_sync", slow_sync):
+        with patch.object(telemetry_module, "_retry_stale_events", slow_sync):
             telemetry_module._sync_to_endpoint()
             returned_before_finish = not allow_finish.is_set()
 
         allow_finish.set()
         assert returned_before_finish
 
-    def test_do_sync_marks_rows_synced_on_success(self, tmp_telemetry, monkeypatch):
-        """_do_sync marks synced=1 for all unsynced rows when the POST succeeds."""
+
+class TestRetryStaleEvents:
+    def _enable_and_seed(
+        self, tmp_telemetry, monkeypatch, count=1, with_skill=False
+    ):
+        """Create events and backdate them to >1hr ago so _retry picks them up."""
         _write_config({"analytics_enabled": True, "user_uuid": "u1"})
         monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
         monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
-        record_event("evaluate", 100.0, 0)
-        record_event("validate", 50.0, 0)
+        monkeypatch.setattr(telemetry_module, "_post_event", lambda *a, **kw: False)
 
-        with patch("urllib.request.urlopen"):
-            telemetry_module._do_sync()
+        for _ in range(count):
+            if with_skill:
+                record_event("evaluate", 100.0, 0, skill_name="test", score=80.0)
+            else:
+                record_event("evaluate", 100.0, 0)
+
+        # Backdate rows to 2 hours ago
+        from datetime import timedelta
+
+        old_ts = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+        conn = sqlite3.connect(tmp_telemetry["db"])
+        conn.execute("UPDATE command_events SET timestamp = ?", (old_ts,))
+        conn.commit()
+        conn.close()
+
+    def test_retries_stale_command_events(self, tmp_telemetry, monkeypatch):
+        self._enable_and_seed(tmp_telemetry, monkeypatch)
+
+        with patch.object(telemetry_module, "_post_event", return_value=True):
+            telemetry_module._retry_stale_events()
 
         conn = sqlite3.connect(tmp_telemetry["db"])
-        unsynced_cmd = conn.execute(
+        unsynced = conn.execute(
             "SELECT COUNT(*) FROM command_events WHERE synced = 0"
         ).fetchone()[0]
-        unsynced_install = conn.execute(
-            "SELECT COUNT(*) FROM installs WHERE synced = 0"
-        ).fetchone()[0]
-        conn.close()
-        assert unsynced_cmd == 0
-        assert unsynced_install == 0
-
-    def test_do_sync_marks_rows_synced_even_on_network_error(self, tmp_telemetry, monkeypatch):
-        """_do_sync marks synced=1 even when the POST fails (fire-and-forget)."""
-        _write_config({"analytics_enabled": True, "user_uuid": "u1"})
-        monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
-        monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
-        record_event("evaluate", 100.0, 0)
-
-        with patch("urllib.request.urlopen", side_effect=OSError("network error")):
-            telemetry_module._do_sync()
-
-        conn = sqlite3.connect(tmp_telemetry["db"])
-        synced = conn.execute("SELECT synced FROM command_events").fetchone()[0]
-        conn.close()
-        assert synced == 1
-
-    def test_do_sync_noop_when_no_unsynced_rows(self, tmp_telemetry, monkeypatch):
-        """_do_sync makes no HTTP call when there are no unsynced rows."""
-        _write_config({"analytics_enabled": True, "user_uuid": "u1"})
-        monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
-        monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
-        record_event("evaluate", 100.0, 0)
-
-        # Mark all rows as already synced
-        conn = sqlite3.connect(tmp_telemetry["db"])
-        conn.execute("UPDATE command_events SET synced = 1")
-        conn.execute("UPDATE installs SET synced = 1")
-        conn.commit()
-        conn.close()
-
-        with patch("urllib.request.urlopen") as mock_open:
-            telemetry_module._do_sync()
-            mock_open.assert_not_called()
-
-    def test_do_sync_payload_structure(self, tmp_telemetry, monkeypatch):
-        """_do_sync sends structured payload with all 4 table keys."""
-        _write_config({"analytics_enabled": True, "user_uuid": "u1"})
-        monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
-        monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
-        record_event("evaluate", 100.0, 0, skill_name="test", score=80.0)
-
-        captured: list[dict] = []
-
-        def mock_urlopen(req, timeout=None):
-            body = json.loads(req.data.decode())
-            captured.append(body)
-            return MagicMock(__enter__=lambda s: s, __exit__=MagicMock(return_value=False))
-
-        with patch("urllib.request.urlopen", side_effect=mock_urlopen):
-            telemetry_module._do_sync()
-
-        assert len(captured) == 1
-        payload = captured[0]
-        assert "installs" in payload
-        assert "command_events" in payload
-        assert "skill_events" in payload
-        assert "error_events" in payload
-
-    def test_do_sync_excludes_sensitive_fields_from_payload(self, tmp_telemetry, monkeypatch):
-        """skill_path, skill_name, skill_version, skill_source must never be synced."""
-        _write_config({"analytics_enabled": True, "user_uuid": "u1"})
-        monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
-        monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
-        record_event(
-            "skill-invoke",
-            0.0,
-            0,
-            skill_name="test",
-            skill_version="1.0.0",
-            skill_source="local",
-            skill_path="/home/user/projects/my-skill",
-            input_tokens=500,
-        )
-
-        captured: list[dict] = []
-
-        def mock_urlopen(req, timeout=None):
-            body = json.loads(req.data.decode())
-            captured.append(body)
-            return MagicMock(__enter__=lambda s: s, __exit__=MagicMock(return_value=False))
-
-        with patch("urllib.request.urlopen", side_effect=mock_urlopen):
-            telemetry_module._do_sync()
-
-        skill_event = captured[0]["skill_events"][0]
-        assert "skill_path" not in skill_event
-        assert "skill_name" not in skill_event
-        assert "skill_version" not in skill_event
-        assert "skill_source" not in skill_event
-        assert "/home/user" not in json.dumps(skill_event)
-
-    def test_do_sync_noop_when_only_some_tables_all_synced(self, tmp_telemetry, monkeypatch):
-        """If every table is empty or all synced, no HTTP call is made."""
-        _write_config({"analytics_enabled": True, "user_uuid": "u1"})
-        monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
-        monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
-        # Write a skill_event row and immediately mark it synced
-        record_event("evaluate", 100.0, 0, skill_name="s", score=80.0)
-        conn = sqlite3.connect(tmp_telemetry["db"])
-        conn.execute("UPDATE command_events SET synced = 1")
-        conn.execute("UPDATE installs SET synced = 1")
-        conn.execute("UPDATE skill_events SET synced = 1")
-        conn.commit()
-        conn.close()
-
-        with patch("urllib.request.urlopen") as mock_open:
-            telemetry_module._do_sync()
-            mock_open.assert_not_called()
-
-    def test_do_sync_with_only_error_events_unsynced(self, tmp_telemetry, monkeypatch):
-        """_do_sync fires a POST even when only error_events have unsynced rows."""
-        _write_config({"analytics_enabled": True, "user_uuid": "u1"})
-        monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
-        monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
-
-        # Create a command_events row (needed to init the DB), mark it synced
-        cmd_id = record_event("evaluate", 100.0, 1)
-        conn = sqlite3.connect(tmp_telemetry["db"])
-        conn.execute("UPDATE command_events SET synced = 1")
-        conn.execute("UPDATE installs SET synced = 1")
-        conn.commit()
-        conn.close()
-
-        # Write an error row (which is unsynced by default)
-        record_error(ValueError("oops"), "evaluate", command_event_id=cmd_id)
-
-        captured: list[dict] = []
-
-        def mock_urlopen(req, timeout=None):
-            captured.append(json.loads(req.data.decode()))
-            return MagicMock(__enter__=lambda s: s, __exit__=MagicMock(return_value=False))
-
-        with patch("urllib.request.urlopen", side_effect=mock_urlopen):
-            telemetry_module._do_sync()
-
-        assert len(captured) == 1
-        assert len(captured[0]["error_events"]) == 1
-        assert captured[0]["error_events"][0]["error_type"] == "ValueError"
-        # Other tables contributed no unsynced rows
-        assert captured[0]["command_events"] == []
-        assert captured[0]["installs"] == []
-
-    def test_do_sync_error_events_marked_synced_on_success(self, tmp_telemetry, monkeypatch):
-        _write_config({"analytics_enabled": True, "user_uuid": "u1"})
-        monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
-        monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
-
-        cmd_id = record_event("evaluate", 100.0, 1)
-        record_error(ValueError("fail"), "evaluate", command_event_id=cmd_id)
-
-        with patch("urllib.request.urlopen"):
-            telemetry_module._do_sync()
-
-        conn = sqlite3.connect(tmp_telemetry["db"])
-        unsynced = conn.execute("SELECT COUNT(*) FROM error_events WHERE synced = 0").fetchone()[0]
         conn.close()
         assert unsynced == 0
+
+    def test_skips_recent_events(self, tmp_telemetry, monkeypatch):
+        """Events less than 1 hour old are not retried."""
+        _write_config({"analytics_enabled": True, "user_uuid": "u1"})
+        monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
+        monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
+        monkeypatch.setattr(telemetry_module, "_post_event", lambda *a, **kw: False)
+        record_event("evaluate", 100.0, 0)
+
+        # Don't backdate — event is recent
+        with patch.object(telemetry_module, "_post_event", return_value=True) as mock_post:
+            telemetry_module._retry_stale_events()
+            mock_post.assert_not_called()
+
+        conn = sqlite3.connect(tmp_telemetry["db"])
+        unsynced = conn.execute(
+            "SELECT COUNT(*) FROM command_events WHERE synced = 0"
+        ).fetchone()[0]
+        conn.close()
+        assert unsynced == 1  # still unsynced
+
+    def test_marks_synced_only_on_success(self, tmp_telemetry, monkeypatch):
+        self._enable_and_seed(tmp_telemetry, monkeypatch)
+
+        with patch.object(telemetry_module, "_post_event", return_value=False):
+            telemetry_module._retry_stale_events()
+
+        conn = sqlite3.connect(tmp_telemetry["db"])
+        unsynced = conn.execute(
+            "SELECT COUNT(*) FROM command_events WHERE synced = 0"
+        ).fetchone()[0]
+        conn.close()
+        assert unsynced == 1  # still unsynced because POST failed
+
+    def test_retries_stale_error_events(self, tmp_telemetry, monkeypatch):
+        self._enable_and_seed(tmp_telemetry, monkeypatch)
+
+        # Add an error event and backdate it
+        record_error(ValueError("fail"), "evaluate", command_event_id=1)
+        from datetime import timedelta
+
+        old_ts = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+        conn = sqlite3.connect(tmp_telemetry["db"])
+        conn.execute("UPDATE error_events SET timestamp = ?", (old_ts,))
+        conn.commit()
+        conn.close()
+
+        with patch.object(telemetry_module, "_post_event", return_value=True):
+            telemetry_module._retry_stale_events()
+
+        conn = sqlite3.connect(tmp_telemetry["db"])
+        unsynced = conn.execute(
+            "SELECT COUNT(*) FROM error_events WHERE synced = 0"
+        ).fetchone()[0]
+        conn.close()
+        assert unsynced == 0
+
+    def test_sends_flat_payload(self, tmp_telemetry, monkeypatch):
+        """Retry sends flat payloads with event_kind discriminator."""
+        self._enable_and_seed(tmp_telemetry, monkeypatch, with_skill=True)
+
+        captured: list[dict[str, object]] = []
+
+        def capture_post(payload: dict[str, object]) -> bool:
+            captured.append(payload)
+            return True
+
+        with patch.object(telemetry_module, "_post_event", side_effect=capture_post):
+            telemetry_module._retry_stale_events()
+
+        assert len(captured) == 1
+        assert captured[0]["event_kind"] == "command"
+        assert captured[0]["command"] == "evaluate"
+        assert "skill_name" not in captured[0]
+        assert "skill_path" not in captured[0]
+
+    def test_noop_when_no_stale_events(self, tmp_telemetry, monkeypatch):
+        """No POST when there are no stale unsynced events."""
+        _write_config({"analytics_enabled": True, "user_uuid": "u1"})
+        monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
+        monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
+        monkeypatch.setattr(telemetry_module, "_post_event", lambda *a, **kw: False)
+        record_event("evaluate", 100.0, 0)
+
+        # Mark everything synced
+        conn = sqlite3.connect(tmp_telemetry["db"])
+        conn.execute("UPDATE command_events SET synced = 1")
+        conn.execute("UPDATE installs SET synced = 1")
+        conn.commit()
+        conn.close()
+
+        with patch.object(telemetry_module, "_post_event", return_value=True) as mock_post:
+            telemetry_module._retry_stale_events()
+            mock_post.assert_not_called()
 
 
 # ─── Debug mode (SKLAB_TELEMETRY_DEBUG) ──────────────────────────────────────
 
 
 class TestDebugMode:
-    def test_debug_mode_prints_payload_to_stderr(self, tmp_telemetry, monkeypatch, capsys):
+    def test_debug_mode_prints_flat_payload_to_stderr(self, tmp_telemetry, monkeypatch, capsys):
+        """In debug mode, record_event's inline sync prints flat payload to stderr."""
         _write_config({"analytics_enabled": True, "user_uuid": "u1"})
         monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
         monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
         monkeypatch.setenv("SKLAB_TELEMETRY_DEBUG", "1")
         record_event("evaluate", 100.0, 0)
 
-        telemetry_module._do_sync()
-
         captured = capsys.readouterr()
         payload = json.loads(captured.err)
-        assert "command_events" in payload
-        assert "installs" in payload
+        assert payload["event_kind"] == "command"
+        assert payload["command"] == "evaluate"
 
     def test_debug_mode_skips_network_post(self, tmp_telemetry, monkeypatch):
         _write_config({"analytics_enabled": True, "user_uuid": "u1"})
         monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
         monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
         monkeypatch.setenv("SKLAB_TELEMETRY_DEBUG", "1")
-        record_event("evaluate", 100.0, 0)
 
         with patch("urllib.request.urlopen") as mock_open:
-            telemetry_module._do_sync()
+            record_event("evaluate", 100.0, 0)
             mock_open.assert_not_called()
 
-    def test_debug_mode_still_marks_synced(self, tmp_telemetry, monkeypatch):
+    def test_debug_mode_marks_synced(self, tmp_telemetry, monkeypatch):
+        """In debug mode, _post_event returns True so _inline_sync marks rows synced."""
         _write_config({"analytics_enabled": True, "user_uuid": "u1"})
         monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
         monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
         monkeypatch.setenv("SKLAB_TELEMETRY_DEBUG", "1")
         record_event("evaluate", 100.0, 0)
-
-        telemetry_module._do_sync()
 
         conn = sqlite3.connect(tmp_telemetry["db"])
         synced = conn.execute("SELECT synced FROM command_events").fetchone()[0]
@@ -1246,6 +1410,7 @@ class TestRetention:
         _write_config({"analytics_enabled": True, "user_uuid": "u1"})
         monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
         monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
+        monkeypatch.setattr(telemetry_module, "_post_event", lambda *a, **kw: False)
         record_event("evaluate", 100.0, 0)
 
         # Backdate the row to 100 days ago
@@ -1272,6 +1437,7 @@ class TestRetention:
         _write_config({"analytics_enabled": True, "user_uuid": "u1"})
         monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
         monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
+        monkeypatch.setattr(telemetry_module, "_post_event", lambda *a, **kw: False)
         record_event("evaluate", 100.0, 0)
 
         deleted = cleanup_old_data()
@@ -1288,12 +1454,19 @@ class TestRetention:
         _write_config({"analytics_enabled": True, "user_uuid": "u1"})
         monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
         monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
+        monkeypatch.setattr(telemetry_module, "_post_event", lambda *a, **kw: False)
         record_event("evaluate", 100.0, 0)
         assert tmp_telemetry["db"].exists()
 
         result = purge_all_data()
         assert result is True
-        assert not tmp_telemetry["db"].exists()
+        # On Windows, file locks may prevent deletion even after close().
+        # In that case purge_all_data empties all tables instead.
+        if tmp_telemetry["db"].exists():
+            conn = sqlite3.connect(tmp_telemetry["db"])
+            rows = conn.execute("SELECT COUNT(*) FROM command_events").fetchone()[0]
+            conn.close()
+            assert rows == 0
 
     def test_purge_noop_when_no_db(self, tmp_telemetry):
         from skill_lab.core.telemetry import purge_all_data
@@ -1308,6 +1481,7 @@ class TestRetention:
         _write_config({"analytics_enabled": True, "user_uuid": "u1"})
         monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
         monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
+        monkeypatch.setattr(telemetry_module, "_post_event", lambda *a, **kw: False)
         record_event("evaluate", 100.0, 0)
 
         _maybe_cleanup()
@@ -1385,6 +1559,7 @@ class TestGetTelemetryStatus:
         _write_config({"analytics_enabled": True, "user_uuid": "u1"})
         monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
         monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
+        monkeypatch.setattr(telemetry_module, "_post_event", lambda *a, **kw: False)
         record_event("evaluate", 100.0, 0)
 
         status = get_telemetry_status()
@@ -1402,6 +1577,7 @@ class TestGetRecentEvents:
         _write_config({"analytics_enabled": True, "user_uuid": "u1"})
         monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
         monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
+        monkeypatch.setattr(telemetry_module, "_post_event", lambda *a, **kw: False)
         record_event("evaluate", 100.0, 0, skill_name="test-skill", score=85.0)
 
         events = get_recent_events(limit=10)
@@ -1416,6 +1592,7 @@ class TestGetRecentEvents:
         _write_config({"analytics_enabled": True, "user_uuid": "u1"})
         monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
         monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
+        monkeypatch.setattr(telemetry_module, "_post_event", lambda *a, **kw: False)
         record_event("validate", 50.0, 0)  # no skill data
 
         events = get_recent_events(limit=5)
@@ -1429,6 +1606,7 @@ class TestGetRecentEvents:
         _write_config({"analytics_enabled": True, "user_uuid": "u1"})
         monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
         monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
+        monkeypatch.setattr(telemetry_module, "_post_event", lambda *a, **kw: False)
         for i in range(5):
             record_event(f"cmd-{i}", 10.0, 0)
 

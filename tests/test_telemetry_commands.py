@@ -105,6 +105,7 @@ class TestPurgeCommand:
         _write_config({"analytics_enabled": True, "user_uuid": "u1"})
         monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
         monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
+        monkeypatch.setattr(telemetry_module, "_post_event", lambda *a, **kw: False)
         record_event("evaluate", 100.0, 0)
         assert tmp_telemetry["db"].exists()
 
@@ -119,6 +120,7 @@ class TestPurgeCommand:
         _write_config({"analytics_enabled": True, "user_uuid": "u1"})
         monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
         monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
+        monkeypatch.setattr(telemetry_module, "_post_event", lambda *a, **kw: False)
         record_event("evaluate", 100.0, 0)
         assert tmp_telemetry["db"].exists()
 
@@ -137,6 +139,7 @@ class TestShowCommand:
         _write_config({"analytics_enabled": True, "user_uuid": "u1"})
         monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
         monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
+        monkeypatch.setattr(telemetry_module, "_post_event", lambda *a, **kw: False)
         for i in range(count):
             record_event(f"cmd-{i}", float(i * 100), 0)
 

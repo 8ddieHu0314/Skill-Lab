@@ -404,6 +404,26 @@ def record_event(
                 )
 
         _maybe_cleanup()
+
+        # Inline sync: build flat payload from in-memory args, POST immediately
+        payload = _build_event_payload(
+            install_uuid=install_uuid,
+            command=command,
+            duration_ms=duration_ms,
+            exit_code=exit_code,
+            timestamp=timestamp,
+            is_ci=is_ci,
+            ci_provider=ci_provider,
+            flags=flags,
+            score=score,
+            model_name=model_name,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            step_count=step_count,
+            tool_call_count=tool_call_count,
+        )
+        _inline_sync(payload, command_event_id, has_skill_data)
+
         _sync_to_endpoint()
         return command_event_id
 
@@ -448,6 +468,25 @@ def record_error(
                     timestamp,
                 ),
             )
+            error_id: int = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+        # Inline sync for error event
+        error_payload: dict[str, Any] = {
+            "event_kind": "error",
+            "install_uuid": install_uuid,
+            "command_event_id": command_event_id,
+            "error_type": error_type,
+            "error_module": error_module,
+            "command": command,
+            "sklab_version": __version__,
+            "timestamp": timestamp,
+        }
+        if _post_event(error_payload):
+            with contextlib.suppress(Exception), sqlite3.connect(SKLAB_DB) as conn:
+                conn.execute(
+                    "UPDATE error_events SET synced = 1 WHERE id = ?",
+                    (error_id,),
+                )
 
     except Exception:
         pass  # Never let telemetry crash the CLI
@@ -501,179 +540,189 @@ def _is_newer(latest: str, current: str) -> bool:
         return False
 
 
+def _build_event_payload(
+    install_uuid: str,
+    command: str,
+    duration_ms: float,
+    exit_code: int,
+    timestamp: str,
+    is_ci: bool,
+    ci_provider: str | None,
+    flags: list[str] | None = None,
+    score: float | None = None,
+    model_name: str | None = None,
+    input_tokens: int | None = None,
+    output_tokens: int | None = None,
+    step_count: int | None = None,
+    tool_call_count: int | None = None,
+) -> dict[str, Any]:
+    """Build a flat event payload from in-memory args (no DB query).
+
+    Excludes sensitive fields (skill_name, skill_path, skill_version, skill_source).
+    """
+    return {
+        "event_kind": "command",
+        "install_uuid": install_uuid,
+        "session_uuid": _session_uuid,
+        "sklab_version": __version__,
+        "os": platform.system(),
+        "python_version": f"{sys.version_info.major}.{sys.version_info.minor}",
+        "is_ci": is_ci,
+        "ci_provider": ci_provider,
+        "command": command,
+        "flags": flags or [],
+        "duration_ms": duration_ms,
+        "exit_code": exit_code,
+        "timestamp": timestamp,
+        "score": score,
+        "model_name": model_name,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "step_count": step_count,
+        "tool_call_count": tool_call_count,
+    }
+
+
+def _post_event(payload: dict[str, Any]) -> bool:
+    """POST a single flat JSON payload to the telemetry endpoint.
+
+    Returns True on success.
+    Set SKLAB_TELEMETRY_DEBUG=1 to print payload to stderr and return True (no POST).
+    """
+    try:
+        if os.environ.get("SKLAB_TELEMETRY_DEBUG", "").strip() == "1":
+            print(json.dumps(payload, indent=2), file=sys.stderr)  # noqa: T201
+            return True
+        data = json.dumps(payload).encode()
+        req = urllib.request.Request(
+            _TELEMETRY_ENDPOINT,
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        urllib.request.urlopen(req, timeout=2)
+        return True
+    except Exception:
+        return False
+
+
+def _inline_sync(
+    payload: dict[str, Any],
+    command_event_id: int,
+    has_skill_event: bool,
+) -> None:
+    """POST event inline and mark DB rows synced on success only."""
+    if not _post_event(payload):
+        return
+    with contextlib.suppress(Exception), sqlite3.connect(SKLAB_DB) as conn:
+        conn.execute(
+            "UPDATE command_events SET synced = 1 WHERE id = ?",
+            (command_event_id,),
+        )
+        if has_skill_event:
+            conn.execute(
+                "UPDATE skill_events SET synced = 1 WHERE command_event_id = ?",
+                (command_event_id,),
+            )
+
+
 def _sync_to_endpoint() -> None:
-    """Spawn a daemon thread to POST unsynced rows. Returns immediately."""
-    t = threading.Thread(target=_do_sync, daemon=True)
+    """Spawn a daemon thread to retry stale unsynced events. Returns immediately."""
+    t = threading.Thread(target=_retry_stale_events, daemon=True)
     t.start()
 
 
-def _mark_synced(
-    conn: sqlite3.Connection,
-    install_uuids: list[str],
-    cmd_ids: list[int],
-    skill_ids: list[int],
-    error_ids: list[int],
-) -> None:
-    """Mark rows as synced=1 in all four tables."""
-    if install_uuids:
-        placeholders = ",".join("?" * len(install_uuids))
-        conn.execute(
-            f"UPDATE installs SET synced = 1 WHERE install_uuid IN ({placeholders})",
-            install_uuids,
-        )
-    if cmd_ids:
-        placeholders = ",".join("?" * len(cmd_ids))
-        conn.execute(
-            f"UPDATE command_events SET synced = 1 WHERE id IN ({placeholders})",
-            cmd_ids,
-        )
-    if skill_ids:
-        placeholders = ",".join("?" * len(skill_ids))
-        conn.execute(
-            f"UPDATE skill_events SET synced = 1 WHERE id IN ({placeholders})",
-            skill_ids,
-        )
-    if error_ids:
-        placeholders = ",".join("?" * len(error_ids))
-        conn.execute(
-            f"UPDATE error_events SET synced = 1 WHERE id IN ({placeholders})",
-            error_ids,
-        )
+def _retry_stale_events() -> None:
+    """Retry syncing stale unsynced events (older than 1 hour).
 
-
-def _do_sync() -> None:
-    """POST unsynced rows to telemetry endpoint (fire-and-forget).
-
-    Rows are always marked synced=1 regardless of POST success/failure.
-    Set SKLAB_TELEMETRY_DEBUG=1 to print payload to stderr and skip POST.
+    Called in a daemon thread by _sync_to_endpoint(). POSTs each event
+    individually via _post_event() and marks synced=1 only on success.
     """
     try:
+        from datetime import timedelta
+
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+
         with sqlite3.connect(SKLAB_DB) as conn:
-            install_rows = conn.execute(
+            # Retry stale command events (LEFT JOIN for skill + install data)
+            stale_cmds = conn.execute(
                 """
-                SELECT install_uuid, first_seen_at, last_seen_at, run_count,
-                       sklab_version, os, python_version, is_ci, ci_provider
-                FROM installs WHERE synced = 0
-                """
+                SELECT c.id, c.install_uuid, c.session_uuid, c.sklab_version,
+                       c.command, c.flags, c.duration_ms, c.exit_code,
+                       c.is_ci, c.ci_provider, c.timestamp,
+                       s.score, s.model_name, s.input_tokens, s.output_tokens,
+                       s.step_count, s.tool_call_count,
+                       i.os, i.python_version
+                FROM command_events c
+                LEFT JOIN skill_events s ON s.command_event_id = c.id
+                LEFT JOIN installs i ON i.install_uuid = c.install_uuid
+                WHERE c.synced = 0 AND c.timestamp < ?
+                LIMIT 10
+                """,
+                (cutoff,),
             ).fetchall()
 
-            cmd_rows = conn.execute(
-                """
-                SELECT id, install_uuid, session_uuid, sklab_version, command,
-                       subcommand, flags, duration_ms, exit_code, success,
-                       is_ci, ci_provider, timestamp
-                FROM command_events WHERE synced = 0
-                """
-            ).fetchall()
-
-            # skill_path, skill_name, skill_version, skill_source excluded — local only
-            skill_rows = conn.execute(
-                """
-                SELECT id, command_event_id, install_uuid, score, model_name,
-                       input_tokens, output_tokens, step_count, tool_call_count,
-                       execution_time_ms, success, timestamp
-                FROM skill_events WHERE synced = 0
-                """
-            ).fetchall()
-
-            error_rows = conn.execute(
-                """
-                SELECT id, command_event_id, install_uuid, error_type, error_module,
-                       command, sklab_version, timestamp
-                FROM error_events WHERE synced = 0
-                """
-            ).fetchall()
-
-            if not (install_rows or cmd_rows or skill_rows or error_rows):
-                return
-
-            # Collect IDs before POST attempt
-            install_uuids = [r[0] for r in install_rows]
-            cmd_ids = [r[0] for r in cmd_rows]
-            skill_ids = [r[0] for r in skill_rows]
-            error_ids = [r[0] for r in error_rows]
-
-            payload = {
-                "installs": [
-                    {
-                        "install_uuid": r[0],
-                        "first_seen_at": r[1],
-                        "last_seen_at": r[2],
-                        "run_count": r[3],
-                        "sklab_version": r[4],
-                        "os": r[5],
-                        "python_version": r[6],
-                        "is_ci": r[7],
-                        "ci_provider": r[8],
-                    }
-                    for r in install_rows
-                ],
-                "command_events": [
-                    {
-                        "id": r[0],
-                        "install_uuid": r[1],
-                        "session_uuid": r[2],
-                        "sklab_version": r[3],
-                        "command": r[4],
-                        "subcommand": r[5],
-                        "flags": r[6],
-                        "duration_ms": r[7],
-                        "exit_code": r[8],
-                        "success": r[9],
-                        "is_ci": r[10],
-                        "ci_provider": r[11],
-                        "timestamp": r[12],
-                    }
-                    for r in cmd_rows
-                ],
-                "skill_events": [
-                    {
-                        "id": r[0],
-                        "command_event_id": r[1],
-                        "install_uuid": r[2],
-                        "score": r[3],
-                        "model_name": r[4],
-                        "input_tokens": r[5],
-                        "output_tokens": r[6],
-                        "step_count": r[7],
-                        "tool_call_count": r[8],
-                        "execution_time_ms": r[9],
-                        "success": r[10],
-                        "timestamp": r[11],
-                    }
-                    for r in skill_rows
-                ],
-                "error_events": [
-                    {
-                        "id": r[0],
-                        "command_event_id": r[1],
-                        "install_uuid": r[2],
-                        "error_type": r[3],
-                        "error_module": r[4],
-                        "command": r[5],
-                        "sklab_version": r[6],
-                        "timestamp": r[7],
-                    }
-                    for r in error_rows
-                ],
-            }
-
-            try:
-                if os.environ.get("SKLAB_TELEMETRY_DEBUG", "").strip() == "1":
-                    print(json.dumps(payload, indent=2), file=sys.stderr)  # noqa: T201
-                else:
-                    data = json.dumps(payload).encode()
-                    req = urllib.request.Request(
-                        _TELEMETRY_ENDPOINT,
-                        data=data,
-                        headers={"Content-Type": "application/json"},
-                        method="POST",
+            for row in stale_cmds:
+                payload: dict[str, Any] = {
+                    "event_kind": "command",
+                    "install_uuid": row[1],
+                    "session_uuid": row[2],
+                    "sklab_version": row[3],
+                    "os": row[17],
+                    "python_version": row[18],
+                    "is_ci": bool(row[8]),
+                    "ci_provider": row[9],
+                    "command": row[4],
+                    "flags": json.loads(row[5]) if row[5] else [],
+                    "duration_ms": row[6],
+                    "exit_code": row[7],
+                    "timestamp": row[10],
+                    "score": row[11],
+                    "model_name": row[12],
+                    "input_tokens": row[13],
+                    "output_tokens": row[14],
+                    "step_count": row[15],
+                    "tool_call_count": row[16],
+                }
+                if _post_event(payload):
+                    cmd_id = row[0]
+                    conn.execute(
+                        "UPDATE command_events SET synced = 1 WHERE id = ?",
+                        (cmd_id,),
                     )
-                    urllib.request.urlopen(req, timeout=3)
-            except Exception:
-                pass  # fire-and-forget — accept data loss on failure
-            finally:
-                _mark_synced(conn, install_uuids, cmd_ids, skill_ids, error_ids)
+                    conn.execute(
+                        "UPDATE skill_events SET synced = 1 WHERE command_event_id = ?",
+                        (cmd_id,),
+                    )
+
+            # Retry stale error events
+            stale_errors = conn.execute(
+                """
+                SELECT id, install_uuid, command_event_id, error_type,
+                       error_module, command, sklab_version, timestamp
+                FROM error_events
+                WHERE synced = 0 AND timestamp < ?
+                LIMIT 10
+                """,
+                (cutoff,),
+            ).fetchall()
+
+            for row in stale_errors:
+                err_payload: dict[str, Any] = {
+                    "event_kind": "error",
+                    "install_uuid": row[1],
+                    "command_event_id": row[2],
+                    "error_type": row[3],
+                    "error_module": row[4],
+                    "command": row[5],
+                    "sklab_version": row[6],
+                    "timestamp": row[7],
+                }
+                if _post_event(err_payload):
+                    conn.execute(
+                        "UPDATE error_events SET synced = 1 WHERE id = ?",
+                        (row[0],),
+                    )
 
     except Exception:
         pass  # DB unavailable — silently skip
@@ -714,12 +763,29 @@ def cleanup_old_data() -> int:
 def purge_all_data() -> bool:
     """Delete the entire usage.db file. Returns True on success."""
     try:
-        if SKLAB_DB.exists():
-            # Explicitly connect and close to release any SQLite file locks
-            # (required on Windows where `with sqlite3.connect(...)` doesn't
-            # call close() and the file remains locked).
-            with contextlib.suppress(Exception):
-                sqlite3.connect(SKLAB_DB).close()
+        if not SKLAB_DB.exists():
+            return True
+        # Try to delete the file directly first.
+        try:
+            SKLAB_DB.unlink()
+            return True
+        except OSError:
+            pass
+        # On Windows, prior connections may hold file locks even after
+        # their context manager exits (commit but no close).  Fall back
+        # to dropping all data inside the DB so the purge still succeeds.
+        conn = sqlite3.connect(SKLAB_DB)
+        try:
+            for (table,) in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall():
+                conn.execute(f"DELETE FROM {table}")  # noqa: S608
+            conn.execute("VACUUM")
+            conn.commit()
+        finally:
+            conn.close()
+        # Try unlinking once more now that we hold no connections.
+        with contextlib.suppress(OSError):
             SKLAB_DB.unlink()
         return True
     except Exception:
