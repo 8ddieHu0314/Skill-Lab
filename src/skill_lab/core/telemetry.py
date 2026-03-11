@@ -119,7 +119,8 @@ def _write_config(config: dict[str, Any]) -> None:
 
 def _ensure_db() -> None:
     _ensure_home()
-    with sqlite3.connect(SKLAB_DB) as conn:
+    conn = sqlite3.connect(SKLAB_DB)
+    with conn:
         # Keep old events table untouched so existing data survives
         conn.execute("""
             CREATE TABLE IF NOT EXISTS events (
@@ -212,6 +213,7 @@ def _ensure_db() -> None:
                 synced           INTEGER DEFAULT 0
             )
         """)
+    conn.close()
 
 
 def init_telemetry() -> bool:
@@ -402,6 +404,7 @@ def record_event(
                         timestamp,
                     ),
                 )
+        conn.close()  # Release file lock on Windows
 
         _maybe_cleanup()
 
@@ -470,6 +473,7 @@ def record_error(
                 ),
             )
             error_id: int = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        conn.close()  # Release file lock on Windows
 
         # Inline sync for error event
         error_payload: dict[str, Any] = {
@@ -785,8 +789,11 @@ def purge_all_data() -> bool:
                 "SELECT name FROM sqlite_master WHERE type='table'"
             ).fetchall():
                 conn.execute(f"DELETE FROM {table}")  # noqa: S608
-            conn.execute("VACUUM")
             conn.commit()
+            # VACUUM needs exclusive access which may fail if another
+            # connection still holds a lock; data is already deleted.
+            with contextlib.suppress(Exception):
+                conn.execute("VACUUM")
         finally:
             conn.close()
         # Try unlinking once more now that we hold no connections.
