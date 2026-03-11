@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 from typer.testing import CliRunner
@@ -93,40 +91,6 @@ class TestStatusCommand:
         result = runner.invoke(app, ["telemetry"])
         assert result.exit_code == 0
         assert "Telemetry Status" in result.output
-
-
-# ─── sklab telemetry purge ───────────────────────────────────────────────────
-
-
-class TestPurgeCommand:
-    def test_purge_deletes_db(
-        self, tmp_telemetry: dict[str, Path], monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        _write_config({"analytics_enabled": True, "user_uuid": "u1"})
-        monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
-        monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
-        monkeypatch.setattr(telemetry_module, "_post_event", lambda *a, **kw: False)
-        record_event("evaluate", 100.0, 0)
-        assert tmp_telemetry["db"].exists()
-
-        result = runner.invoke(app, ["telemetry", "purge"], input="y\n")
-        assert result.exit_code == 0
-        assert "deleted" in result.output.lower()
-        assert not tmp_telemetry["db"].exists()
-
-    def test_purge_cancel_noop(
-        self, tmp_telemetry: dict[str, Path], monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        _write_config({"analytics_enabled": True, "user_uuid": "u1"})
-        monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
-        monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
-        monkeypatch.setattr(telemetry_module, "_post_event", lambda *a, **kw: False)
-        record_event("evaluate", 100.0, 0)
-        assert tmp_telemetry["db"].exists()
-
-        result = runner.invoke(app, ["telemetry", "purge"], input="n\n")
-        # DB should still exist — purge was cancelled
-        assert tmp_telemetry["db"].exists()
 
 
 # ─── sklab telemetry show ────────────────────────────────────────────────────

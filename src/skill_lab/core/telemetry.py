@@ -732,6 +732,7 @@ def _retry_stale_events() -> None:
                         "UPDATE error_events SET synced = 1 WHERE id = ?",
                         (row[0],),
                     )
+        conn.close()
 
     except Exception:
         pass  # DB unavailable — silently skip
@@ -764,44 +765,10 @@ def cleanup_old_data() -> int:
                         (cutoff,),  # noqa: S608
                     )
                     total += cur.rowcount
+        conn.close()
         return total
     except Exception:
         return 0
-
-
-def purge_all_data() -> bool:
-    """Delete the entire usage.db file. Returns True on success."""
-    try:
-        if not SKLAB_DB.exists():
-            return True
-        # Try to delete the file directly first.
-        try:
-            SKLAB_DB.unlink()
-            return True
-        except OSError:
-            pass
-        # On Windows, prior connections may hold file locks even after
-        # their context manager exits (commit but no close).  Fall back
-        # to dropping all data inside the DB so the purge still succeeds.
-        conn = sqlite3.connect(SKLAB_DB)
-        try:
-            for (table,) in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            ).fetchall():
-                conn.execute(f"DELETE FROM {table}")  # noqa: S608
-            conn.commit()
-            # VACUUM needs exclusive access which may fail if another
-            # connection still holds a lock; data is already deleted.
-            with contextlib.suppress(Exception):
-                conn.execute("VACUUM")
-        finally:
-            conn.close()
-        # Try unlinking once more now that we hold no connections.
-        with contextlib.suppress(OSError):
-            SKLAB_DB.unlink()
-        return True
-    except Exception:
-        return False
 
 
 def _maybe_cleanup() -> None:
@@ -873,6 +840,7 @@ def get_telemetry_status() -> dict[str, Any]:
                             f"SELECT COUNT(*) FROM {table}"  # noqa: S608
                         ).fetchone()[0]
                         row_counts[table] = count
+            conn.close()
         except Exception:
             pass
 
@@ -915,6 +883,7 @@ def get_recent_events(limit: int = 20) -> list[TelemetryEvent]:
                 """,
                 (limit,),
             ).fetchall()
+        conn.close()
         return [
             TelemetryEvent(
                 timestamp=r[0],

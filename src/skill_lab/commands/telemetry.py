@@ -69,22 +69,6 @@ def telemetry_status() -> None:
     _telemetry_status()
 
 
-@telemetry_app.command("purge")
-def telemetry_purge() -> None:
-    """Delete all local telemetry data."""
-    confirm = typer.confirm("This will delete all local telemetry data. Continue?")
-    if not confirm:
-        console.print("[dim]Cancelled.[/dim]")
-        return
-
-    from skill_lab.core.telemetry import purge_all_data
-
-    if purge_all_data():
-        console.print("[green]All telemetry data deleted.[/green]")
-    else:
-        console.print("[red]Failed to delete telemetry data.[/red]")
-
-
 @telemetry_app.command("show")
 def telemetry_show(
     limit: Annotated[

@@ -1449,33 +1449,6 @@ class TestRetention:
         conn.close()
         assert remaining == 1
 
-    def test_purge_deletes_db_file(self, tmp_telemetry, monkeypatch):
-        from skill_lab.core.telemetry import purge_all_data
-
-        _write_config({"analytics_enabled": True, "user_uuid": "u1"})
-        monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
-        monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
-        monkeypatch.setattr(telemetry_module, "_post_event", lambda *a, **kw: False)
-        record_event("evaluate", 100.0, 0)
-        assert tmp_telemetry["db"].exists()
-
-        result = purge_all_data()
-        assert result is True
-        # On Windows, file locks may prevent deletion even after close().
-        # In that case purge_all_data empties all tables instead.
-        if tmp_telemetry["db"].exists():
-            conn = sqlite3.connect(tmp_telemetry["db"])
-            rows = conn.execute("SELECT COUNT(*) FROM command_events").fetchone()[0]
-            conn.close()
-            assert rows == 0
-
-    def test_purge_noop_when_no_db(self, tmp_telemetry):
-        from skill_lab.core.telemetry import purge_all_data
-
-        assert not tmp_telemetry["db"].exists()
-        result = purge_all_data()
-        assert result is True
-
     def test_maybe_cleanup_throttled_once_per_day(self, tmp_telemetry, monkeypatch):
         from skill_lab.core.telemetry import _maybe_cleanup
 
