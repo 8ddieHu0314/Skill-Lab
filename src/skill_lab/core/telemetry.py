@@ -11,6 +11,7 @@ import json
 import os
 import platform
 import sqlite3
+import ssl
 import sys
 import threading
 import urllib.error
@@ -19,6 +20,8 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
+
+import certifi
 
 from skill_lab import __version__
 from skill_lab.core.constants import SKLAB_CONFIG, SKLAB_DB, SKLAB_HOME
@@ -523,7 +526,8 @@ def check_for_update() -> str | None:
             "https://pypi.org/pypi/skill-lab/json",
             headers={"User-Agent": f"sklab/{__version__}"},
         )
-        with urllib.request.urlopen(req, timeout=2) as resp:
+        ctx = ssl.create_default_context(cafile=certifi.where())
+        with urllib.request.urlopen(req, timeout=2, context=ctx) as resp:
             data = json.loads(resp.read())
         latest = data["info"]["version"]
 
@@ -607,7 +611,8 @@ def _post_event(payload: dict[str, Any]) -> bool:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        urllib.request.urlopen(req, timeout=2)
+        ctx = ssl.create_default_context(cafile=certifi.where())
+        urllib.request.urlopen(req, timeout=2, context=ctx)
         return True
     except Exception:
         return False
