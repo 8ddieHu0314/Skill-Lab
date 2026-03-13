@@ -9,6 +9,8 @@ on:
 jobs:
   test:
     runs-on: ${{ matrix.os }}
+    env:
+      SKLAB_NO_ANALYTICS: "1"
     strategy:
       fail-fast: false
       matrix:
