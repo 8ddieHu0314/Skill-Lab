@@ -653,8 +653,8 @@ class TestRecordError:
 
     def test_no_write_when_install_uuid_missing(self, tmp_telemetry, monkeypatch):
         """record_error returns early if config has no user_uuid."""
-        monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
-        # Config exists but has no user_uuid
+        self._enable(tmp_telemetry, monkeypatch)
+        # Config exists but has no user_uuid — overwrite what _enable wrote
         _write_config({"analytics_enabled": True})
         # Ensure DB is initialised first so the connect won't fail on missing file
         record_event("evaluate", 100.0, 1)

@@ -410,6 +410,8 @@ class TestTrackInvocationCLI:
         db = tmp_path / "usage.db"
         monkeypatch.setattr(telemetry_module, "SKLAB_DB", db)
         monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
+        monkeypatch.setattr(telemetry_module, "_post_event", lambda *a, **kw: False)
+        monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
         monkeypatch.setenv("SKLAB_NO_ANALYTICS", "")
 
         payload = json.dumps({
