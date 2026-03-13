@@ -761,6 +761,11 @@ class TestFlagCapture:
 
 
 class TestInitTelemetry:
+    @pytest.fixture(autouse=True)
+    def _not_ci(self, monkeypatch):
+        """Isolate init_telemetry tests from the real CI environment."""
+        monkeypatch.setattr(telemetry_module, "_detect_ci", lambda: (False, None))
+
     @pytest.mark.parametrize(
         "env_var", ["SKLAB_NO_ANALYTICS", "DO_NOT_TRACK"], ids=["no-analytics", "do-not-track"]
     )
@@ -876,6 +881,23 @@ class TestInitTelemetry:
         monkeypatch.setenv("SKLAB_NO_ANALYTICS", "1")
         monkeypatch.setenv("DO_NOT_TRACK", "1")
         assert init_telemetry() is False
+
+    # ── CI environment detection ────────────────────────────────────────────────
+
+    def test_ci_environment_returns_false(self, tmp_telemetry, monkeypatch):
+        """CI environments are always disabled regardless of config."""
+        monkeypatch.delenv("SKLAB_NO_ANALYTICS", raising=False)
+        monkeypatch.delenv("DO_NOT_TRACK", raising=False)
+        _write_config({"analytics_enabled": True, "user_uuid": "u1"})
+        monkeypatch.setattr(telemetry_module, "_detect_ci", lambda: (True, "github_actions"))
+        assert init_telemetry() is False
+
+    def test_ci_environment_caches_false(self, tmp_telemetry, monkeypatch):
+        monkeypatch.delenv("SKLAB_NO_ANALYTICS", raising=False)
+        monkeypatch.delenv("DO_NOT_TRACK", raising=False)
+        monkeypatch.setattr(telemetry_module, "_detect_ci", lambda: (True, "github_actions"))
+        init_telemetry()
+        assert telemetry_module._analytics_enabled is False
 
     # ── Non-interactive stdin (TTY check) ─────────────────────────────────────
 
