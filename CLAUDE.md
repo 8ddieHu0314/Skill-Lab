@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Python CLI tool that evaluates agent skills (SKILL.md files) via static analysis, trigger testing, and LLM-based test generation. Produces a 0-100 score across 28 checks / 5 dimensions.
+Python CLI tool that evaluates agent skills (SKILL.md files) via static analysis, trigger testing, and LLM-based test generation. Produces a 0-100 score across 28 checks (structure:7, naming:1, schema:9, content:11) / 5 dimensions.
 
 ## Naming
 
@@ -41,6 +41,7 @@ pytest tests/test_checks.py -v              # run single test file
 pytest tests/test_checks.py -k "keyword" -v # filter by keyword
 mypy src/                     # type check
 ruff check src/ && ruff format src/
+/verify                       # runs all of the above (pytest, mypy, ruff check, ruff format)
 ```
 
 ## Critical Architecture Notes
@@ -92,7 +93,7 @@ ruff check src/ && ruff format src/
 
 ### CLI Patterns
 
-- All commands use `_resolve_skill_path()` for path validation and `_cli_error_handler()` context manager for consistent error output
+- Commands are split into modules under `commands/` (evaluate, trigger, generate, info, stats, telemetry, setup). Shared helpers (`_resolve_skill_path()`, `_cli_error_handler()`) live in `cli.py`.
 - Exit codes: 0 = success, 1 = failure (spec-required check failed or error)
 - Custom exceptions inherit from `SkillLabError` in `core/exceptions.py` (`ParseError`, `ValidationError`, `ConfigurationError`, `GenerationError`)
 

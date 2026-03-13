@@ -226,7 +226,8 @@ def init_telemetry() -> bool:
     Returns False immediately if any opt-out signal is present:
       - SKLAB_NO_ANALYTICS=1 env var
       - DO_NOT_TRACK=1 env var (consoledonottrack.com standard)
-      - Non-interactive stdin (CI, piped input, cron) on first run
+      - CI environment detected (GITHUB_ACTIONS, GITLAB_CI, CI, etc.)
+      - Non-interactive stdin (piped input, cron) on first run
     Caches the result for the lifetime of the process.
     """
     global _analytics_enabled
@@ -240,6 +241,12 @@ def init_telemetry() -> bool:
         return False
 
     if os.environ.get("DO_NOT_TRACK", "").strip() == "1":
+        _analytics_enabled = False
+        return False
+
+    # CI environments — disable silently (GitHub Actions, GitLab CI, etc.)
+    is_ci, _ = _detect_ci()
+    if is_ci:
         _analytics_enabled = False
         return False
 
