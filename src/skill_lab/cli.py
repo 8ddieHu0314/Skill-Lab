@@ -26,6 +26,7 @@ from skill_lab.core.telemetry import (
     _pop_telemetry_extras,
     _store_pending_error,
     check_for_update,
+    compute_repo_root_hash,
     init_telemetry,
     push_telemetry_extra,
     record_error,
@@ -35,7 +36,7 @@ from skill_lab.core.tokens import estimate_tokens
 from skill_lab.evaluators.static_evaluator import StaticEvaluator
 from skill_lab.evaluators.trace_evaluator import TraceEvaluator
 from skill_lab.parsers.skill_parser import parse_skill
-from skill_lab.reporters.console_reporter import SEVERITY_STYLES, ConsoleReporter
+from skill_lab.reporters.console_reporter import SEVERITY_LABELS, SEVERITY_STYLES, ConsoleReporter
 from skill_lab.reporters.json_reporter import JsonReporter
 from skill_lab.triggers.trigger_evaluator import TriggerEvaluator
 
@@ -614,7 +615,7 @@ def list_checks(
             check_class.check_id,
             check_class.check_name,
             check_class.dimension.value,
-            f"[{severity_style}]{check_class.severity.value}[/{severity_style}]",
+            f"[{severity_style}]{SEVERITY_LABELS.get(check_class.severity.value, check_class.severity.value)}[/{severity_style}]",
             spec_badge,
             check_class.description,
         )
@@ -1182,12 +1183,13 @@ def stats(ctx: typer.Context) -> None:
     print_stats_overview(data)
 
 
-def _resolve_repo_filter(here: bool) -> Path | None:
-    """Return the repo root if --here is set, else None (global)."""
+def _resolve_repo_filter(here: bool) -> str | None:
+    """Return SHA256 hash of repo root if --here is set, else None (global)."""
     if not here:
         return None
     root = _find_repo_root(Path.cwd())
-    return root if root is not None else Path.cwd()
+    target = root if root is not None else Path.cwd()
+    return compute_repo_root_hash(str(target))
 
 
 @stats_app.command("count")
@@ -1202,7 +1204,7 @@ def stats_count(
     from skill_lab.core.stats import get_stats_count
     from skill_lab.reporters.stats_reporter import print_stats_count
 
-    month_label, rows = get_stats_count(repo_root=_resolve_repo_filter(here))
+    month_label, rows = get_stats_count(repo_root_hash=_resolve_repo_filter(here))
     print_stats_count(month_label, rows)
 
 
@@ -1218,7 +1220,7 @@ def stats_score(
     from skill_lab.core.stats import get_stats_score
     from skill_lab.reporters.stats_reporter import print_stats_score
 
-    rows = get_stats_score(repo_root=_resolve_repo_filter(here))
+    rows = get_stats_score(repo_root_hash=_resolve_repo_filter(here))
     print_stats_score(rows)
 
 
@@ -1234,7 +1236,7 @@ def stats_tokens(
     from skill_lab.core.stats import get_stats_tokens
     from skill_lab.reporters.stats_reporter import print_stats_tokens
 
-    month_label, rows = get_stats_tokens(repo_root=_resolve_repo_filter(here))
+    month_label, rows = get_stats_tokens(repo_root_hash=_resolve_repo_filter(here))
     print_stats_tokens(month_label, rows)
 
 
@@ -1320,6 +1322,12 @@ def track_invocation() -> None:
 
             with contextlib.suppress(Exception):
                 tokens = estimate_tokens((skill_dir / "SKILL.md").read_text(encoding="utf-8"))
+        repo_root: Path | None = None
+        if skill_dir is not None:
+            repo_root = _find_repo_root(skill_dir)
+        elif cwd:
+            repo_root = _find_repo_root(Path(cwd))
+        repo_hash = compute_repo_root_hash(str(repo_root) if repo_root else None)
         record_event(
             command="skill-invoke",
             duration_ms=0,
@@ -1327,6 +1335,7 @@ def track_invocation() -> None:
             skill_name=skill_name,
             input_tokens=tokens,
             skill_path=skill_path_str,
+            repo_root_hash=repo_hash,
         )
     except Exception:
         pass  # Never let the hook crash

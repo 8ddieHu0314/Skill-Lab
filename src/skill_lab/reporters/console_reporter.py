@@ -20,6 +20,12 @@ SEVERITY_ICONS: dict[str, str] = {
     "info": "i",
 }
 
+SEVERITY_LABELS: dict[str, str] = {
+    "error": "severe",
+    "warning": "moderate",
+    "info": "minor",
+}
+
 
 class ConsoleReporter:
     """Reporter that outputs evaluation results to the console."""
@@ -40,6 +46,10 @@ class ConsoleReporter:
     def _severity_icon(self, severity: Severity) -> str:
         """Get the icon for a severity level."""
         return SEVERITY_ICONS.get(severity.value, "?")
+
+    def _severity_label(self, severity: Severity) -> str:
+        """Get the friendly display label for a severity level."""
+        return SEVERITY_LABELS.get(severity.value, severity.value)
 
     def _print_verbose_hint(self, total_count: int, shown_count: int) -> None:
         """Print a hint about hidden passing checks when not in verbose mode."""
@@ -102,7 +112,7 @@ class ConsoleReporter:
         if results_to_show:
             table = Table(title="Check Results" if self.verbose else "Failed Checks")
             table.add_column("Status", width=6)
-            table.add_column("Severity", width=8)
+            table.add_column("Severity", width=10)
             table.add_column("Check", width=30)
             table.add_column("Message", width=50)
 
@@ -113,7 +123,7 @@ class ConsoleReporter:
                     else f"[{self._severity_style(result.severity)}]{self._severity_icon(result.severity)}[/{self._severity_style(result.severity)}]"
                 )
                 severity_text = Text(
-                    result.severity.value.upper(), style=self._severity_style(result.severity)
+                    self._severity_label(result.severity).upper(), style=self._severity_style(result.severity)
                 )
                 display_message = (result.fix or result.message) if not result.passed else result.message
                 table.add_row(

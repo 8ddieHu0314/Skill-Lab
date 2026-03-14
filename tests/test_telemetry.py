@@ -16,8 +16,10 @@ from skill_lab.core.telemetry import (
     _pop_telemetry_extras,
     _read_config,
     _store_pending_error,
+    _upsert_skill_stats,
     _write_config,
     check_for_update,
+    compute_repo_root_hash,
     init_telemetry,
     push_telemetry_extra,
     record_error,
@@ -1223,3 +1225,121 @@ class TestSyncToEndpoint:
         ).fetchone()[0]
         conn.close()
         assert unsynced == 0
+
+
+# ─── TestSkillStats ───────────────────────────────────────────────────────────
+
+
+def _open_db(db_path: str) -> sqlite3.Connection:
+    return sqlite3.connect(db_path)
+
+
+class TestSkillStats:
+    """Tests for skill_stats table and compute_repo_root_hash."""
+
+    def _get_rows(self, db_path: str) -> list[tuple]:
+        conn = sqlite3.connect(db_path)
+        rows = conn.execute("SELECT skill_name, month, repo_root_hash, use_count, total_tokens FROM skill_stats").fetchall()
+        conn.close()
+        return rows
+
+    def test_upsert_creates_row_on_first_invocation(self, tmp_telemetry):
+        _write_config({"analytics_enabled": True, "user_uuid": "u1"})
+        import skill_lab.core.telemetry as t
+        t._analytics_enabled = True
+        t._sync_to_endpoint = lambda: None
+
+        with t.sqlite3.connect(tmp_telemetry["db"]) as conn:
+            t._ensure_db()
+            _upsert_skill_stats(conn, "commit", "2026-03", "", 100)
+
+        rows = self._get_rows(str(tmp_telemetry["db"]))
+        assert len(rows) == 1
+        assert rows[0] == ("commit", "2026-03", "", 1, 100)
+
+    def test_upsert_increments_use_count(self, tmp_telemetry):
+        import skill_lab.core.telemetry as t
+        t._ensure_db()
+
+        with t.sqlite3.connect(tmp_telemetry["db"]) as conn:
+            _upsert_skill_stats(conn, "commit", "2026-03", "", 50)
+            _upsert_skill_stats(conn, "commit", "2026-03", "", 50)
+
+        rows = self._get_rows(str(tmp_telemetry["db"]))
+        assert len(rows) == 1
+        assert rows[0][3] == 2  # use_count
+
+    def test_upsert_accumulates_total_tokens(self, tmp_telemetry):
+        import skill_lab.core.telemetry as t
+        t._ensure_db()
+
+        with t.sqlite3.connect(tmp_telemetry["db"]) as conn:
+            _upsert_skill_stats(conn, "commit", "2026-03", "", 10)
+            _upsert_skill_stats(conn, "commit", "2026-03", "", 20)
+
+        rows = self._get_rows(str(tmp_telemetry["db"]))
+        assert rows[0][4] == 30  # total_tokens
+
+    def test_upsert_adds_zero_when_token_count_none(self, tmp_telemetry):
+        import skill_lab.core.telemetry as t
+        t._ensure_db()
+
+        with t.sqlite3.connect(tmp_telemetry["db"]) as conn:
+            _upsert_skill_stats(conn, "commit", "2026-03", "", 100)
+            _upsert_skill_stats(conn, "commit", "2026-03", "", None)
+
+        rows = self._get_rows(str(tmp_telemetry["db"]))
+        assert rows[0][3] == 2   # use_count still incremented
+        assert rows[0][4] == 100  # total_tokens unchanged
+
+    def test_upsert_separates_by_repo_root_hash(self, tmp_telemetry):
+        import skill_lab.core.telemetry as t
+        t._ensure_db()
+
+        hash_a = compute_repo_root_hash("/projects/repo-a")
+        hash_b = compute_repo_root_hash("/projects/repo-b")
+
+        with t.sqlite3.connect(tmp_telemetry["db"]) as conn:
+            _upsert_skill_stats(conn, "commit", "2026-03", hash_a, 100)
+            _upsert_skill_stats(conn, "commit", "2026-03", hash_b, 200)
+
+        rows = self._get_rows(str(tmp_telemetry["db"]))
+        assert len(rows) == 2
+
+    def test_compute_repo_root_hash_returns_empty_for_none(self):
+        assert compute_repo_root_hash(None) == ""
+        assert compute_repo_root_hash("") == ""
+
+    def test_compute_repo_root_hash_is_deterministic(self):
+        h1 = compute_repo_root_hash("/projects/repo-a")
+        h2 = compute_repo_root_hash("/projects/repo-a")
+        assert h1 == h2
+        assert len(h1) == 64  # SHA256 hex digest
+
+    def test_non_skill_invoke_does_not_write_skill_stats(self, tmp_telemetry, monkeypatch):
+        _write_config({"analytics_enabled": True, "user_uuid": "u1"})
+        monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
+        monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
+
+        record_event("evaluate", 100.0, 0, skill_name="commit", score=80.0)
+
+        rows = self._get_rows(str(tmp_telemetry["db"]))
+        assert rows == []
+
+    def test_record_event_writes_skill_stats_on_skill_invoke(self, tmp_telemetry, monkeypatch):
+        _write_config({"analytics_enabled": True, "user_uuid": "u1"})
+        monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
+        monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
+
+        record_event(
+            "skill-invoke", 0.0, 0,
+            skill_name="commit",
+            input_tokens=150,
+            repo_root_hash="abc123",
+        )
+
+        rows = self._get_rows(str(tmp_telemetry["db"]))
+        assert len(rows) == 1
+        assert rows[0][0] == "commit"
+        assert rows[0][3] == 1    # use_count
+        assert rows[0][4] == 150  # total_tokens

@@ -7,6 +7,7 @@ Set SKLAB_NO_ANALYTICS=1 to disable telemetry without any prompt.
 """
 
 import contextlib
+import hashlib
 import json
 import os
 import platform
@@ -210,6 +211,16 @@ def _ensure_db() -> None:
                 synced           INTEGER DEFAULT 0
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS skill_stats (
+                skill_name       TEXT NOT NULL,
+                month            TEXT NOT NULL,
+                repo_root_hash   TEXT NOT NULL DEFAULT '',
+                use_count        INTEGER NOT NULL DEFAULT 0,
+                total_tokens     INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (skill_name, month, repo_root_hash)
+            )
+        """)
 
 
 def init_telemetry() -> bool:
@@ -296,6 +307,33 @@ def _upsert_install(
     )
 
 
+def compute_repo_root_hash(repo_root: str | None) -> str:
+    """Return a SHA256 hex digest of the repo root path, or '' if none."""
+    if not repo_root:
+        return ""
+    return hashlib.sha256(repo_root.encode()).hexdigest()
+
+
+def _upsert_skill_stats(
+    conn: sqlite3.Connection,
+    skill_name: str,
+    month: str,
+    repo_root_hash: str,
+    token_count: int | None,
+) -> None:
+    token_add = token_count if token_count is not None else 0
+    conn.execute(
+        """
+        INSERT INTO skill_stats (skill_name, month, repo_root_hash, use_count, total_tokens)
+        VALUES (?, ?, ?, 1, ?)
+        ON CONFLICT(skill_name, month, repo_root_hash) DO UPDATE SET
+            use_count    = use_count + 1,
+            total_tokens = total_tokens + excluded.total_tokens
+        """,
+        (skill_name, month, repo_root_hash, token_add),
+    )
+
+
 def record_event(
     command: str,
     duration_ms: float,
@@ -311,6 +349,7 @@ def record_event(
     output_tokens: int | None = None,
     step_count: int | None = None,
     tool_call_count: int | None = None,
+    repo_root_hash: str = "",
 ) -> int | None:
     """Write an event to local SQLite, then attempt a fire-and-forget Supabase sync.
 
@@ -400,6 +439,10 @@ def record_event(
                         timestamp,
                     ),
                 )
+
+            if command == "skill-invoke" and skill_name is not None:
+                month = timestamp[:7]  # "YYYY-MM"
+                _upsert_skill_stats(conn, skill_name, month, repo_root_hash, input_tokens)
 
         _sync_to_endpoint()
         return command_event_id

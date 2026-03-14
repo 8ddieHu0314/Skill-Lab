@@ -17,6 +17,7 @@ from skill_lab.core.models import (
 )
 from skill_lab.reporters.console_reporter import (
     SEVERITY_ICONS,
+    SEVERITY_LABELS,
     SEVERITY_STYLES,
     ConsoleReporter,
 )
@@ -164,6 +165,43 @@ class TestSeverityMappings:
 
     def test_info_style_is_blue(self):
         assert SEVERITY_STYLES["info"] == "blue"
+
+
+class TestSeverityLabels:
+    def test_labels_has_error(self):
+        assert "error" in SEVERITY_LABELS
+
+    def test_labels_has_warning(self):
+        assert "warning" in SEVERITY_LABELS
+
+    def test_labels_has_info(self):
+        assert "info" in SEVERITY_LABELS
+
+    def test_error_maps_to_severe(self):
+        assert SEVERITY_LABELS["error"] == "severe"
+
+    def test_warning_maps_to_moderate(self):
+        assert SEVERITY_LABELS["warning"] == "moderate"
+
+    def test_info_maps_to_minor(self):
+        assert SEVERITY_LABELS["info"] == "minor"
+
+
+class TestSeverityLabel:
+    def test_error(self):
+        assert ConsoleReporter()._severity_label(Severity.ERROR) == "severe"
+
+    def test_warning(self):
+        assert ConsoleReporter()._severity_label(Severity.WARNING) == "moderate"
+
+    def test_info(self):
+        assert ConsoleReporter()._severity_label(Severity.INFO) == "minor"
+
+    def test_unknown_value_returns_raw(self):
+        class FakeSeverity:
+            value = "nonexistent"
+
+        assert ConsoleReporter()._severity_label(FakeSeverity()) == "nonexistent"  # type: ignore[arg-type]
 
 
 # ─── ConsoleReporter init & private methods ────────────────────────────────────
