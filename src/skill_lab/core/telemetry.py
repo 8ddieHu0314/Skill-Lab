@@ -619,8 +619,8 @@ def _post_event(payload: dict[str, Any]) -> bool:
             method="POST",
         )
         ctx = ssl.create_default_context(cafile=certifi.where())
-        urllib.request.urlopen(req, timeout=2, context=ctx)
-        return True
+        with urllib.request.urlopen(req, timeout=2, context=ctx):
+            return True
     except Exception:
         return False
 

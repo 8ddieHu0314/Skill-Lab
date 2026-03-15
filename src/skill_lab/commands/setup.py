@@ -11,6 +11,8 @@ from skill_lab.core.telemetry import record_event
 
 def _find_skill_md(skill_name: str, cwd: str) -> Path | None:
     """Search common locations for a skill's SKILL.md. Returns path if found."""
+    if not skill_name or "/" in skill_name or "\\" in skill_name or skill_name.startswith("."):
+        return None
     search_dirs = [
         Path.home() / ".claude" / "skills" / skill_name,
         Path.home() / ".cursor" / "skills" / skill_name,
