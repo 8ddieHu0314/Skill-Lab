@@ -1088,7 +1088,11 @@ class TestBuildEventPayload:
             tool_call_count=10,
         )
         assert payload["flags"] == ["--verbose"]
-        assert payload["score"] == 90.0
+        assert payload["skill_count"] == 1
+        assert payload["total_score"] == 90.0
+        assert payload["mean_score"] == 90.0
+        assert payload["max_score"] == 90.0
+        assert payload["min_score"] == 90.0
         assert payload["model_name"] == "claude-sonnet-4-6"
         assert payload["input_tokens"] == 1000
         assert payload["output_tokens"] == 500

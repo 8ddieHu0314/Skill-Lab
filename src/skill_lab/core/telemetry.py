@@ -592,7 +592,11 @@ def _build_event_payload(
         "exit_code": exit_code,
         "timestamp": timestamp,
         "skill_name": skill_name,
-        "score": score,
+        "skill_count": 1 if score is not None else None,
+        "total_score": score,
+        "mean_score": score,
+        "max_score": score,
+        "min_score": score,
         "model_name": model_name,
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
@@ -630,17 +634,35 @@ def _inline_sync(
     command_event_id: int,
     has_skill_event: bool,
 ) -> None:
-    """POST event inline and mark DB rows synced on success only."""
-    if not _post_event(payload):
-        return
+    """POST event inline and mark DB rows synced on success only.
+
+    Uses an optimistic claim (synced=2) to prevent duplicate POSTs if
+    the retry thread picks up the same event concurrently.
+    """
     with contextlib.suppress(Exception), sqlite3.connect(SKLAB_DB) as conn:
         conn.execute(
-            "UPDATE command_events SET synced = 1 WHERE id = ?",
+            "UPDATE command_events SET synced = 2 WHERE id = ? AND synced = 0",
             (command_event_id,),
         )
-        if has_skill_event:
+        if conn.execute("SELECT changes()").fetchone()[0] == 0:
+            return  # Already claimed by another thread
+
+    if _post_event(payload):
+        with contextlib.suppress(Exception), sqlite3.connect(SKLAB_DB) as conn:
             conn.execute(
-                "UPDATE skill_events SET synced = 1 WHERE command_event_id = ?",
+                "UPDATE command_events SET synced = 1 WHERE id = ?",
+                (command_event_id,),
+            )
+            if has_skill_event:
+                conn.execute(
+                    "UPDATE skill_events SET synced = 1 WHERE command_event_id = ?",
+                    (command_event_id,),
+                )
+    else:
+        # Revert claim so retry thread can pick it up later
+        with contextlib.suppress(Exception), sqlite3.connect(SKLAB_DB) as conn:
+            conn.execute(
+                "UPDATE command_events SET synced = 0 WHERE id = ?",
                 (command_event_id,),
             )
 
@@ -656,8 +678,13 @@ def _retry_stale_events() -> None:
 
     Called in a daemon thread by _sync_to_endpoint(). POSTs each event
     individually via _post_event() and marks synced=1 only on success.
+    Uses an optimistic claim (synced=2) to prevent duplicate POSTs from
+    concurrent retry threads.
     """
     try:
+        if not _analytics_enabled:
+            return
+
         from datetime import timedelta
 
         cutoff = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
@@ -683,6 +710,16 @@ def _retry_stale_events() -> None:
             ).fetchall()
 
             for row in stale_cmds:
+                cmd_id = row[0]
+                # Optimistic claim: mark in-flight (synced=2) atomically
+                conn.execute(
+                    "UPDATE command_events SET synced = 2 WHERE id = ? AND synced = 0",
+                    (cmd_id,),
+                )
+                if conn.execute("SELECT changes()").fetchone()[0] == 0:
+                    continue  # Another thread already claimed this event
+
+                score_val = row[12]
                 payload: dict[str, Any] = {
                     "event_kind": "command",
                     "install_uuid": row[1],
@@ -698,7 +735,11 @@ def _retry_stale_events() -> None:
                     "exit_code": row[7],
                     "timestamp": row[10],
                     "skill_name": row[11],
-                    "score": row[12],
+                    "skill_count": 1 if score_val is not None else None,
+                    "total_score": score_val,
+                    "mean_score": score_val,
+                    "max_score": score_val,
+                    "min_score": score_val,
                     "model_name": row[13],
                     "input_tokens": row[14],
                     "output_tokens": row[15],
@@ -706,13 +747,18 @@ def _retry_stale_events() -> None:
                     "tool_call_count": row[17],
                 }
                 if _post_event(payload):
-                    cmd_id = row[0]
                     conn.execute(
                         "UPDATE command_events SET synced = 1 WHERE id = ?",
                         (cmd_id,),
                     )
                     conn.execute(
                         "UPDATE skill_events SET synced = 1 WHERE command_event_id = ?",
+                        (cmd_id,),
+                    )
+                else:
+                    # Revert claim so another retry can pick it up
+                    conn.execute(
+                        "UPDATE command_events SET synced = 0 WHERE id = ?",
                         (cmd_id,),
                     )
 
@@ -729,6 +775,15 @@ def _retry_stale_events() -> None:
             ).fetchall()
 
             for row in stale_errors:
+                err_id = row[0]
+                # Optimistic claim
+                conn.execute(
+                    "UPDATE error_events SET synced = 2 WHERE id = ? AND synced = 0",
+                    (err_id,),
+                )
+                if conn.execute("SELECT changes()").fetchone()[0] == 0:
+                    continue
+
                 err_payload: dict[str, Any] = {
                     "event_kind": "error",
                     "install_uuid": row[1],
@@ -742,7 +797,12 @@ def _retry_stale_events() -> None:
                 if _post_event(err_payload):
                     conn.execute(
                         "UPDATE error_events SET synced = 1 WHERE id = ?",
-                        (row[0],),
+                        (err_id,),
+                    )
+                else:
+                    conn.execute(
+                        "UPDATE error_events SET synced = 0 WHERE id = ?",
+                        (err_id,),
                     )
         conn.close()
 
