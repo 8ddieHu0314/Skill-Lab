@@ -19,7 +19,7 @@ from rich.table import Table
 
 from skill_lab import __version__
 from skill_lab.core.constants import SKLAB_HOME, SKLAB_INITIALIZED, TESTS_DIR
-from skill_lab.core.models import EvalDimension, TriggerReport, TriggerType
+from skill_lab.core.models import TriggerReport, TriggerType
 from skill_lab.core.registry import registry
 from skill_lab.core.telemetry import (
     _pop_pending_error,
