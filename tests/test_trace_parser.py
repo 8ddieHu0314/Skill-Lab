@@ -26,22 +26,21 @@ class TestParseTraceFileErrors:
         with pytest.raises(ValueError, match="Invalid JSON"):
             parse_trace_file(p)
 
-    def test_error_message_includes_line_number_1(self, tmp_path: Path):
+    @pytest.mark.parametrize(
+        "content, expected_line_match",
+        [
+            ("not-json\n", "line 1"),
+            ('{"type": "ok"}\nnot-json\n', "line 2"),
+            ('{"type": "a"}\n{"type": "b"}\n{bad}\n', "line 3"),
+        ],
+        ids=["line-1", "line-2", "line-3"],
+    )
+    def test_error_includes_line_number(
+        self, tmp_path: Path, content: str, expected_line_match: str
+    ):
         p = tmp_path / "trace.jsonl"
-        p.write_text("not-json\n")
-        with pytest.raises(ValueError, match="line 1"):
-            parse_trace_file(p)
-
-    def test_error_message_includes_correct_line_number(self, tmp_path: Path):
-        p = tmp_path / "trace.jsonl"
-        p.write_text('{"type": "ok"}\nnot-json\n')
-        with pytest.raises(ValueError, match="line 2"):
-            parse_trace_file(p)
-
-    def test_error_on_third_line(self, tmp_path: Path):
-        p = tmp_path / "trace.jsonl"
-        p.write_text('{"type": "a"}\n{"type": "b"}\n{bad}\n')
-        with pytest.raises(ValueError, match="line 3"):
+        p.write_text(content)
+        with pytest.raises(ValueError, match=expected_line_match):
             parse_trace_file(p)
 
 
@@ -314,31 +313,26 @@ class TestParseEventSimplifiedFunctionCall:
 
 
 class TestParseEventTimestamp:
-    def test_timestamp_from_timestamp_field(self):
-        data = {"type": "x", "timestamp": "2024-01-01T00:00:00Z"}
+    @pytest.mark.parametrize(
+        "data, expected_timestamp",
+        [
+            ({"type": "x", "timestamp": "2024-01-01T00:00:00Z"}, "2024-01-01T00:00:00Z"),
+            ({"type": "x", "time": "2024-06-15T12:30:00Z"}, "2024-06-15T12:30:00Z"),
+            ({"type": "x"}, None),
+            ({"type": "x", "timestamp": "ts-value", "time": "time-value"}, "ts-value"),
+            ({"type": "x", "timestamp": "", "time": "time-value"}, "time-value"),
+        ],
+        ids=[
+            "from-timestamp-field",
+            "from-time-field",
+            "no-field-gives-none",
+            "timestamp-precedence",
+            "empty-timestamp-fallback",
+        ],
+    )
+    def test_timestamp_extraction(self, data, expected_timestamp):
         event = _parse_event(data)
-        assert event.timestamp == "2024-01-01T00:00:00Z"
-
-    def test_timestamp_from_time_field(self):
-        data = {"type": "x", "time": "2024-06-15T12:30:00Z"}
-        event = _parse_event(data)
-        assert event.timestamp == "2024-06-15T12:30:00Z"
-
-    def test_no_timestamp_field_gives_none(self):
-        event = _parse_event({"type": "x"})
-        assert event.timestamp is None
-
-    def test_timestamp_takes_precedence_over_time(self):
-        data = {"type": "x", "timestamp": "ts-value", "time": "time-value"}
-        event = _parse_event(data)
-        # data.get("timestamp") is non-falsy → used over "time"
-        assert event.timestamp == "ts-value"
-
-    def test_empty_timestamp_falls_back_to_time(self):
-        # An empty string is falsy → falls through to "time" via `or`
-        data = {"type": "x", "timestamp": "", "time": "time-value"}
-        event = _parse_event(data)
-        assert event.timestamp == "time-value"
+        assert event.timestamp == expected_timestamp
 
 
 # ─── _parse_event: unknown item types ────────────────────────────────────────
@@ -385,7 +379,14 @@ class TestParseRealTraces:
         """The scenario fixture uses pretty-printed multi-line JSON, not compact JSONL.
         parse_trace_file reads line-by-line and will raise ValueError on it — that is
         expected behaviour; this test documents that constraint."""
-        trace = fixtures_dir / "skills" / "creating-reports" / ".skill-lab" / "traces" / "scenario-1.jsonl"
+        trace = (
+            fixtures_dir
+            / "skills"
+            / "creating-reports"
+            / ".skill-lab"
+            / "traces"
+            / "scenario-1.jsonl"
+        )
         if not trace.exists():
             pytest.skip("scenario-1.jsonl fixture not present")
         with pytest.raises(ValueError, match="Invalid JSON"):

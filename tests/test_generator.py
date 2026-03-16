@@ -97,6 +97,7 @@ def mock_client() -> MagicMock:
 @pytest.fixture
 def generator(mock_client: MagicMock) -> TriggerGenerator:
     """Create a TriggerGenerator with a mocked client."""
+    pytest.importorskip("anthropic")
     with patch("anthropic.Anthropic", return_value=mock_client):
         gen = TriggerGenerator(api_key="test-key")
     return gen
@@ -127,9 +128,7 @@ class TestTriggerGenerator:
         data = yaml.safe_load(result)
         assert data["skill"] == "creating-reports"
 
-    def test_generate_all_four_types(
-        self, generator: TriggerGenerator, fixtures_dir: Path
-    ) -> None:
+    def test_generate_all_four_types(self, generator: TriggerGenerator, fixtures_dir: Path) -> None:
         """Test that all 4 trigger types are present."""
         skill_path = fixtures_dir / "skills" / "creating-reports"
         result = generator.generate(skill_path)
@@ -220,9 +219,7 @@ class TestTriggerGenerator:
         data = yaml.safe_load(result)
         assert "test_cases" in data
 
-    def test_generate_parse_error(
-        self, generator: TriggerGenerator, tmp_path: Path
-    ) -> None:
+    def test_generate_parse_error(self, generator: TriggerGenerator, tmp_path: Path) -> None:
         """Test error when skill can't be parsed."""
         skill_dir = tmp_path / "broken-skill"
         skill_dir.mkdir()
@@ -296,10 +293,7 @@ class TestYamlValidation:
 
     def test_missing_required_field(self, generator: TriggerGenerator) -> None:
         """Test validation catches missing required fields."""
-        yaml_str = (
-            "skill: test\ntest_cases:\n"
-            "  - id: t1\n    type: explicit\n    prompt: hi"
-        )
+        yaml_str = "skill: test\ntest_cases:\n  - id: t1\n    type: explicit\n    prompt: hi"
         with pytest.raises(GenerationError, match="missing required field 'expected'"):
             generator._parse_response(yaml_str, "test")
 
@@ -315,14 +309,10 @@ class TestGenerateCommand:
 
         skill_dir = tmp_path / "my-skill"
         skill_dir.mkdir()
-        (skill_dir / "SKILL.md").write_text(
-            "---\nname: my-skill\ndescription: test\n---\n"
-        )
+        (skill_dir / "SKILL.md").write_text("---\nname: my-skill\ndescription: test\n---\n")
 
         runner = CliRunner()
-        result = runner.invoke(
-            app, ["generate", str(skill_dir)], env={"ANTHROPIC_API_KEY": ""}
-        )
+        result = runner.invoke(app, ["generate", str(skill_dir)], env={"ANTHROPIC_API_KEY": ""})
         assert result.exit_code == 1
         assert "ANTHROPIC_API_KEY" in result.output
 
@@ -359,15 +349,17 @@ class TestGenerateCommand:
 
         skill_dir = tmp_path / "my-skill"
         skill_dir.mkdir()
-        (skill_dir / "SKILL.md").write_text(
-            "---\nname: my-skill\ndescription: test\n---\n"
-        )
+        (skill_dir / "SKILL.md").write_text("---\nname: my-skill\ndescription: test\n---\n")
 
         runner = CliRunner()
-        with patch(
-            "skill_lab.cli.importlib_import",
-            side_effect=ImportError("No module named 'anthropic'"),
-        ) if False else patch.dict("sys.modules", {"skill_lab.triggers.generator": None}):
+        with (
+            patch(
+                "skill_lab.cli.importlib_import",
+                side_effect=ImportError("No module named 'anthropic'"),
+            )
+            if False
+            else patch.dict("sys.modules", {"skill_lab.triggers.generator": None})
+        ):
             # When generator module is None in sys.modules, importing will raise ImportError
             pass
 

@@ -31,7 +31,7 @@ def _make_check_result(
     check_id: str = "check-1",
     check_name: str = "Check One",
     passed: bool = True,
-    severity: Severity = Severity.ERROR,
+    severity: Severity = Severity.HIGH,
     dimension: EvalDimension = EvalDimension.STRUCTURE,
     message: str = "All good",
 ) -> CheckResult:
@@ -130,72 +130,72 @@ def _capture(reporter: ConsoleReporter) -> tuple[ConsoleReporter, io.StringIO]:
 
 
 class TestSeverityMappings:
-    def test_styles_has_error(self):
-        assert "error" in SEVERITY_STYLES
+    @pytest.mark.parametrize(
+        "severity, dict_name",
+        [
+            ("high", "SEVERITY_STYLES"),
+            ("medium", "SEVERITY_STYLES"),
+            ("low", "SEVERITY_STYLES"),
+            ("high", "SEVERITY_ICONS"),
+            ("medium", "SEVERITY_ICONS"),
+            ("low", "SEVERITY_ICONS"),
+        ],
+        ids=[
+            "styles-high",
+            "styles-medium",
+            "styles-low",
+            "icons-high",
+            "icons-medium",
+            "icons-low",
+        ],
+    )
+    def test_key_exists(self, severity, dict_name):
+        mapping = SEVERITY_STYLES if dict_name == "SEVERITY_STYLES" else SEVERITY_ICONS
+        assert severity in mapping
 
-    def test_styles_has_warning(self):
-        assert "warning" in SEVERITY_STYLES
-
-    def test_styles_has_info(self):
-        assert "info" in SEVERITY_STYLES
-
-    def test_icons_has_error(self):
-        assert "error" in SEVERITY_ICONS
-
-    def test_icons_has_warning(self):
-        assert "warning" in SEVERITY_ICONS
-
-    def test_icons_has_info(self):
-        assert "info" in SEVERITY_ICONS
-
-    def test_error_icon_is_X(self):
-        assert SEVERITY_ICONS["error"] == "X"
-
-    def test_warning_icon_is_exclamation(self):
-        assert SEVERITY_ICONS["warning"] == "!"
-
-    def test_info_icon_is_i(self):
-        assert SEVERITY_ICONS["info"] == "i"
-
-    def test_error_style_is_bold_red(self):
-        assert SEVERITY_STYLES["error"] == "bold red"
-
-    def test_warning_style_is_yellow(self):
-        assert SEVERITY_STYLES["warning"] == "yellow"
-
-    def test_info_style_is_blue(self):
-        assert SEVERITY_STYLES["info"] == "blue"
+    @pytest.mark.parametrize(
+        "severity, expected_icon, expected_style",
+        [
+            ("high", "X", "bold red"),
+            ("medium", "!", "yellow"),
+            ("low", "i", "blue"),
+        ],
+        ids=["high", "medium", "low"],
+    )
+    def test_values_match(self, severity, expected_icon, expected_style):
+        assert SEVERITY_ICONS[severity] == expected_icon
+        assert SEVERITY_STYLES[severity] == expected_style
 
 
 class TestSeverityLabels:
-    def test_labels_has_error(self):
-        assert "error" in SEVERITY_LABELS
+    def test_labels_has_high(self):
+        assert "high" in SEVERITY_LABELS
 
-    def test_labels_has_warning(self):
-        assert "warning" in SEVERITY_LABELS
+    def test_labels_has_medium(self):
+        assert "medium" in SEVERITY_LABELS
 
-    def test_labels_has_info(self):
-        assert "info" in SEVERITY_LABELS
+    def test_labels_has_low(self):
+        assert "low" in SEVERITY_LABELS
 
-    def test_error_maps_to_severe(self):
-        assert SEVERITY_LABELS["error"] == "severe"
+    def test_high_maps_to_high(self):
+        assert SEVERITY_LABELS["high"] == "high"
 
-    def test_warning_maps_to_moderate(self):
-        assert SEVERITY_LABELS["warning"] == "moderate"
+    def test_medium_maps_to_medium(self):
+        assert SEVERITY_LABELS["medium"] == "medium"
 
-    def test_info_maps_to_minor(self):
-        assert SEVERITY_LABELS["info"] == "minor"
+    def test_low_maps_to_low(self):
+        assert SEVERITY_LABELS["low"] == "low"
 
 
 class TestSeverityLabel:
-    def test_error(self):
-        assert ConsoleReporter()._severity_label(Severity.ERROR) == "severe"
+    def test_high(self):
+        assert ConsoleReporter()._severity_label(Severity.HIGH) == "high"
 
-    def test_warning(self):
-        assert ConsoleReporter()._severity_label(Severity.WARNING) == "moderate"
+    def test_medium(self):
+        assert ConsoleReporter()._severity_label(Severity.MEDIUM) == "medium"
 
-    def test_info(self):
-        assert ConsoleReporter()._severity_label(Severity.INFO) == "minor"
+    def test_low(self):
+        assert ConsoleReporter()._severity_label(Severity.LOW) == "low"
 
     def test_unknown_value_returns_raw(self):
         class FakeSeverity:
@@ -219,17 +219,19 @@ class TestConsoleReporterInit:
 
 
 class TestSeverityStyle:
-    def test_error(self):
-        assert ConsoleReporter()._severity_style(Severity.ERROR) == "bold red"
-
-    def test_warning(self):
-        assert ConsoleReporter()._severity_style(Severity.WARNING) == "yellow"
-
-    def test_info(self):
-        assert ConsoleReporter()._severity_style(Severity.INFO) == "blue"
+    @pytest.mark.parametrize(
+        "severity, expected",
+        [
+            (Severity.HIGH, "bold red"),
+            (Severity.MEDIUM, "yellow"),
+            (Severity.LOW, "blue"),
+        ],
+        ids=["high", "medium", "low"],
+    )
+    def test_known_severity(self, severity, expected):
+        assert ConsoleReporter()._severity_style(severity) == expected
 
     def test_unknown_value_returns_white(self):
-        # Simulate a Severity-like object whose value is not in the map
         class FakeSeverity:
             value = "nonexistent"
 
@@ -237,14 +239,17 @@ class TestSeverityStyle:
 
 
 class TestSeverityIcon:
-    def test_error(self):
-        assert ConsoleReporter()._severity_icon(Severity.ERROR) == "X"
-
-    def test_warning(self):
-        assert ConsoleReporter()._severity_icon(Severity.WARNING) == "!"
-
-    def test_info(self):
-        assert ConsoleReporter()._severity_icon(Severity.INFO) == "i"
+    @pytest.mark.parametrize(
+        "severity, expected",
+        [
+            (Severity.HIGH, "X"),
+            (Severity.MEDIUM, "!"),
+            (Severity.LOW, "i"),
+        ],
+        ids=["high", "medium", "low"],
+    )
+    def test_known_severity(self, severity, expected):
+        assert ConsoleReporter()._severity_icon(severity) == expected
 
     def test_unknown_value_returns_question_mark(self):
         class FakeSeverity:
@@ -486,9 +491,7 @@ class TestConsoleReporterReportTrace:
 
     def test_all_passed_shows_count(self):
         reporter, buf = self._reporter()
-        reporter.report_trace(
-            _make_trace_report(overall_pass=True, checks_passed=5, checks_run=5)
-        )
+        reporter.report_trace(_make_trace_report(overall_pass=True, checks_passed=5, checks_run=5))
         output = buf.getvalue()
         assert "5" in output
         assert "passed" in output.lower()
@@ -675,9 +678,9 @@ class TestJsonReporterFormat:
         assert result["results"][0]["check_id"] == "sentinel-id"
 
     def test_result_severity_serialized_as_string(self):
-        results = [_make_check_result(severity=Severity.WARNING)]
+        results = [_make_check_result(severity=Severity.MEDIUM)]
         result = json.loads(JsonReporter().format(_make_eval_report(results=results)))
-        assert result["results"][0]["severity"] == "warning"
+        assert result["results"][0]["severity"] == "medium"
 
     def test_schema_version_is_first_key(self):
         result = json.loads(JsonReporter().format(_make_eval_report()))

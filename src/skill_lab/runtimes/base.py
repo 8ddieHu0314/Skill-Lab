@@ -1,6 +1,8 @@
 """Abstract base class for runtime adapters."""
 
 import json
+import shutil
+import subprocess
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from pathlib import Path
@@ -16,10 +18,12 @@ class RuntimeAdapter(ABC):
     traces for analysis. Each runtime (Codex, Claude, etc.) has its own
     native trace format which gets normalized to TraceEvent objects.
 
-    Implementations should:
-    1. Execute the skill with the given prompt
-    2. Capture the execution trace
-    3. Normalize trace events to the common TraceEvent format
+    Implementations must provide:
+    - name: Runtime adapter name
+    - _cli_binary_name(): CLI binary to locate via shutil.which
+    - _build_command(): Runtime-specific command args
+    - _check_skill_trigger(): Runtime-specific skill detection logic
+    - parse_trace(): Trace parsing and normalization
     """
 
     @property
@@ -29,6 +33,36 @@ class RuntimeAdapter(ABC):
         ...
 
     @abstractmethod
+    def _cli_binary_name(self) -> str:
+        """Return the CLI binary name (e.g., 'claude', 'codex')."""
+        ...
+
+    @abstractmethod
+    def _build_command(self, cli_path: str, prompt: str) -> list[str]:
+        """Build the command list for subprocess.Popen.
+
+        Args:
+            cli_path: Full path to the CLI binary.
+            prompt: The user prompt to send.
+
+        Returns:
+            Command list for Popen.
+        """
+        ...
+
+    @abstractmethod
+    def _check_skill_trigger(self, line: str, skill_name: str) -> bool:
+        """Check if a JSONL line indicates the skill was triggered.
+
+        Args:
+            line: A single line of JSONL output.
+            skill_name: The skill name to look for.
+
+        Returns:
+            True if the skill was triggered in this event.
+        """
+        ...
+
     def execute(
         self,
         prompt: str,
@@ -38,6 +72,9 @@ class RuntimeAdapter(ABC):
         working_dir: Path | None = None,
     ) -> int:
         """Execute a skill with the given prompt and capture the trace.
+
+        Template method: uses _cli_binary_name(), _build_command(), and
+        _check_skill_trigger() from subclasses.
 
         Args:
             prompt: The user prompt to send to the LLM.
@@ -53,7 +90,67 @@ class RuntimeAdapter(ABC):
         Returns:
             Exit code from the runtime (0 for success).
         """
-        ...
+        trace_path.parent.mkdir(parents=True, exist_ok=True)
+        cwd = working_dir if working_dir is not None else skill_path
+
+        binary = self._cli_binary_name()
+        cli_path = shutil.which(binary)
+        if cli_path is None:
+            trace_path.write_text(
+                f'{{"type": "error", "message": "{binary.capitalize()} CLI not found"}}\n'
+            )
+            return 127
+
+        try:
+            proc = subprocess.Popen(
+                self._build_command(cli_path, prompt),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                cwd=cwd,
+            )
+
+            captured_lines: list[str] = []
+            skill_triggered = False
+
+            for line in proc.stdout or []:
+                line = line.rstrip("\n")
+                if not line:
+                    continue
+                captured_lines.append(line)
+
+                if (
+                    stop_on_skill
+                    and not skill_triggered
+                    and self._check_skill_trigger(line, stop_on_skill)
+                ):
+                    skill_triggered = True
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                    break
+
+            if proc.poll() is None:
+                try:
+                    proc.wait(timeout=300)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    captured_lines.append('{"type": "error", "message": "Execution timed out"}')
+
+            formatted_trace = self._format_trace("\n".join(captured_lines))
+            trace_path.write_text(formatted_trace)
+
+            if skill_triggered:
+                return 0
+            return proc.returncode or 0
+
+        except Exception as e:
+            trace_path.write_text(
+                f'{{\n  "type": "error",\n  "message": "Execution failed: {e}"\n}}\n'
+            )
+            return 1
 
     @abstractmethod
     def parse_trace(self, trace_path: Path) -> Iterator[TraceEvent]:

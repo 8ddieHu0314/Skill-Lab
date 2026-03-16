@@ -1,0 +1,17 @@
+skill: testing-features
+
+test_cases:
+  - id: explicit-1
+    type: explicit
+    prompt: "$testing-features run all tests"
+    expected: trigger
+
+  - id: implicit-1
+    type: implicit
+    prompt: "I need to run the test suite for this project"
+    expected: trigger
+
+  - id: negative-1
+    type: negative
+    prompt: "How do I install Python?"
+    expected: no_trigger

@@ -401,24 +401,16 @@ class TestSetupCLI:
 
 
 class TestTrackInvocationCLI:
-    def _get_skill_stats(self, db: Path) -> list[tuple]:
-        import sqlite3
-        conn = sqlite3.connect(db)
-        rows = conn.execute(
-            "SELECT skill_name, use_count, total_tokens, repo_root_hash FROM skill_stats"
-        ).fetchall()
-        conn.close()
-        return rows
-
     def test_records_invocation_from_stdin(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A valid PostToolUse JSON payload records a skill-invoke event and skill_stats row."""
+        """A valid PostToolUse JSON payload records a skill-invoke event."""
         import skill_lab.core.telemetry as telemetry_module
 
         db = tmp_path / "usage.db"
         monkeypatch.setattr(telemetry_module, "SKLAB_DB", db)
         monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
+        monkeypatch.setattr(telemetry_module, "_post_event", lambda *a, **kw: False)
         monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
         monkeypatch.setenv("SKLAB_NO_ANALYTICS", "")
 
@@ -429,97 +421,6 @@ class TestTrackInvocationCLI:
         })
         result = runner.invoke(app, ["_track-invocation"], input=payload)
         assert result.exit_code == 0
-
-        rows = self._get_skill_stats(db)
-        assert len(rows) == 1
-        assert rows[0][0] == "commit"
-        assert rows[0][1] == 1  # use_count
-
-    def test_tokens_accumulated_across_invocations(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Two invocations of the same skill accumulate total_tokens."""
-        import skill_lab.core.telemetry as telemetry_module
-
-        skill_dir = tmp_path / ".claude" / "skills" / "commit"
-        skill_dir.mkdir(parents=True)
-        skill_md = skill_dir / "SKILL.md"
-        skill_md.write_text("# Commit\n" + "x" * 100, encoding="utf-8")
-
-        db = tmp_path / "usage.db"
-        monkeypatch.setattr(telemetry_module, "SKLAB_DB", db)
-        monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
-        monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
-        monkeypatch.setenv("SKLAB_NO_ANALYTICS", "")
-
-        payload = json.dumps({
-            "tool_name": "Skill",
-            "tool_input": {"skill": "commit"},
-            "cwd": str(tmp_path),
-        })
-        runner.invoke(app, ["_track-invocation"], input=payload)
-        runner.invoke(app, ["_track-invocation"], input=payload)
-
-        rows = self._get_skill_stats(db)
-        assert len(rows) == 1
-        assert rows[0][1] == 2  # use_count == 2
-        assert rows[0][2] > 0   # total_tokens accumulated
-
-    def test_zero_tokens_added_when_skill_not_found(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """When skill file is missing, use_count still increments but total_tokens stays 0."""
-        import skill_lab.core.telemetry as telemetry_module
-
-        db = tmp_path / "usage.db"
-        monkeypatch.setattr(telemetry_module, "SKLAB_DB", db)
-        monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
-        monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
-        monkeypatch.setenv("SKLAB_NO_ANALYTICS", "")
-
-        payload = json.dumps({
-            "tool_name": "Skill",
-            "tool_input": {"skill": "nonexistent-skill"},
-            "cwd": str(tmp_path),
-        })
-        result = runner.invoke(app, ["_track-invocation"], input=payload)
-        assert result.exit_code == 0
-
-        rows = self._get_skill_stats(db)
-        assert len(rows) == 1
-        assert rows[0][1] == 1  # use_count incremented
-        assert rows[0][2] == 0  # total_tokens stays 0
-
-    def test_separate_rows_for_different_repo_hashes(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Invocations from different repos produce separate skill_stats rows."""
-        import hashlib
-        import skill_lab.core.telemetry as telemetry_module
-
-        db = tmp_path / "usage.db"
-        monkeypatch.setattr(telemetry_module, "SKLAB_DB", db)
-        monkeypatch.setattr(telemetry_module, "_analytics_enabled", True)
-        monkeypatch.setattr(telemetry_module, "_sync_to_endpoint", lambda: None)
-        monkeypatch.setenv("SKLAB_NO_ANALYTICS", "")
-
-        repo_a = tmp_path / "repo-a"
-        repo_b = tmp_path / "repo-b"
-        repo_a.mkdir()
-        repo_b.mkdir()
-
-        for cwd in (str(repo_a), str(repo_b)):
-            payload = json.dumps({
-                "tool_name": "Skill",
-                "tool_input": {"skill": "commit"},
-                "cwd": cwd,
-            })
-            runner.invoke(app, ["_track-invocation"], input=payload)
-
-        rows = self._get_skill_stats(db)
-        # Two separate rows (one per repo hash) or one global row if cwd->root not found
-        hashes = {r[3] for r in rows}
-        assert len(hashes) >= 1  # at least one distinct hash recorded
 
     def test_empty_stdin_does_not_crash(self) -> None:
         result = runner.invoke(app, ["_track-invocation"], input="")

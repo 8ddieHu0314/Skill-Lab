@@ -20,10 +20,6 @@ class TraceEvaluator:
     trace file, and runs each check using the appropriate handler.
     """
 
-    def __init__(self) -> None:
-        """Initialize the trace evaluator."""
-        pass
-
     def evaluate(self, skill_path: Path, trace_path: Path) -> TraceReport:
         """Evaluate a trace against the skill's trace checks.
 

@@ -21,7 +21,7 @@ class SkillMdExistsCheck(StaticCheck):
     check_id: ClassVar[str] = "structure.skill-md-exists"
     check_name: ClassVar[str] = "SKILL.md Exists"
     description: ClassVar[str] = "SKILL.md file exists in the skill directory"
-    severity: ClassVar[Severity] = Severity.ERROR
+    severity: ClassVar[Severity] = Severity.HIGH
     dimension: ClassVar[EvalDimension] = EvalDimension.STRUCTURE
     spec_required: ClassVar[bool] = True
     fix: ClassVar[str] = "Create a SKILL.md file in this directory"
@@ -56,7 +56,7 @@ class ValidFrontmatterCheck(StaticCheck):
     check_id: ClassVar[str] = "structure.valid-frontmatter"
     check_name: ClassVar[str] = "Valid Frontmatter"
     description: ClassVar[str] = "YAML frontmatter is parseable and valid"
-    severity: ClassVar[Severity] = Severity.ERROR
+    severity: ClassVar[Severity] = Severity.HIGH
     dimension: ClassVar[EvalDimension] = EvalDimension.STRUCTURE
     spec_required: ClassVar[bool] = True
     fix: ClassVar[str] = "Fix the YAML syntax errors in your SKILL.md frontmatter"
@@ -84,6 +84,57 @@ class ValidFrontmatterCheck(StaticCheck):
         )
 
 
+def _validate_folder_extensions(
+    check: StaticCheck,
+    skill: Skill,
+    folder_name: str,
+    valid_extensions: set[str],
+    file_type: str,
+) -> CheckResult:
+    """Validate that a folder contains only files with allowed extensions.
+
+    Args:
+        check: The check instance (for _pass/_fail helpers).
+        skill: The skill being evaluated.
+        folder_name: Folder name relative to skill root (e.g., "scripts").
+        valid_extensions: Set of allowed file extensions (e.g., {".py", ".sh"}).
+        file_type: Human label for messages (e.g., "script", "reference").
+
+    Returns:
+        CheckResult indicating pass or fail.
+    """
+    folder_path = skill.path / folder_name
+
+    if not folder_path.exists():
+        return check._pass(f"No {folder_name} folder present (optional)")
+
+    if not folder_path.is_dir():
+        return check._fail(
+            f"{folder_name} is not a directory",
+            location=str(folder_path),
+        )
+
+    invalid_files: list[str] = []
+    for item in folder_path.iterdir():
+        if item.is_file() and item.suffix.lower() not in valid_extensions:
+            invalid_files.append(item.name)
+
+    if invalid_files:
+        return check._fail(
+            f"{folder_name.capitalize()} folder contains invalid files: {', '.join(invalid_files)}",
+            details={
+                "invalid_files": invalid_files,
+                "valid_extensions": list(valid_extensions),
+            },
+            location=str(folder_path),
+        )
+
+    return check._pass(
+        f"{folder_name.capitalize()} folder contains only valid {file_type} files",
+        location=str(folder_path),
+    )
+
+
 @register_check
 class ScriptsValidCheck(StaticCheck):
     """Check that /scripts contains only valid script files."""
@@ -91,42 +142,15 @@ class ScriptsValidCheck(StaticCheck):
     check_id: ClassVar[str] = "structure.scripts-valid"
     check_name: ClassVar[str] = "Scripts Folder Valid"
     description: ClassVar[str] = "/scripts contains only .py, .sh, .js, .ts, .bash, .rb files"
-    severity: ClassVar[Severity] = Severity.WARNING
+    severity: ClassVar[Severity] = Severity.MEDIUM
     dimension: ClassVar[EvalDimension] = EvalDimension.STRUCTURE
-    fix: ClassVar[str] = "Remove invalid files from scripts/ — only .py .sh .js .ts .bash .rb allowed"
+    fix: ClassVar[str] = (
+        "Remove invalid files from scripts/ — only .py .sh .js .ts .bash .rb allowed"
+    )
 
     def run(self, skill: Skill) -> CheckResult:
-        scripts_path = skill.path / "scripts"
-
-        if not scripts_path.exists():
-            return self._pass(
-                "No scripts folder present (optional)",
-            )
-
-        if not scripts_path.is_dir():
-            return self._fail(
-                "scripts is not a directory",
-                location=str(scripts_path),
-            )
-
-        invalid_files: list[str] = []
-        for item in scripts_path.iterdir():
-            if item.is_file() and item.suffix.lower() not in VALID_SCRIPT_EXTENSIONS:
-                invalid_files.append(item.name)
-
-        if invalid_files:
-            return self._fail(
-                f"Scripts folder contains invalid files: {', '.join(invalid_files)}",
-                details={
-                    "invalid_files": invalid_files,
-                    "valid_extensions": list(VALID_SCRIPT_EXTENSIONS),
-                },
-                location=str(scripts_path),
-            )
-
-        return self._pass(
-            "Scripts folder contains only valid script files",
-            location=str(scripts_path),
+        return _validate_folder_extensions(
+            self, skill, "scripts", VALID_SCRIPT_EXTENSIONS, "script"
         )
 
 
@@ -137,42 +161,13 @@ class ReferencesValidCheck(StaticCheck):
     check_id: ClassVar[str] = "structure.references-valid"
     check_name: ClassVar[str] = "References Folder Valid"
     description: ClassVar[str] = "/references contains only .md, .txt, .rst files"
-    severity: ClassVar[Severity] = Severity.WARNING
+    severity: ClassVar[Severity] = Severity.MEDIUM
     dimension: ClassVar[EvalDimension] = EvalDimension.STRUCTURE
     fix: ClassVar[str] = "Remove invalid files from references/ — only .md .txt .rst allowed"
 
     def run(self, skill: Skill) -> CheckResult:
-        references_path = skill.path / "references"
-
-        if not references_path.exists():
-            return self._pass(
-                "No references folder present (optional)",
-            )
-
-        if not references_path.is_dir():
-            return self._fail(
-                "references is not a directory",
-                location=str(references_path),
-            )
-
-        invalid_files: list[str] = []
-        for item in references_path.iterdir():
-            if item.is_file() and item.suffix.lower() not in VALID_REFERENCE_EXTENSIONS:
-                invalid_files.append(item.name)
-
-        if invalid_files:
-            return self._fail(
-                f"References folder contains invalid files: {', '.join(invalid_files)}",
-                details={
-                    "invalid_files": invalid_files,
-                    "valid_extensions": list(VALID_REFERENCE_EXTENSIONS),
-                },
-                location=str(references_path),
-            )
-
-        return self._pass(
-            "References folder contains only valid reference files",
-            location=str(references_path),
+        return _validate_folder_extensions(
+            self, skill, "references", VALID_REFERENCE_EXTENSIONS, "reference"
         )
 
 
@@ -195,7 +190,7 @@ class StandardFrontmatterFieldsCheck(StaticCheck):
     check_id: ClassVar[str] = "structure.standard-frontmatter-fields"
     check_name: ClassVar[str] = "Standard Frontmatter Fields"
     description: ClassVar[str] = "Frontmatter contains only fields defined in the Agent Skills spec"
-    severity: ClassVar[Severity] = Severity.WARNING
+    severity: ClassVar[Severity] = Severity.MEDIUM
     dimension: ClassVar[EvalDimension] = EvalDimension.STRUCTURE
     fix: ClassVar[str] = "Move these non-standard fields into the metadata map"
 
@@ -267,7 +262,7 @@ class ScriptsNoInteractiveCheck(StaticCheck):
     description: ClassVar[str] = (
         "Scripts do not use interactive input (agents run non-interactive shells)"
     )
-    severity: ClassVar[Severity] = Severity.WARNING
+    severity: ClassVar[Severity] = Severity.MEDIUM
     dimension: ClassVar[EvalDimension] = EvalDimension.STRUCTURE
     fix: ClassVar[str] = "Remove interactive input calls — scripts must run non-interactively"
 
@@ -334,7 +329,7 @@ class ScriptsSelfContainedCheck(StaticCheck):
     check_id: ClassVar[str] = "structure.scripts-self-contained"
     check_name: ClassVar[str] = "Scripts Self-Contained"
     description: ClassVar[str] = "Scripts folder has no loose dependency manifests"
-    severity: ClassVar[Severity] = Severity.INFO
+    severity: ClassVar[Severity] = Severity.LOW
     dimension: ClassVar[EvalDimension] = EvalDimension.STRUCTURE
     fix: ClassVar[str] = "Remove dependency manifests from scripts/ and embed dependencies inline"
 

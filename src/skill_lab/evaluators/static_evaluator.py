@@ -13,9 +13,10 @@ from skill_lab.checks.static import (  # noqa: F401
     content,
     naming,
     schema,
+    security,
     structure,
 )
-from skill_lab.core.models import CheckResult, EvaluationReport, Severity
+from skill_lab.core.models import CheckResult, EvalDimension, EvaluationReport, Severity
 from skill_lab.core.registry import registry
 from skill_lab.core.scoring import build_summary, calculate_metrics, calculate_score
 from skill_lab.parsers.skill_parser import parse_skill
@@ -28,6 +29,7 @@ class StaticEvaluator:
         self,
         check_ids: list[str] | None = None,
         spec_only: bool = False,
+        include_security: bool = False,
     ) -> None:
         """Initialize the evaluator.
 
@@ -36,9 +38,14 @@ class StaticEvaluator:
                       If None, all registered checks are run.
             spec_only: If True, only run checks required by the Agent Skills spec.
                       Quality suggestion checks will be skipped.
+            include_security: If True, include the security.scan check.
+                      Excluded by default so it does not appear in `evaluate` output.
+                      Use `sklab validate` (which sets this True) or `sklab scan`
+                      for security results.
         """
         self.check_ids = check_ids
         self.spec_only = spec_only
+        self.include_security = include_security
 
     def _get_checks(self) -> list[StaticCheck]:
         """Get the check instances to run.
@@ -55,11 +62,15 @@ class StaticEvaluator:
                     if self.spec_only and not check_class.spec_required:
                         continue
                     checks.append(check_class())
-            return checks
         elif self.spec_only:
-            return [check_class() for check_class in registry.get_spec_required()]
+            checks = [check_class() for check_class in registry.get_spec_required()]
         else:
-            return [check_class() for check_class in registry.get_all()]
+            checks = [check_class() for check_class in registry.get_all()]
+
+        if not self.include_security:
+            checks = [c for c in checks if c.dimension != EvalDimension.SECURITY]
+
+        return checks
 
     def evaluate(self, skill_path: str | Path) -> EvaluationReport:
         """Evaluate a skill at the given path.
@@ -103,8 +114,8 @@ class StaticEvaluator:
 
         metrics = calculate_metrics(results)
 
-        # Determine overall pass (no ERROR-level failures)
-        error_failures = [r for r in results if not r.passed and r.severity == Severity.ERROR]
+        # Determine overall pass (no HIGH-severity failures)
+        error_failures = [r for r in results if not r.passed and r.severity == Severity.HIGH]
         overall_pass = len(error_failures) == 0
 
         # Calculate quality score
@@ -128,7 +139,7 @@ class StaticEvaluator:
         )
 
     def validate(self, skill_path: str | Path) -> tuple[bool, list[CheckResult]]:
-        """Quick validation that returns only ERROR-level failures.
+        """Quick validation that returns only HIGH-severity failures.
 
         Args:
             skill_path: Path to the skill directory.
@@ -137,5 +148,5 @@ class StaticEvaluator:
             Tuple of (passed, error_results).
         """
         report = self.evaluate(skill_path)
-        error_results = [r for r in report.results if not r.passed and r.severity == Severity.ERROR]
+        error_results = [r for r in report.results if not r.passed and r.severity == Severity.HIGH]
         return report.overall_pass, error_results

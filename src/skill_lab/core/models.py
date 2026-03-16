@@ -9,9 +9,9 @@ from typing import Any
 class Severity(str, Enum):
     """Severity levels for check results."""
 
-    ERROR = "error"  # Must fix
-    WARNING = "warning"  # Should fix
-    INFO = "info"  # Suggestion
+    HIGH = "high"  # Must fix
+    MEDIUM = "medium"  # Should fix
+    LOW = "low"  # Suggestion
 
 
 class EvalDimension(str, Enum):
@@ -22,6 +22,7 @@ class EvalDimension(str, Enum):
     DESCRIPTION = "description"
     CONTENT = "content"
     EXECUTION = "execution"  # Phase 3: Trace-based checks
+    SECURITY = "security"
 
 
 class TriggerType(str, Enum):

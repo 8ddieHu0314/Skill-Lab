@@ -40,6 +40,15 @@ class FakeRuntime(RuntimeAdapter):
     def name(self) -> str:
         return self._name
 
+    def _cli_binary_name(self) -> str:
+        return "fake"
+
+    def _build_command(self, cli_path: str, prompt: str) -> list[str]:
+        return [cli_path, prompt]
+
+    def _check_skill_trigger(self, line: str, skill_name: str) -> bool:
+        return False
+
     def is_available(self) -> bool:
         return self._available
 
@@ -118,7 +127,9 @@ def _make_test_case(
     )
 
 
-def _make_trigger_result(passed: bool = True, trigger_type: TriggerType = TriggerType.EXPLICIT) -> TriggerResult:
+def _make_trigger_result(
+    passed: bool = True, trigger_type: TriggerType = TriggerType.EXPLICIT
+) -> TriggerResult:
     return TriggerResult(
         test_id="t1",
         test_name="T1",
@@ -332,123 +343,116 @@ class TestCheckExpectations:
         )
 
     # Skill trigger expectation
-    def test_returns_true_when_skill_triggered_matches_expected(self):
-        assert self._check(skill_triggered=True, expected_triggered=True) is True
-
-    def test_returns_true_when_negative_test_and_not_triggered(self):
-        assert self._check(skill_triggered=False, expected_triggered=False) is True
-
-    def test_returns_false_when_skill_not_triggered_but_expected(self):
-        assert self._check(skill_triggered=False, expected_triggered=True) is False
-
-    def test_returns_false_when_skill_triggered_but_not_expected(self):
-        assert self._check(skill_triggered=True, expected_triggered=False) is False
+    @pytest.mark.parametrize(
+        "skill_triggered, expected_triggered, want",
+        [
+            (True, True, True),
+            (False, False, True),
+            (False, True, False),
+            (True, False, False),
+        ],
+        ids=["match", "negative-match", "not-triggered", "unexpected-trigger"],
+    )
+    def test_skill_trigger_expectation(self, skill_triggered, expected_triggered, want):
+        assert (
+            self._check(skill_triggered=skill_triggered, expected_triggered=expected_triggered)
+            is want
+        )
 
     # Exit code
-    def test_returns_true_when_exit_code_not_specified(self):
-        assert self._check(exit_code_actual=1, exit_code_expected=None) is True
-
-    def test_returns_true_when_exit_code_matches(self):
-        assert self._check(exit_code_actual=0, exit_code_expected=0) is True
-
-    def test_returns_false_when_exit_code_mismatches(self):
-        assert self._check(exit_code_actual=1, exit_code_expected=0) is False
-
-    def test_nonzero_exit_code_accepted_when_matches(self):
-        assert self._check(exit_code_actual=2, exit_code_expected=2) is True
+    @pytest.mark.parametrize(
+        "exit_code_actual, exit_code_expected, want",
+        [
+            (1, None, True),
+            (0, 0, True),
+            (1, 0, False),
+            (2, 2, True),
+        ],
+        ids=["not-specified", "matches", "mismatches", "nonzero-matches"],
+    )
+    def test_exit_code_expectation(self, exit_code_actual, exit_code_expected, want):
+        assert (
+            self._check(exit_code_actual=exit_code_actual, exit_code_expected=exit_code_expected)
+            is want
+        )
 
     # Command inclusion
-    def test_returns_true_when_required_command_run(self):
-        assert self._check(
-            commands_include=("npm install",),
-            commands_run=["npm install", "npm test"],
-        ) is True
-
-    def test_returns_false_when_required_command_missing(self):
-        assert self._check(
-            commands_include=("npm test",),
-            commands_run=["npm install"],
-        ) is False
-
-    def test_returns_false_when_one_of_multiple_commands_missing(self):
-        assert self._check(
-            commands_include=("npm install", "npm test"),
-            commands_run=["npm install"],
-        ) is False
-
-    def test_returns_true_when_all_required_commands_present(self):
-        assert self._check(
-            commands_include=("cmd-a", "cmd-b"),
-            commands_run=["cmd-a", "cmd-b", "cmd-c"],
-        ) is True
-
-    def test_no_required_commands_does_not_block(self):
-        assert self._check(commands_include=(), commands_run=[]) is True
+    @pytest.mark.parametrize(
+        "commands_include, commands_run, want",
+        [
+            (("npm install",), ["npm install", "npm test"], True),
+            (("npm test",), ["npm install"], False),
+            (("npm install", "npm test"), ["npm install"], False),
+            (("cmd-a", "cmd-b"), ["cmd-a", "cmd-b", "cmd-c"], True),
+            ((), [], True),
+        ],
+        ids=["present", "missing", "one-missing", "all-present", "none-required"],
+    )
+    def test_command_inclusion(self, commands_include, commands_run, want):
+        assert self._check(commands_include=commands_include, commands_run=commands_run) is want
 
     # File creation
-    def test_returns_true_when_required_file_exists(self):
-        assert self._check(
-            files_created_expected=("output.txt",),
-            files_exist=["output.txt"],
-        ) is True
-
-    def test_returns_false_when_required_file_missing(self):
-        assert self._check(
-            files_created_expected=("report.pdf",),
-            files_exist=[],
-        ) is False
-
-    def test_returns_false_when_one_required_file_missing(self):
-        assert self._check(
-            files_created_expected=("a.txt", "b.txt"),
-            files_exist=["a.txt"],
-        ) is False
-
-    def test_returns_true_when_all_required_files_present(self):
-        assert self._check(
-            files_created_expected=("a.txt", "b.txt"),
-            files_exist=["a.txt", "b.txt"],
-        ) is True
-
-    def test_no_required_files_does_not_block(self):
-        assert self._check(files_created_expected=(), files_exist=[]) is True
+    @pytest.mark.parametrize(
+        "files_created_expected, files_exist, want",
+        [
+            (("output.txt",), ["output.txt"], True),
+            (("report.pdf",), [], False),
+            (("a.txt", "b.txt"), ["a.txt"], False),
+            (("a.txt", "b.txt"), ["a.txt", "b.txt"], True),
+            ((), [], True),
+        ],
+        ids=["present", "missing", "one-missing", "all-present", "none-required"],
+    )
+    def test_file_creation(self, files_created_expected, files_exist, want):
+        assert (
+            self._check(files_created_expected=files_created_expected, files_exist=files_exist)
+            is want
+        )
 
     # Loop detection
-    def test_returns_false_when_loops_detected_and_no_loops_true(self):
-        assert self._check(no_loops=True, has_loops=True) is False
-
-    def test_returns_true_when_no_loops_detected_and_no_loops_true(self):
-        assert self._check(no_loops=True, has_loops=False) is True
-
-    def test_ignores_loops_when_no_loops_false(self):
-        # Even if loops present, no_loops=False means we don't care
-        assert self._check(no_loops=False, has_loops=True) is True
+    @pytest.mark.parametrize(
+        "no_loops, has_loops, want",
+        [
+            (True, True, False),
+            (True, False, True),
+            (False, True, True),
+        ],
+        ids=["loops-detected", "no-loops", "ignored"],
+    )
+    def test_loop_detection(self, no_loops, has_loops, want):
+        assert self._check(no_loops=no_loops, has_loops=has_loops) is want
 
     # Combined scenarios
     def test_all_expectations_pass(self):
-        assert self._check(
-            skill_triggered=True,
-            expected_triggered=True,
-            exit_code_actual=0,
-            exit_code_expected=0,
-            commands_include=("npm install",),
-            commands_run=["npm install"],
-            files_created_expected=("dist/output.js",),
-            files_exist=["dist/output.js"],
-            no_loops=True,
-            has_loops=False,
-        ) is True
+        assert (
+            self._check(
+                skill_triggered=True,
+                expected_triggered=True,
+                exit_code_actual=0,
+                exit_code_expected=0,
+                commands_include=("npm install",),
+                commands_run=["npm install"],
+                files_created_expected=("dist/output.js",),
+                files_exist=["dist/output.js"],
+                no_loops=True,
+                has_loops=False,
+            )
+            is True
+        )
 
     def test_one_failure_causes_overall_false(self):
         # Everything passes but exit code mismatches
-        assert self._check(
-            skill_triggered=True,
-            expected_triggered=True,
-            exit_code_actual=1,
-            exit_code_expected=0,
-            commands_include=("npm install",),
-            commands_run=["npm install"],
-        ) is False
+        assert (
+            self._check(
+                skill_triggered=True,
+                expected_triggered=True,
+                exit_code_actual=1,
+                exit_code_expected=0,
+                commands_include=("npm install",),
+                commands_run=["npm install"],
+            )
+            is False
+        )
 
 
 # ─── _run_single_test ─────────────────────────────────────────────────────────
@@ -552,7 +556,9 @@ class TestRunSingleTest:
         recorded: list[Path | None] = []
 
         class RecordingRuntime(FakeRuntime):
-            def execute(self, prompt, skill_path, trace_path, stop_on_skill=None, working_dir=None) -> int:
+            def execute(
+                self, prompt, skill_path, trace_path, stop_on_skill=None, working_dir=None
+            ) -> int:
                 recorded.append(working_dir)
                 trace_path.parent.mkdir(parents=True, exist_ok=True)
                 trace_path.write_text("")
@@ -572,7 +578,9 @@ class TestRunSingleTest:
         recorded: list[Path | None] = []
 
         class RecordingRuntime(FakeRuntime):
-            def execute(self, prompt, skill_path, trace_path, stop_on_skill=None, working_dir=None) -> int:
+            def execute(
+                self, prompt, skill_path, trace_path, stop_on_skill=None, working_dir=None
+            ) -> int:
                 recorded.append(working_dir)
                 trace_path.parent.mkdir(parents=True, exist_ok=True)
                 trace_path.write_text("")
@@ -705,7 +713,9 @@ class TestEvaluate:
         implicit_tc = _make_test_case(id="i1", trigger_type=TriggerType.IMPLICIT)
         ev = self._evaluator_with_runtime()
         with patch(self._PATCH_LOAD, return_value=([explicit_tc, implicit_tc], [])):
-            with patch.object(ev, "_run_single_test", return_value=_make_trigger_result()) as mock_run:
+            with patch.object(
+                ev, "_run_single_test", return_value=_make_trigger_result()
+            ) as mock_run:
                 ev.evaluate(tmp_path / "skill", type_filter=TriggerType.EXPLICIT)
                 # Only explicit test was run
                 assert mock_run.call_count == 1
@@ -719,7 +729,9 @@ class TestEvaluate:
         ]
         ev = self._evaluator_with_runtime()
         with patch(self._PATCH_LOAD, return_value=(tcs, [])):
-            with patch.object(ev, "_run_single_test", return_value=_make_trigger_result()) as mock_run:
+            with patch.object(
+                ev, "_run_single_test", return_value=_make_trigger_result()
+            ) as mock_run:
                 ev.evaluate(tmp_path / "skill", type_filter=TriggerType.NEGATIVE)
                 assert mock_run.call_count == 1
                 assert mock_run.call_args[0][0].id == "n"
@@ -730,7 +742,9 @@ class TestEvaluate:
         calls: list[tuple] = []
         with patch(self._PATCH_LOAD, return_value=(tcs, [])):
             with patch.object(ev, "_run_single_test", return_value=_make_trigger_result()):
-                ev.evaluate(tmp_path / "skill", progress_callback=lambda c, t, n: calls.append((c, t, n)))
+                ev.evaluate(
+                    tmp_path / "skill", progress_callback=lambda c, t, n: calls.append((c, t, n))
+                )
         assert len(calls) == 3
         assert calls[0] == (1, 3, "Test 0")
         assert calls[1] == (2, 3, "Test 1")

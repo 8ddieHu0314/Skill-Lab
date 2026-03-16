@@ -31,7 +31,16 @@ This document provides a comprehensive overview of Skill-Lab's technology stack 
 
 ```
 src/skill_lab/
-├── cli.py                    # Entry point - Typer CLI commands
+├── cli.py                    # App definition, shared helpers, entry point
+├── commands/                 # CLI command modules
+│   ├── __init__.py           # Imports all command modules
+│   ├── evaluate.py           # evaluate, validate, list-checks
+│   ├── trigger.py            # trigger tests
+│   ├── generate.py           # LLM-based test generation
+│   ├── info.py               # info, prompt, eval-trace
+│   ├── stats.py              # stats subcommands
+│   ├── telemetry.py          # telemetry subcommands
+│   └── setup.py              # setup, track-invocation
 ├── __main__.py               # Allows `python -m skill_lab`
 ├── core/
 │   ├── models.py             # Data classes (Skill, CheckResult, TriggerResult, etc.)
@@ -146,9 +155,9 @@ src/skill_lab/
 
 ```python
 class Severity(str, Enum):
-    ERROR = "error"      # Must fix (weight: 1.0)
-    WARNING = "warning"  # Should fix (weight: 0.5)
-    INFO = "info"        # Suggestion (weight: 0.25)
+    HIGH = "high"        # Must fix (weight: 1.0)
+    MEDIUM = "medium"    # Should fix (weight: 0.5)
+    LOW = "low"          # Suggestion (weight: 0.25)
 
 class EvalDimension(str, Enum):
     STRUCTURE = "structure"      # 30% weight
@@ -248,7 +257,7 @@ def register_check(check_class):
 class SkillMdExistsCheck(StaticCheck):
     check_id = "structure.skill-md-exists"
     check_name = "SKILL.md Exists"
-    severity = Severity.ERROR
+    severity = Severity.HIGH
     dimension = EvalDimension.STRUCTURE
 
     def run(self, skill: Skill) -> CheckResult:
@@ -316,9 +325,9 @@ from skill_lab.checks.static import content, description, naming, schema, struct
 For each dimension, calculate: `(passed_weight / total_weight) * 100`
 
 Weights by severity:
-- ERROR = 1.0
-- WARNING = 0.5
-- INFO = 0.25
+- HIGH = 1.0
+- MEDIUM = 0.5
+- LOW = 0.25
 
 #### Step 2: Weighted Average
 
@@ -337,9 +346,9 @@ DIMENSION_WEIGHTS = {
 
 ```
 Structure: 5 checks, all pass       → 100 × 0.30 = 30.0
-Naming: 5 checks, 1 ERROR fails     →  80 × 0.20 = 16.0
+Naming: 5 checks, 1 HIGH fails      →  80 × 0.20 = 16.0
 Description: 5 checks, all pass     → 100 × 0.25 = 25.0
-Content: 6 checks, 1 WARNING fails  →  90 × 0.25 = 22.5
+Content: 6 checks, 1 MEDIUM fails   →  90 × 0.25 = 22.5
 ──────────────────────────────────────────────────────
 Final Score: 93.5
 ```
@@ -402,13 +411,18 @@ sklab
 # Main evaluation command (defaults to current directory if path omitted)
 sklab evaluate [./my-skill] [-f console|json] [-o file.json] [-V] [-s]
 sklab evaluate --all             # Discover + evaluate all skills under cwd (recursive)
-sklab evaluate --repo            # Discover + evaluate all skills from git repo root
 
 # Quick validation (exit 0 or 1, defaults to current directory)
 sklab validate [./my-skill] [-s]
+sklab validate --all             # Discover + validate all skills under cwd (recursive)
+sklab validate --repo            # Discover + validate all skills from git repo root
+
+# Security scan (exits 1 on BLOCK)
+sklab scan [./my-skill]
+sklab scan --all                 # Scan all skills under cwd (recursive)
 
 # List available checks
-sklab list-checks [-d structure|naming|description|content] [-s] [--suggestions-only]
+sklab list-checks [-s] [--suggestions-only]
 
 # Trigger testing (defaults to current directory if path omitted)
 sklab trigger [./my-skill] [-t explicit|implicit|contextual|negative] [-f console|json] [-o file.json]
@@ -430,6 +444,14 @@ sklab stats                   # Overview: invocations this month, avg score, tok
 sklab stats count             # Table: skill name | use count | tokens used (current month)
 sklab stats score             # Table: skill name | current score | baseline score | delta
 sklab stats tokens            # Table: skill name | tokens/invocation | total tokens (current month)
+
+# Telemetry management
+sklab telemetry               # Show status (same as status)
+sklab telemetry enable        # Enable analytics
+sklab telemetry disable       # Disable analytics
+sklab telemetry status        # Rich panel: enabled/disabled, env overrides, DB path, row counts
+sklab telemetry purge         # Delete local usage.db (with confirmation)
+sklab telemetry show [-n N] [--json]  # View recent events as table or JSON
 
 # One-time hook setup for invocation tracking (v0.5.0)
 sklab setup
@@ -635,7 +657,10 @@ scenarios:
 | **T \| None over Optional[T]** | Python 3.10+ union syntax for cleaner, more readable type annotations |
 | **NFKC Unicode normalization** | Naming check normalizes both sides with `unicodedata.normalize("NFKC", ...)` so precomposed/decomposed forms match |
 | **Custom YAML loader** | `_SkillYAMLLoader` prevents `yes`→`True`, `null`→`None` coercion; values stay as strings |
-| **Fire-and-forget telemetry** | All network calls (Supabase sync, PyPI version check) use `timeout=2-3s` and swallow all exceptions — a network failure never crashes the CLI |
+| **Inline per-event sync** | Each `record_event()` / `record_error()` call builds a flat JSON payload (`_build_event_payload`) and POSTs it inline via `_post_event()` (2s timeout). Rows are marked `synced=1` only on success. A daemon thread (`_retry_stale_events`) retries unsynced events older than 1 hour. All exceptions silently swallowed — network failures never crash the CLI. |
+| **Local-only sensitive fields** | `skill_path`, `skill_version`, `skill_source` are stored locally but excluded from server sync payloads. `skill_name` is synced for product analytics. |
+| **90-day retention** | Local telemetry rows older than 90 days are auto-deleted (throttled to once/day). `sklab telemetry purge` for immediate wipe. |
+| **Telemetry debug mode** | `SKLAB_TELEMETRY_DEBUG=1` prints the JSON payload to stderr and skips the POST — allows users to audit exactly what would be sent |
 | **Telemetry independent of analytics opt-in** | PyPI version update checks run regardless of whether the user opted into analytics |
 
 ---
@@ -699,7 +724,7 @@ class MyNewCheck(StaticCheck):
     check_id: ClassVar[str] = "dimension.my-check"
     check_name: ClassVar[str] = "My Check Name"
     description: ClassVar[str] = "What this check verifies"
-    severity: ClassVar[Severity] = Severity.WARNING
+    severity: ClassVar[Severity] = Severity.MEDIUM
     dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
     spec_required: ClassVar[bool] = False  # True if required by Agent Skills spec
 
@@ -710,8 +735,8 @@ class MyNewCheck(StaticCheck):
 ```
 
 **Check Categories:**
-- **Spec-required checks** (10): Must pass to be valid per the Agent Skills spec. Use `spec_required = True` and `Severity.ERROR`.
-- **Quality suggestions** (18): Best practices that improve skill quality. Use `spec_required = False` (default) with `Severity.WARNING` or `Severity.INFO`.
+- **Spec-required checks** (10): Must pass to be valid per the Agent Skills spec. Use `spec_required = True` and `Severity.HIGH`.
+- **Quality suggestions** (18): Best practices that improve skill quality. Use `spec_required = False` (default) with `Severity.MEDIUM` or `Severity.LOW`.
 
 ---
 

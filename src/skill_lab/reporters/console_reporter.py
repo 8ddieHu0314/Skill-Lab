@@ -9,22 +9,31 @@ from skill_lab.core.models import EvaluationReport, Severity, TraceReport
 
 # Shared severity display mappings — keyed by Severity.value string
 SEVERITY_STYLES: dict[str, str] = {
-    "error": "bold red",
-    "warning": "yellow",
-    "info": "blue",
+    "high": "bold red",
+    "medium": "yellow",
+    "low": "blue",
 }
 
 SEVERITY_ICONS: dict[str, str] = {
-    "error": "X",
-    "warning": "!",
-    "info": "i",
+    "high": "X",
+    "medium": "!",
+    "low": "i",
 }
 
 SEVERITY_LABELS: dict[str, str] = {
-    "error": "severe",
-    "warning": "moderate",
-    "info": "minor",
+    "high": "high",
+    "medium": "medium",
+    "low": "low",
 }
+
+
+def score_color(score: float) -> str:
+    """Return a rich color name based on a 0-100 quality score."""
+    if score >= 80:
+        return "green"
+    if score >= 60:
+        return "yellow"
+    return "red"
 
 
 class ConsoleReporter:
@@ -62,7 +71,9 @@ class ConsoleReporter:
             )
         elif shown_count == 0:
             self.console.print("[green]All checks passed![/green]")
-            self.console.print("[dim](run [bold]sklab evaluate --verbose ./skill[/bold] to see details)[/dim]")
+            self.console.print(
+                "[dim](run [bold]sklab evaluate --verbose ./skill[/bold] to see details)[/dim]"
+            )
 
     def report(self, report: EvaluationReport) -> None:
         """Print an evaluation report to the console.
@@ -82,18 +93,12 @@ class ConsoleReporter:
         )
 
         # Score and status
-        score_color = (
-            "green"
-            if report.quality_score >= 80
-            else "yellow"
-            if report.quality_score >= 60
-            else "red"
-        )
+        sc = score_color(report.quality_score)
         status = "[green]PASS[/green]" if report.overall_pass else "[red]FAIL[/red]"
 
         self.console.print()
         self.console.print(
-            f"[bold]Quality Score:[/bold] [{score_color}]{report.quality_score:.1f}/100[/{score_color}]"
+            f"[bold]Quality Score:[/bold] [{sc}]{report.quality_score:.1f}/100[/{sc}]"
         )
         self.console.print(f"[bold]Status:[/bold] {status}")
         self.console.print(
@@ -111,10 +116,10 @@ class ConsoleReporter:
 
         if results_to_show:
             table = Table(title="Check Results" if self.verbose else "Failed Checks")
-            table.add_column("Status", width=6)
-            table.add_column("Severity", width=10)
-            table.add_column("Check", width=30)
-            table.add_column("Message", width=50)
+            table.add_column("", width=4, no_wrap=True)
+            table.add_column("Severity", min_width=6, no_wrap=True)
+            table.add_column("Check", min_width=20)
+            table.add_column("Message")
 
             for result in results_to_show:
                 status_icon = (
@@ -125,7 +130,9 @@ class ConsoleReporter:
                 severity_text = Text(
                     self._severity_label(result.severity).upper(), style=self._severity_style(result.severity)
                 )
-                display_message = (result.fix or result.message) if not result.passed else result.message
+                display_message = (
+                    (result.fix or result.message) if not result.passed else result.message
+                )
                 table.add_row(
                     status_icon,
                     severity_text,
@@ -185,10 +192,10 @@ class ConsoleReporter:
 
         if results_to_show:
             table = Table(title="Check Results" if self.verbose else "Failed Checks")
-            table.add_column("Status", width=6)
-            table.add_column("Check ID", style="cyan", width=25)
-            table.add_column("Type", style="blue", width=18)
-            table.add_column("Message", width=50)
+            table.add_column("", width=4, no_wrap=True)
+            table.add_column("Check ID", style="cyan", min_width=20)
+            table.add_column("Type", style="blue", min_width=10, no_wrap=True)
+            table.add_column("Message")
 
             for result in results_to_show:
                 status = "[green]PASS[/green]" if result.passed else "[red]FAIL[/red]"

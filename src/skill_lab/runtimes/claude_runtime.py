@@ -2,7 +2,6 @@
 
 import json
 import shutil
-import subprocess
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -27,100 +26,19 @@ class ClaudeRuntime(RuntimeAdapter):
         """Return the runtime name."""
         return "claude"
 
-    def execute(
-        self,
-        prompt: str,
-        skill_path: Path,
-        trace_path: Path,
-        stop_on_skill: str | None = None,
-        working_dir: Path | None = None,
-    ) -> int:
-        """Run Claude Code with the given prompt.
+    def _cli_binary_name(self) -> str:
+        return "claude"
 
-        Args:
-            prompt: The user prompt to send.
-            skill_path: Path to the skill directory (for metadata).
-            trace_path: Where to write the trace.
-            stop_on_skill: If provided, terminate early when this skill
-                is triggered. Optimizes positive trigger tests.
-            working_dir: Directory to run from. Defaults to skill_path.
-
-        Returns:
-            Exit code from Claude Code.
-        """
-        trace_path.parent.mkdir(parents=True, exist_ok=True)
-        cwd = working_dir if working_dir is not None else skill_path
-
-        # Get full path to handle Windows .CMD files
-        claude_path = shutil.which("claude")
-        if claude_path is None:
-            trace_path.write_text('{"type": "error", "message": "Claude CLI not found"}\n')
-            return 127
-
-        try:
-            # Use streaming with Popen for early termination support
-            proc = subprocess.Popen(
-                [
-                    claude_path,
-                    "--print",  # Output mode
-                    "--verbose",  # Required for stream-json output
-                    "--output-format",
-                    "stream-json",
-                    "-p",
-                    prompt,
-                ],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                cwd=cwd,
-            )
-
-            captured_lines: list[str] = []
-            skill_triggered = False
-
-            # Stream stdout and check for skill trigger
-            for line in proc.stdout or []:
-                line = line.rstrip("\n")
-                if not line:
-                    continue
-                captured_lines.append(line)
-
-                # Check if we should stop early
-                if (
-                    stop_on_skill
-                    and not skill_triggered
-                    and self._check_skill_trigger(line, stop_on_skill)
-                ):
-                    skill_triggered = True
-                    proc.terminate()
-                    try:
-                        proc.wait(timeout=5)
-                    except subprocess.TimeoutExpired:
-                        proc.kill()
-                    break
-
-            # Wait for process to complete if not terminated
-            if proc.poll() is None:
-                try:
-                    proc.wait(timeout=300)
-                except subprocess.TimeoutExpired:
-                    proc.kill()
-                    captured_lines.append('{"type": "error", "message": "Execution timed out"}')
-
-            # Format trace for readability
-            formatted_trace = self._format_trace("\n".join(captured_lines))
-            trace_path.write_text(formatted_trace)
-
-            # Return 0 if we terminated early due to skill trigger (success)
-            if skill_triggered:
-                return 0
-            return proc.returncode or 0
-
-        except Exception as e:
-            trace_path.write_text(
-                f'{{\n  "type": "error",\n  "message": "Execution failed: {e}"\n}}\n'
-            )
-            return 1
+    def _build_command(self, cli_path: str, prompt: str) -> list[str]:
+        return [
+            cli_path,
+            "--print",  # Output mode
+            "--verbose",  # Required for stream-json output
+            "--output-format",
+            "stream-json",
+            "-p",
+            prompt,
+        ]
 
     def _check_skill_trigger(self, line: str, skill_name: str) -> bool:
         """Check if a JSONL line indicates the skill was triggered.

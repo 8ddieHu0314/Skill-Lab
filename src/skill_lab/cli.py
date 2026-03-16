@@ -167,15 +167,20 @@ def _print_getting_started() -> None:
     guide.add_row("  [dim]--verbose / -V[/dim]", "Show all checks, not just failures")
     guide.add_row("  [dim]--spec-only / -s[/dim]", "Only run the 10 spec-required checks")
     guide.add_row("  [dim]--all[/dim]", "Evaluate every skill in the current directory")
-    guide.add_row("  [dim]--repo[/dim]", "Evaluate every skill from the git repo root")
     guide.add_row("", "")
     guide.add_row(
         "sklab validate [green]./my-skill[/green]", "Quick pass/fail — exits 0 or 1 (great for CI)"
     )
     guide.add_row("  [dim]--spec-only / -s[/dim]", "Only validate against the Agent Skills spec")
+    guide.add_row("  [dim]--all[/dim]", "Validate every skill in the current directory")
+    guide.add_row("  [dim]--repo[/dim]", "Validate every skill from the git repo root")
+    guide.add_row("", "")
+    guide.add_row(
+        "sklab scan [green]./my-skill[/green]", "Security scan — shows BLOCK / SUS / ALLOW status"
+    )
+    guide.add_row("  [dim]--all[/dim]", "Scan every skill in the current directory")
     guide.add_row("", "")
     guide.add_row("sklab list-checks", "Browse all 28 checks across 4 dimensions")
-    guide.add_row("  [dim]--dimension <dim>[/dim]", "Filter by dimension")
     guide.add_row("  [dim]--spec-only[/dim]", "Only spec-required checks")
     guide.add_row("  [dim]--suggestions-only[/dim]", "Only quality suggestions")
     guide.add_row("", "")
@@ -406,6 +411,70 @@ def _run_bulk_evaluate(
         raise typer.Exit(code=1)
 
 
+def _run_bulk_validate(roots: list[Path], spec_only: bool) -> None:
+    """Discover and validate all skills under the given root directories."""
+    skill_paths: list[Path] = []
+    for root in roots:
+        found = _discover_skills(root)
+        skill_paths.extend(found)
+
+    if not skill_paths:
+        console.print("[yellow]No skill folders found (no SKILL.md files discovered).[/yellow]")
+        raise typer.Exit(code=0)
+
+    console.print(f"[dim]Found {len(skill_paths)} skill(s). Running validate...[/dim]\n")
+
+    evaluator = StaticEvaluator(spec_only=spec_only, include_security=True)
+    any_failed = False
+    summary_rows: list[tuple[str, str, str]] = []  # name, path, status
+
+    for sp in skill_paths:
+        with _cli_error_handler():
+            passed, errors = evaluator.validate(sp)
+
+        skill_name = sp.name
+        rel_path = str(sp.relative_to(Path.cwd())) if sp.is_relative_to(Path.cwd()) else str(sp)
+
+        if passed:
+            status_str = "[green]PASS[/green]"
+        else:
+            status_str = "[red]FAIL[/red]"
+            console.print(f"[bold]{skill_name}[/bold] ({rel_path})")
+            for error in errors:
+                console.print(f"  [red]X[/red] [{error.check_id}] {error.message}")
+            has_security = any(e.check_id == "security.scan" for e in errors)
+            has_other = any(e.check_id != "security.scan" for e in errors)
+            if has_security and has_other:
+                console.print(
+                    f"  [dim]Run [bold]sklab evaluate {rel_path}[/bold] for full quality details "
+                    f"or [bold]sklab scan {rel_path}[/bold] for security findings.[/dim]"
+                )
+            elif has_security:
+                console.print(
+                    f"  [dim]Run [bold]sklab scan {rel_path}[/bold] for full security findings.[/dim]"
+                )
+            else:
+                console.print(
+                    f"  [dim]Run [bold]sklab evaluate {rel_path}[/bold] for full details.[/dim]"
+                )
+            console.print()
+            any_failed = True
+
+        summary_rows.append((skill_name, rel_path, status_str))
+
+    console.print()
+    table = Table(title=f"Summary — {len(skill_paths)} skill(s)", box=box.ROUNDED)
+    table.add_column("Skill", style="cyan")
+    table.add_column("Path", style="dim")
+    table.add_column("Status", justify="center")
+    for name, path, status in summary_rows:
+        table.add_row(name, path, status)
+    console.print(table)
+
+    if any_failed:
+        raise typer.Exit(code=1)
+
+
 @app.command()
 @_with_telemetry("evaluate")
 def evaluate(
@@ -455,38 +524,17 @@ def evaluate(
             help="Discover and evaluate all skills in the current directory (recursive)",
         ),
     ] = False,
-    repo: Annotated[
-        bool,
-        typer.Option(
-            "--repo",
-            help="Discover and evaluate all skills from the git repo root (recursive)",
-        ),
-    ] = False,
 ) -> None:
     """Evaluate a skill and generate a quality report.
 
     Run from inside a skill directory, or pass the path as an argument.
     """
-    # --all and --repo are mutually exclusive with a positional path
-    if (all_skills or repo) and skill_path is not None:
-        console.print("[red]Error: Cannot combine --all/--repo with a skill path argument.[/red]")
-        raise typer.Exit(code=1)
-
-    if all_skills and repo:
-        console.print("[red]Error: --all and --repo are mutually exclusive.[/red]")
+    if all_skills and skill_path is not None:
+        console.print("[red]Error: Cannot combine --all with a skill path argument.[/red]")
         raise typer.Exit(code=1)
 
     if all_skills:
         _run_bulk_evaluate([Path.cwd()], verbose, spec_only, format)
-        return
-
-    if repo:
-        repo_root = _find_repo_root(Path.cwd())
-        if repo_root is None:
-            console.print("[red]Error: Not inside a git repository.[/red]")
-            raise typer.Exit(code=1)
-        console.print(f"[dim]Repo root: {repo_root}[/dim]")
-        _run_bulk_evaluate([repo_root], verbose, spec_only, format)
         return
 
     skill_path = _resolve_skill_path(skill_path)
@@ -533,12 +581,48 @@ def validate(
             help="Only run checks required by the Agent Skills spec (skip quality suggestions)",
         ),
     ] = False,
+    all_skills: Annotated[
+        bool,
+        typer.Option(
+            "--all",
+            "-a",
+            help="Discover and validate all skills in the current directory (recursive)",
+        ),
+    ] = False,
+    repo: Annotated[
+        bool,
+        typer.Option(
+            "--repo",
+            help="Discover and validate all skills from the git repo root (recursive)",
+        ),
+    ] = False,
 ) -> None:
     """Quick validation that reports only errors."""
+    if (all_skills or repo) and skill_path is not None:
+        console.print("[red]Error: Cannot combine --all/--repo with a skill path argument.[/red]")
+        raise typer.Exit(code=1)
+
+    if all_skills and repo:
+        console.print("[red]Error: --all and --repo are mutually exclusive.[/red]")
+        raise typer.Exit(code=1)
+
+    if all_skills:
+        _run_bulk_validate([Path.cwd()], spec_only)
+        return
+
+    if repo:
+        repo_root = _find_repo_root(Path.cwd())
+        if repo_root is None:
+            console.print("[red]Error: Not inside a git repository.[/red]")
+            raise typer.Exit(code=1)
+        console.print(f"[dim]Repo root: {repo_root}[/dim]")
+        _run_bulk_validate([repo_root], spec_only)
+        return
+
     skill_path = _resolve_skill_path(skill_path)
 
     with _cli_error_handler():
-        evaluator = StaticEvaluator(spec_only=spec_only)
+        evaluator = StaticEvaluator(spec_only=spec_only, include_security=True)
         passed, errors = evaluator.validate(skill_path)
 
     if passed:
@@ -549,19 +633,180 @@ def validate(
         for error in errors:
             console.print(f"  [red]X[/red] [{error.check_id}] {error.message}")
         console.print()
+        has_security = any(e.check_id == "security.scan" for e in errors)
+        has_other = any(e.check_id != "security.scan" for e in errors)
+        path_str = f" {skill_path}"
+        if has_security and has_other:
+            console.print(
+                f"[dim]Run [bold]sklab evaluate{path_str}[/bold] for full quality details "
+                f"or [bold]sklab scan{path_str}[/bold] for security findings.[/dim]"
+            )
+        elif has_security:
+            console.print(
+                f"[dim]Run [bold]sklab scan{path_str}[/bold] for full security findings.[/dim]"
+            )
+        else:
+            console.print(
+                f"[dim]Run [bold]sklab evaluate{path_str}[/bold] for full details.[/dim]"
+            )
+        console.print()
         raise typer.Exit(code=1)
 
 
-@app.command("list-checks")
-def list_checks(
-    dimension: Annotated[
-        str | None,
-        typer.Option(
-            "--dimension",
-            "-d",
-            help="Filter by dimension (structure, naming, description, content)",
+
+
+def _run_bulk_scan(roots: list[Path]) -> None:
+    """Discover and security-scan all skills under the given root directories."""
+    from skill_lab.checks.static.security import SecurityScanCheck
+    from skill_lab.parsers.skill_parser import parse_skill as _parse_skill
+
+    skill_paths: list[Path] = []
+    for root in roots:
+        found = _discover_skills(root)
+        skill_paths.extend(found)
+
+    if not skill_paths:
+        console.print("[yellow]No skill folders found (no SKILL.md files discovered).[/yellow]")
+        raise typer.Exit(code=0)
+
+    console.print(f"[dim]Found {len(skill_paths)} skill(s). Running scan...[/dim]\n")
+
+    check = SecurityScanCheck()
+    any_blocked = False
+    summary_rows: list[tuple[str, str, str]] = []  # name, path, status
+
+    for sp in skill_paths:
+        with _cli_error_handler():
+            skill = _parse_skill(sp)
+
+        result = check.run(skill)
+        details = result.details or {}
+        status: str = details.get("status", "allow")
+        findings: list[dict[str, str]] = details.get("findings", [])
+        skill_name = skill.metadata.name if skill.metadata else sp.name
+        rel_path = str(sp.relative_to(Path.cwd())) if sp.is_relative_to(Path.cwd()) else str(sp)
+
+        if status == "block":
+            status_str = "[bold red]BLOCK[/bold red]"
+            any_blocked = True
+            console.print(f"[bold]{skill_name}[/bold] ({rel_path})")
+            for f in findings:
+                console.print(f"  [red]![/red] {f.get('problem', '')} — {f.get('text', '')}")
+            console.print()
+        elif status == "sus":
+            status_str = "[bold yellow]SUS[/bold yellow]"
+        else:
+            status_str = "[bold green]ALLOW[/bold green]"
+
+        summary_rows.append((skill_name, rel_path, status_str))
+
+    console.print()
+    table = Table(title=f"Security Summary — {len(skill_paths)} skill(s)", box=box.ROUNDED)
+    table.add_column("Skill", style="cyan")
+    table.add_column("Path", style="dim")
+    table.add_column("Status", justify="center")
+    for name, path, status_str in summary_rows:
+        table.add_row(name, path, status_str)
+    console.print(table)
+
+    if any_blocked:
+        raise typer.Exit(code=1)
+
+
+@app.command("scan")
+@_with_telemetry("scan")
+def scan(
+    skill_path: Annotated[
+        Path | None,
+        typer.Argument(
+            help="Path to the skill directory (defaults to current directory)",
         ),
     ] = None,
+    all_skills: Annotated[
+        bool,
+        typer.Option(
+            "--all",
+            "-a",
+            help="Discover and scan all skills in the current directory (recursive)",
+        ),
+    ] = False,
+) -> None:
+    """Run the security scan and show detailed findings.
+
+    Status:
+      BLOCK — any injection, jailbreak, unicode obfuscation, YAML, or evaluator finding
+      SUS   — size/structure anomalies only (oversized body, repeated tokens, etc.)
+      ALLOW — no findings
+
+    Exits 1 on BLOCK.
+    """
+    from skill_lab.checks.static.security import SecurityScanCheck
+
+    if all_skills and skill_path is not None:
+        console.print("[red]Error: Cannot combine --all with a skill path argument.[/red]")
+        raise typer.Exit(code=1)
+
+    if all_skills:
+        _run_bulk_scan([Path.cwd()])
+        return
+
+    skill_path = _resolve_skill_path(skill_path)
+
+    with _cli_error_handler():
+        from skill_lab.parsers.skill_parser import parse_skill as _parse_skill
+
+        skill = _parse_skill(skill_path)
+
+    result = SecurityScanCheck().run(skill)
+    details = result.details or {}
+    status: str = details.get("status", "allow")
+    findings: list[dict[str, str]] = details.get("findings", [])
+
+    if status == "block":
+        status_label = "[bold red]BLOCK[/bold red]"
+        border = "red"
+    elif status == "sus":
+        status_label = "[bold yellow]SUS[/bold yellow]"
+        border = "yellow"
+    else:
+        status_label = "[bold green]ALLOW[/bold green]"
+        border = "green"
+
+    skill_name = skill.metadata.name if skill.metadata else skill_path.name
+    console.print()
+    console.print(
+        Panel(
+            f"[bold]Skill:[/bold] {skill_name}\n[bold]Path:[/bold] {skill_path}",
+            title="Security Scan",
+            border_style=border,
+        )
+    )
+    console.print()
+    console.print(f"[bold]Status:[/bold]  {status_label}")
+    console.print()
+
+    if findings:
+        table = Table(title="Findings", box=box.SIMPLE_HEAD)
+        table.add_column("Location", style="dim", no_wrap=True)
+        table.add_column("Problem")
+        table.add_column("Text", style="dim")
+        for f in findings:
+            table.add_row(
+                f.get("location", ""),
+                f.get("problem", ""),
+                f.get("text", ""),
+            )
+        console.print(table)
+    else:
+        console.print("[green]No security findings.[/green]")
+
+    console.print()
+
+    if status == "block":
+        raise typer.Exit(code=1)
+
+@app.command("list-checks")
+def list_checks(
     spec_only: Annotated[
         bool,
         typer.Option(
@@ -580,15 +825,7 @@ def list_checks(
 ) -> None:
     """List all available checks."""
     # Get checks
-    if dimension:
-        try:
-            dim = EvalDimension(dimension.lower())
-            checks = registry.get_by_dimension(dim.value)
-        except ValueError:
-            console.print(f"[red]Invalid dimension: {dimension}[/red]")
-            console.print(f"Valid dimensions: {', '.join(d.value for d in EvalDimension)}")
-            raise typer.Exit(code=1) from None
-    elif spec_only:
+    if spec_only:
         checks = registry.get_spec_required()
     elif suggestions_only:
         checks = registry.get_quality_suggestions()
@@ -1339,6 +1576,13 @@ def track_invocation() -> None:
         )
     except Exception:
         pass  # Never let the hook crash
+
+
+# =============================================================================
+# Register command modules (must be after app and helpers are defined)
+# =============================================================================
+
+import skill_lab.commands  # noqa: E402, F401, I001
 
 
 # =============================================================================

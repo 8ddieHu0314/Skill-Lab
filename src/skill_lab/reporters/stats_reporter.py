@@ -8,16 +8,9 @@ from rich.panel import Panel
 from rich.table import Table
 
 from skill_lab.core.stats import OverviewStats, SkillCount, SkillScore, SkillTokens
+from skill_lab.reporters.console_reporter import score_color
 
 console = Console()
-
-
-def _score_color(score: float) -> str:
-    if score >= 80:
-        return "green"
-    if score >= 60:
-        return "yellow"
-    return "red"
 
 
 def print_stats_overview(stats: OverviewStats) -> None:
@@ -39,7 +32,7 @@ def print_stats_overview(stats: OverviewStats) -> None:
         delta = stats.avg_current_score - stats.avg_baseline_score
         sign = "+" if delta >= 0 else ""
         delta_color = "green" if delta >= 0 else "red"
-        cur_color = _score_color(stats.avg_current_score)
+        cur_color = score_color(stats.avg_current_score)
         lines.append(f"  Baseline   {stats.avg_baseline_score:.1f}")
         lines.append(
             f"  Current    [{cur_color}]{stats.avg_current_score:.1f}[/{cur_color}]"
@@ -126,7 +119,7 @@ def print_stats_score(rows: list[SkillScore]) -> None:
     table.add_column("\u0394", justify="right")
 
     for row in rows:
-        cur_color = _score_color(row.current_score)
+        cur_color = score_color(row.current_score)
         current_str = f"[{cur_color}]{row.current_score:.1f}[/{cur_color}]"
         baseline_str = f"{row.baseline_score:.1f}"
         if row.is_new:

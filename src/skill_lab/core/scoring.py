@@ -15,13 +15,14 @@ DIMENSION_WEIGHTS: dict[EvalDimension, float] = {
     EvalDimension.DESCRIPTION: 0.25,
     EvalDimension.CONTENT: 0.25,
     EvalDimension.EXECUTION: 0.0,  # Evaluated separately via trace evaluation
+    EvalDimension.SECURITY: 0.0,   # Security scan is a gate check, not a scoring dimension
 }
 
 # Weights for severity levels when calculating dimension scores
 SEVERITY_WEIGHTS: dict[Severity, float] = {
-    Severity.ERROR: 1.0,
-    Severity.WARNING: 0.5,
-    Severity.INFO: 0.25,
+    Severity.HIGH: 1.0,
+    Severity.MEDIUM: 0.5,
+    Severity.LOW: 0.25,
 }
 
 
@@ -44,15 +45,6 @@ class EvaluationMetrics:
     passed: int
     failed: int
     pass_rate: float
-
-    def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary."""
-        return {
-            "total": self.total,
-            "passed": self.passed,
-            "failed": self.failed,
-            "pass_rate": self.pass_rate,
-        }
 
 
 def calculate_metrics(results: list[T]) -> EvaluationMetrics:

@@ -63,6 +63,26 @@ def _conn() -> sqlite3.Connection:
     return sqlite3.connect(SKLAB_DB)
 
 
+def _path_filter(
+    repo_root: Path | None,
+    column: str = "se.skill_path",
+) -> tuple[str, list[object]]:
+    """Build a SQL clause and params for filtering by skill_path prefix.
+
+    Args:
+        repo_root: If given, filter to skills under this directory.
+        column: SQL column expression (e.g., "se.skill_path" or "skill_path").
+
+    Returns:
+        (sql_clause, params) — clause is empty string if no filter.
+    """
+    if not repo_root:
+        return "", []
+    clause = f"AND REPLACE({column}, char(92), '/') LIKE ?"
+    param = repo_root.as_posix().rstrip("/") + "/%"
+    return clause, [param]
+
+
 def get_overview_stats() -> OverviewStats | None:
     """Return overview stats, or None if the DB doesn't exist yet."""
     if not Path(SKLAB_DB).exists():
@@ -71,7 +91,10 @@ def get_overview_stats() -> OverviewStats | None:
     with _conn() as conn:
         fired: int = conn.execute(
             """
-            SELECT COALESCE(SUM(use_count), 0) FROM skill_stats WHERE month = ?
+            SELECT COUNT(*) FROM skill_events se
+            JOIN command_events ce ON se.command_event_id = ce.id
+            WHERE ce.command = 'skill-invoke'
+              AND strftime('%Y-%m', se.timestamp) = ?
             """,
             (_current_ym(),),
         ).fetchone()[0]
@@ -112,7 +135,10 @@ def get_overview_stats() -> OverviewStats | None:
 
         tokens: int = conn.execute(
             """
-            SELECT COALESCE(SUM(total_tokens), 0) FROM skill_stats WHERE month = ?
+            SELECT COALESCE(SUM(se.input_tokens), 0) FROM skill_events se
+            JOIN command_events ce ON se.command_event_id = ce.id
+            WHERE ce.command = 'skill-invoke'
+              AND strftime('%Y-%m', se.timestamp) = ?
             """,
             (_current_ym(),),
         ).fetchone()[0]
@@ -154,33 +180,34 @@ def get_overview_stats() -> OverviewStats | None:
 
 
 def get_stats_count(
-    repo_root_hash: str | None = None,
+    repo_root: Path | None = None,
 ) -> tuple[str, list[SkillCount]]:
     """Return (month_label, rows) for sklab stats count.
 
-    If repo_root_hash is given, only skills recorded from that repo are included
-    (for --here filtering).
+    If repo_root is given, only skills whose skill_path starts with that
+    directory are included (for --here filtering).
     """
     label = _month_label()
     if not Path(SKLAB_DB).exists():
         return label, []
 
-    hash_clause = "AND repo_root_hash = ?" if repo_root_hash is not None else ""
-    params: list[object] = [_current_ym()]
-    if repo_root_hash is not None:
-        params.append(repo_root_hash)
+    path_clause, path_params = _path_filter(repo_root)
+    params: list[object] = [_current_ym(), *path_params]
 
     with _conn() as conn:
         rows = conn.execute(
             f"""
-            SELECT skill_name,
-                   SUM(use_count),
-                   SUM(total_tokens)
-            FROM skill_stats
-            WHERE month = ?
-              {hash_clause}
-            GROUP BY skill_name
-            ORDER BY SUM(use_count) DESC
+            SELECT se.skill_name,
+                   COUNT(*) as use_count,
+                   COALESCE(SUM(se.input_tokens), 0) as tokens
+            FROM skill_events se
+            JOIN command_events ce ON se.command_event_id = ce.id
+            WHERE ce.command = 'skill-invoke'
+              AND se.skill_name IS NOT NULL
+              AND strftime('%Y-%m', se.timestamp) = ?
+              {path_clause}
+            GROUP BY se.skill_name
+            ORDER BY use_count DESC
             """,
             params,
         ).fetchall()
@@ -189,26 +216,30 @@ def get_stats_count(
 
 
 def get_stats_score(
-    repo_root_hash: str | None = None,
+    repo_root: Path | None = None,
 ) -> list[SkillScore]:
     """Return per-skill score data for sklab stats score.
 
-    repo_root_hash is accepted for API consistency but score data in skill_events
-    is not filtered by repo (score tracks evaluate runs, not invocations).
+    If repo_root is given, only skills whose skill_path starts with that
+    directory are included (for --here filtering).
     """
     if not Path(SKLAB_DB).exists():
         return []
 
+    path_clause, path_params = _path_filter(repo_root, "skill_path")
+
     with _conn() as conn:
         skill_ids = conn.execute(
-            """
+            f"""
             SELECT skill_name, MIN(id) as min_id, MAX(id) as max_id
             FROM skill_events
             WHERE skill_name IS NOT NULL
               AND score IS NOT NULL
+              {path_clause}
             GROUP BY skill_name
             ORDER BY skill_name
             """,
+            path_params,
         ).fetchall()
 
         if not skill_ids:
@@ -242,36 +273,35 @@ def get_stats_score(
 
 
 def get_stats_tokens(
-    repo_root_hash: str | None = None,
+    repo_root: Path | None = None,
 ) -> tuple[str, list[SkillTokens]]:
     """Return (month_label, rows) for sklab stats tokens.
 
-    If repo_root_hash is given, only skills recorded from that repo are included
-    (for --here filtering).
+    If repo_root is given, only skills whose skill_path starts with that
+    directory are included (for --here filtering).
     """
     label = _month_label()
     if not Path(SKLAB_DB).exists():
         return label, []
 
-    hash_clause = "AND repo_root_hash = ?" if repo_root_hash is not None else ""
-    params: list[object] = [_current_ym()]
-    if repo_root_hash is not None:
-        params.append(repo_root_hash)
+    path_clause, path_params = _path_filter(repo_root)
+    params: list[object] = [_current_ym(), *path_params]
 
     with _conn() as conn:
         rows = conn.execute(
             f"""
-            SELECT skill_name,
-                   CASE WHEN SUM(use_count) > 0
-                        THEN CAST(SUM(total_tokens) / SUM(use_count) AS INTEGER)
-                        ELSE 0 END,
-                   SUM(total_tokens)
-            FROM skill_stats
-            WHERE month = ?
-              AND total_tokens > 0
-              {hash_clause}
-            GROUP BY skill_name
-            ORDER BY SUM(total_tokens) DESC
+            SELECT se.skill_name,
+                   CAST(AVG(se.input_tokens) AS INTEGER) as avg_tokens,
+                   COALESCE(SUM(se.input_tokens), 0) as total_tokens
+            FROM skill_events se
+            JOIN command_events ce ON se.command_event_id = ce.id
+            WHERE ce.command = 'skill-invoke'
+              AND se.skill_name IS NOT NULL
+              AND se.input_tokens IS NOT NULL
+              AND strftime('%Y-%m', se.timestamp) = ?
+              {path_clause}
+            GROUP BY se.skill_name
+            ORDER BY total_tokens DESC
             """,
             params,
         ).fetchall()

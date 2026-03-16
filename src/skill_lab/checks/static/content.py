@@ -53,7 +53,7 @@ class BodyNotEmptyCheck(StaticCheck):
     check_id: ClassVar[str] = "content.body-not-empty"
     check_name: ClassVar[str] = "Body Not Empty"
     description: ClassVar[str] = "SKILL.md body has meaningful content"
-    severity: ClassVar[Severity] = Severity.WARNING
+    severity: ClassVar[Severity] = Severity.MEDIUM
     dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
     fix: ClassVar[str] = "Add instructions and context to your SKILL.md body"
 
@@ -87,7 +87,7 @@ class LineBudgetCheck(StaticCheck):
     check_id: ClassVar[str] = "content.line-budget"
     check_name: ClassVar[str] = "Line Budget"
     description: ClassVar[str] = f"Body is under {MAX_LINE_COUNT} lines"
-    severity: ClassVar[Severity] = Severity.WARNING
+    severity: ClassVar[Severity] = Severity.MEDIUM
     dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
     fix: ClassVar[str] = "Trim your SKILL.md body to under 500 lines"
 
@@ -115,7 +115,7 @@ class HasExamplesCheck(StaticCheck):
     check_id: ClassVar[str] = "content.has-examples"
     check_name: ClassVar[str] = "Has Examples"
     description: ClassVar[str] = "Content contains code examples"
-    severity: ClassVar[Severity] = Severity.INFO
+    severity: ClassVar[Severity] = Severity.LOW
     dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
     fix: ClassVar[str] = "Add code examples using fenced code blocks"
 
@@ -143,7 +143,7 @@ class ReferenceDepthCheck(StaticCheck):
     check_id: ClassVar[str] = "content.reference-depth"
     check_name: ClassVar[str] = "Reference Depth"
     description: ClassVar[str] = f"References are max {MAX_REFERENCE_DEPTH} level deep"
-    severity: ClassVar[Severity] = Severity.WARNING
+    severity: ClassVar[Severity] = Severity.MEDIUM
     dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
     fix: ClassVar[str] = "Flatten your references/ folder — keep it to 1 level deep"
 
@@ -189,7 +189,7 @@ class ScriptsReferencedCheck(StaticCheck):
     check_id: ClassVar[str] = "content.scripts-referenced"
     check_name: ClassVar[str] = "Scripts Referenced"
     description: ClassVar[str] = "Scripts in scripts/ are mentioned in the SKILL.md body"
-    severity: ClassVar[Severity] = Severity.WARNING
+    severity: ClassVar[Severity] = Severity.MEDIUM
     dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
     fix: ClassVar[str] = "Mention your script filenames in the SKILL.md body"
 
@@ -235,6 +235,47 @@ _SCRIPT_EXT_PATTERN = "|".join(ext.lstrip(".") for ext in sorted(VALID_SCRIPT_EX
 _SCRIPT_PATH_RE = re.compile(rf"(?<![/\w-])scripts/[\w.-]+\.(?:{_SCRIPT_EXT_PATTERN})\b")
 
 
+def _check_paths_exist(
+    check: StaticCheck,
+    skill: Skill,
+    pattern: re.Pattern[str],
+    label: str,
+) -> CheckResult:
+    """Check that paths matching a regex in the body exist on disk.
+
+    Args:
+        check: The check instance (for _pass/_fail helpers).
+        skill: The skill being evaluated.
+        pattern: Regex pattern to find path references in the body.
+        label: Human label for messages (e.g., "script", "asset").
+
+    Returns:
+        CheckResult indicating pass or fail.
+    """
+    refs = pattern.findall(skill.body)
+
+    if not refs:
+        return check._pass(
+            f"No {label} path references in body",
+            location=check._skill_md_location(skill),
+        )
+
+    unique_refs = list(dict.fromkeys(refs))
+    missing = [ref for ref in unique_refs if not (skill.path / ref).exists()]
+
+    if missing:
+        return check._fail(
+            f"{label.capitalize()} path(s) not found on disk: {', '.join(missing)}",
+            details={"missing_paths": missing, "all_references": unique_refs},
+            location=check._skill_md_location(skill),
+        )
+
+    return check._pass(
+        f"All referenced {label} paths exist ({len(unique_refs)} verified)",
+        location=check._skill_md_location(skill),
+    )
+
+
 @register_check
 class ScriptPathsExistCheck(StaticCheck):
     """Check that script paths referenced in body exist on disk."""
@@ -242,40 +283,12 @@ class ScriptPathsExistCheck(StaticCheck):
     check_id: ClassVar[str] = "content.script-paths-exist"
     check_name: ClassVar[str] = "Script Paths Exist"
     description: ClassVar[str] = "Script paths referenced in body resolve to files on disk"
-    severity: ClassVar[Severity] = Severity.WARNING
+    severity: ClassVar[Severity] = Severity.MEDIUM
     dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
     fix: ClassVar[str] = "Create the missing script files or fix the paths in your SKILL.md body"
 
     def run(self, skill: Skill) -> CheckResult:
-        refs = _SCRIPT_PATH_RE.findall(skill.body)
-
-        if not refs:
-            return self._pass(
-                "No script path references in body",
-                location=self._skill_md_location(skill),
-            )
-
-        # Deduplicate while preserving order
-        seen: set[str] = set()
-        unique_refs: list[str] = []
-        for ref in refs:
-            if ref not in seen:
-                seen.add(ref)
-                unique_refs.append(ref)
-
-        missing = [ref for ref in unique_refs if not (skill.path / ref).exists()]
-
-        if missing:
-            return self._fail(
-                f"Script path(s) not found on disk: {', '.join(missing)}",
-                details={"missing_paths": missing, "all_references": unique_refs},
-                location=self._skill_md_location(skill),
-            )
-
-        return self._pass(
-            f"All referenced script paths exist ({len(unique_refs)} verified)",
-            location=self._skill_md_location(skill),
-        )
+        return _check_paths_exist(self, skill, _SCRIPT_PATH_RE, "script")
 
 
 # Command runners and their expected runtime mentions in compatibility
@@ -302,7 +315,7 @@ class CompatibilityPrereqsCheck(StaticCheck):
     check_id: ClassVar[str] = "content.compatibility-prereqs"
     check_name: ClassVar[str] = "Compatibility Prerequisites"
     description: ClassVar[str] = "Command runners in body are documented in compatibility field"
-    severity: ClassVar[Severity] = Severity.INFO
+    severity: ClassVar[Severity] = Severity.LOW
     dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
     fix: ClassVar[str] = "Add required runtimes to the compatibility: field"
 
@@ -360,7 +373,7 @@ class TokenBudgetCheck(StaticCheck):
     check_id: ClassVar[str] = "content.token-budget"
     check_name: ClassVar[str] = "Token Budget"
     description: ClassVar[str] = f"Body is under {MAX_BODY_TOKENS} tokens"
-    severity: ClassVar[Severity] = Severity.WARNING
+    severity: ClassVar[Severity] = Severity.MEDIUM
     dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
     fix: ClassVar[str] = "Trim your SKILL.md body to under 5000 tokens"
 
@@ -389,7 +402,7 @@ class MetadataTokenBudgetCheck(StaticCheck):
     description: ClassVar[str] = (
         f"Metadata is under {MAX_METADATA_TOKENS} tokens for efficient discovery"
     )
-    severity: ClassVar[Severity] = Severity.INFO
+    severity: ClassVar[Severity] = Severity.LOW
     dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
     fix: ClassVar[str] = "Shorten your name or description to under 150 tokens"
 
@@ -423,7 +436,7 @@ class DescriptionActionableCheck(StaticCheck):
     check_id: ClassVar[str] = "content.description-actionable"
     check_name: ClassVar[str] = "Description Actionable"
     description: ClassVar[str] = "Description explains when to use this skill"
-    severity: ClassVar[Severity] = Severity.INFO
+    severity: ClassVar[Severity] = Severity.LOW
     dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
     fix: ClassVar[str] = "Add 'Use when...' phrasing to describe when to trigger this skill"
 
@@ -463,37 +476,9 @@ class AssetPathsExistCheck(StaticCheck):
     check_id: ClassVar[str] = "content.asset-paths-exist"
     check_name: ClassVar[str] = "Asset Paths Exist"
     description: ClassVar[str] = "Asset paths referenced in body resolve to files on disk"
-    severity: ClassVar[Severity] = Severity.WARNING
+    severity: ClassVar[Severity] = Severity.MEDIUM
     dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
     fix: ClassVar[str] = "Create the missing asset files or fix the paths in your SKILL.md body"
 
     def run(self, skill: Skill) -> CheckResult:
-        refs = _ASSET_PATH_RE.findall(skill.body)
-
-        if not refs:
-            return self._pass(
-                "No asset path references in body",
-                location=self._skill_md_location(skill),
-            )
-
-        # Deduplicate while preserving order
-        seen: set[str] = set()
-        unique_refs: list[str] = []
-        for ref in refs:
-            if ref not in seen:
-                seen.add(ref)
-                unique_refs.append(ref)
-
-        missing = [ref for ref in unique_refs if not (skill.path / ref).exists()]
-
-        if missing:
-            return self._fail(
-                f"Asset path(s) not found on disk: {', '.join(missing)}",
-                details={"missing_paths": missing, "all_references": unique_refs},
-                location=self._skill_md_location(skill),
-            )
-
-        return self._pass(
-            f"All referenced asset paths exist ({len(unique_refs)} verified)",
-            location=self._skill_md_location(skill),
-        )
+        return _check_paths_exist(self, skill, _ASSET_PATH_RE, "asset")

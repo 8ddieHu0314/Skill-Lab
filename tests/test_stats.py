@@ -102,40 +102,8 @@ def _create_db(db_path: Path) -> sqlite3.Connection:
             synced           INTEGER DEFAULT 0
         )
     """)
-    conn.execute("""
-        CREATE TABLE skill_stats (
-            skill_name       TEXT NOT NULL,
-            month            TEXT NOT NULL,
-            repo_root_hash   TEXT NOT NULL DEFAULT '',
-            use_count        INTEGER NOT NULL DEFAULT 0,
-            total_tokens     INTEGER NOT NULL DEFAULT 0,
-            PRIMARY KEY (skill_name, month, repo_root_hash)
-        )
-    """)
     conn.commit()
     return conn
-
-
-def _insert_skill_stats(
-    conn: sqlite3.Connection,
-    skill_name: str,
-    use_count: int = 1,
-    total_tokens: int = 0,
-    month: str | None = None,
-    repo_root_hash: str = "",
-) -> None:
-    m = month or _ts()[:7]
-    conn.execute(
-        """
-        INSERT INTO skill_stats (skill_name, month, repo_root_hash, use_count, total_tokens)
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(skill_name, month, repo_root_hash) DO UPDATE SET
-            use_count    = use_count + excluded.use_count,
-            total_tokens = total_tokens + excluded.total_tokens
-        """,
-        (skill_name, m, repo_root_hash, use_count, total_tokens),
-    )
-    conn.commit()
 
 
 def _ts(year: int = 2026, month: int = 3, day: int = 5) -> str:
@@ -200,15 +168,18 @@ class TestGetOverviewStats:
 
     def test_counts_skill_invokes_this_month(self, tmp_db: Path) -> None:
         conn = _create_db(tmp_db)
-        _insert_skill_stats(conn, "commit", use_count=2, total_tokens=400)
-        _insert_skill_stats(conn, "review-pr", use_count=1, total_tokens=150)
+        _insert(conn, "skill-invoke", skill_name="commit", input_tokens=200)
+        _insert(conn, "skill-invoke", skill_name="commit", input_tokens=200)
+        _insert(conn, "skill-invoke", skill_name="review-pr", input_tokens=150)
         result = get_overview_stats()
         assert result is not None
         assert result.skills_fired_this_month == 3
 
     def test_ignores_invokes_from_other_months(self, tmp_db: Path) -> None:
         conn = _create_db(tmp_db)
-        _insert_skill_stats(conn, "commit", use_count=1, total_tokens=200, month="2026-02")
+        _insert(
+            conn, "skill-invoke", skill_name="commit", input_tokens=200, timestamp=_ts(2026, 2, 1)
+        )
         result = get_overview_stats()
         assert result is not None
         assert result.skills_fired_this_month == 0
@@ -224,12 +195,12 @@ class TestGetOverviewStats:
         result = get_overview_stats()
         assert result is not None
         assert result.avg_baseline_score == pytest.approx(65.0)  # (60+70)/2
-        assert result.avg_current_score == pytest.approx(85.0)   # (80+90)/2
+        assert result.avg_current_score == pytest.approx(85.0)  # (80+90)/2
 
     def test_sums_tokens_this_month(self, tmp_db: Path) -> None:
         conn = _create_db(tmp_db)
-        _insert_skill_stats(conn, "commit", use_count=1, total_tokens=300)
-        _insert_skill_stats(conn, "review-pr", use_count=1, total_tokens=200)
+        _insert(conn, "skill-invoke", skill_name="commit", input_tokens=300)
+        _insert(conn, "skill-invoke", skill_name="review-pr", input_tokens=200)
         result = get_overview_stats()
         assert result is not None
         assert result.tokens_this_month == 500
@@ -272,6 +243,7 @@ class TestGetOverviewStats:
     def test_month_label_no_platform_specific_format(self, tmp_db: Path) -> None:
         """Month label must not use %-d (Linux-only) — uses str(day) instead."""
         from skill_lab.core.stats import _month_label
+
         label = _month_label()
         # Should not raise and should contain the numeric day without zero-padding
         now = datetime.now()
@@ -295,8 +267,9 @@ class TestGetStatsCount:
 
     def test_counts_per_skill(self, tmp_db: Path) -> None:
         conn = _create_db(tmp_db)
-        _insert_skill_stats(conn, "commit", use_count=2, total_tokens=400)
-        _insert_skill_stats(conn, "review-pr", use_count=1, total_tokens=150)
+        _insert(conn, "skill-invoke", skill_name="commit", input_tokens=200)
+        _insert(conn, "skill-invoke", skill_name="commit", input_tokens=200)
+        _insert(conn, "skill-invoke", skill_name="review-pr", input_tokens=150)
         _, rows = get_stats_count()
         assert len(rows) == 2
         commit_row = next(r for r in rows if r.skill_name == "commit")
@@ -308,20 +281,21 @@ class TestGetStatsCount:
 
     def test_ordered_by_use_count_desc(self, tmp_db: Path) -> None:
         conn = _create_db(tmp_db)
-        _insert_skill_stats(conn, "rare", use_count=1)
-        _insert_skill_stats(conn, "popular", use_count=2)
+        _insert(conn, "skill-invoke", skill_name="rare")
+        _insert(conn, "skill-invoke", skill_name="popular")
+        _insert(conn, "skill-invoke", skill_name="popular")
         _, rows = get_stats_count()
         assert rows[0].skill_name == "popular"
 
     def test_excludes_other_months(self, tmp_db: Path) -> None:
         conn = _create_db(tmp_db)
-        _insert_skill_stats(conn, "commit", use_count=1, month="2026-01")
+        _insert(conn, "skill-invoke", skill_name="commit", timestamp=_ts(2026, 1, 1))
         _, rows = get_stats_count()
         assert rows == []
 
     def test_returns_skill_count_dataclass(self, tmp_db: Path) -> None:
         conn = _create_db(tmp_db)
-        _insert_skill_stats(conn, "commit", use_count=1, total_tokens=100)
+        _insert(conn, "skill-invoke", skill_name="commit", input_tokens=100)
         _, rows = get_stats_count()
         assert isinstance(rows[0], SkillCount)
 
@@ -406,8 +380,9 @@ class TestGetStatsTokens:
 
     def test_aggregates_per_skill(self, tmp_db: Path) -> None:
         conn = _create_db(tmp_db)
-        _insert_skill_stats(conn, "commit", use_count=2, total_tokens=400)
-        _insert_skill_stats(conn, "review-pr", use_count=1, total_tokens=400)
+        _insert(conn, "skill-invoke", skill_name="commit", input_tokens=200)
+        _insert(conn, "skill-invoke", skill_name="commit", input_tokens=200)
+        _insert(conn, "skill-invoke", skill_name="review-pr", input_tokens=400)
         _, rows = get_stats_tokens()
         commit_row = next(r for r in rows if r.skill_name == "commit")
         assert commit_row.total_tokens == 400
@@ -415,26 +390,28 @@ class TestGetStatsTokens:
 
     def test_ordered_by_total_desc(self, tmp_db: Path) -> None:
         conn = _create_db(tmp_db)
-        _insert_skill_stats(conn, "cheap", use_count=1, total_tokens=10)
-        _insert_skill_stats(conn, "expensive", use_count=1, total_tokens=1000)
+        _insert(conn, "skill-invoke", skill_name="cheap", input_tokens=10)
+        _insert(conn, "skill-invoke", skill_name="expensive", input_tokens=1000)
         _, rows = get_stats_tokens()
         assert rows[0].skill_name == "expensive"
 
     def test_excludes_other_months(self, tmp_db: Path) -> None:
         conn = _create_db(tmp_db)
-        _insert_skill_stats(conn, "commit", use_count=1, total_tokens=200, month="2025-01")
+        _insert(
+            conn, "skill-invoke", skill_name="commit", input_tokens=200, timestamp=_ts(2025, 1, 1)
+        )
         _, rows = get_stats_tokens()
         assert rows == []
 
     def test_returns_skill_tokens_dataclass(self, tmp_db: Path) -> None:
         conn = _create_db(tmp_db)
-        _insert_skill_stats(conn, "commit", use_count=1, total_tokens=200)
+        _insert(conn, "skill-invoke", skill_name="commit", input_tokens=200)
         _, rows = get_stats_tokens()
         assert isinstance(rows[0], SkillTokens)
 
     def test_skips_rows_without_tokens(self, tmp_db: Path) -> None:
         conn = _create_db(tmp_db)
-        _insert_skill_stats(conn, "commit", use_count=1, total_tokens=0)
+        _insert(conn, "skill-invoke", skill_name="commit", input_tokens=None)
         _, rows = get_stats_tokens()
         assert rows == []
 
@@ -455,36 +432,43 @@ class TestStatsCLI:
         db = tmp_path / "usage.db"
         monkeypatch.setattr("skill_lab.core.stats.SKLAB_DB", db)
         conn = _create_db(db)
-        _insert_skill_stats(conn, "commit", use_count=1, total_tokens=200)
+        _insert(conn, "skill-invoke", skill_name="commit", input_tokens=200)
         _insert(conn, "evaluate", skill_name="commit", score=80.0)
         result = runner.invoke(app, ["stats"])
         assert result.exit_code == 0
         assert "sklab stats" in result.output
 
-    def test_stats_count_empty(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    @pytest.mark.parametrize(
+        "subcommand, expected_message",
+        [
+            ("count", "No skill invocations"),
+            ("score", "No evaluate runs"),
+            ("tokens", "No token data"),
+        ],
+        ids=["count", "score", "tokens"],
+    )
+    def test_stats_subcommand_empty(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        subcommand: str,
+        expected_message: str,
+    ) -> None:
         db = tmp_path / "usage.db"
         monkeypatch.setattr("skill_lab.core.stats.SKLAB_DB", db)
         _create_db(db)
-        result = runner.invoke(app, ["stats", "count"])
+        result = runner.invoke(app, ["stats", subcommand])
         assert result.exit_code == 0
-        assert "No skill invocations" in result.output
+        assert expected_message in result.output
 
     def test_stats_count_with_data(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         db = tmp_path / "usage.db"
         monkeypatch.setattr("skill_lab.core.stats.SKLAB_DB", db)
         conn = _create_db(db)
-        _insert_skill_stats(conn, "commit", use_count=1, total_tokens=200)
+        _insert(conn, "skill-invoke", skill_name="commit", input_tokens=200)
         result = runner.invoke(app, ["stats", "count"])
         assert result.exit_code == 0
         assert "commit" in result.output
-
-    def test_stats_score_empty(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        db = tmp_path / "usage.db"
-        monkeypatch.setattr("skill_lab.core.stats.SKLAB_DB", db)
-        _create_db(db)
-        result = runner.invoke(app, ["stats", "score"])
-        assert result.exit_code == 0
-        assert "No evaluate runs" in result.output
 
     def test_stats_score_with_data(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         db = tmp_path / "usage.db"
@@ -498,19 +482,11 @@ class TestStatsCLI:
         assert "80.0" in result.output
         assert "90.0" in result.output
 
-    def test_stats_tokens_empty(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        db = tmp_path / "usage.db"
-        monkeypatch.setattr("skill_lab.core.stats.SKLAB_DB", db)
-        _create_db(db)
-        result = runner.invoke(app, ["stats", "tokens"])
-        assert result.exit_code == 0
-        assert "No token data" in result.output
-
     def test_stats_tokens_with_data(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         db = tmp_path / "usage.db"
         monkeypatch.setattr("skill_lab.core.stats.SKLAB_DB", db)
         conn = _create_db(db)
-        _insert_skill_stats(conn, "commit", use_count=1, total_tokens=300)
+        _insert(conn, "skill-invoke", skill_name="commit", input_tokens=300)
         result = runner.invoke(app, ["stats", "tokens"])
         assert result.exit_code == 0
         assert "commit" in result.output
@@ -523,84 +499,131 @@ class TestStatsCLI:
 
 
 class TestRepoFilter:
-    import hashlib as _hashlib
-
     REPO_A = "/projects/repo-a"
     REPO_B = "/projects/repo-b"
-    HASH_A = _hashlib.sha256(REPO_A.encode()).hexdigest()
-    HASH_B = _hashlib.sha256(REPO_B.encode()).hexdigest()
 
     def test_count_filters_by_repo(self, tmp_db: Path) -> None:
         conn = _create_db(tmp_db)
-        _insert_skill_stats(conn, "commit", use_count=1, total_tokens=100, repo_root_hash=self.HASH_A)
-        _insert_skill_stats(conn, "pdf", use_count=1, total_tokens=100, repo_root_hash=self.HASH_B)
-        _, rows = get_stats_count(repo_root_hash=self.HASH_A)
+        _insert(
+            conn,
+            "skill-invoke",
+            skill_name="commit",
+            skill_path=f"{self.REPO_A}/commit",
+            input_tokens=100,
+        )
+        _insert(
+            conn,
+            "skill-invoke",
+            skill_name="pdf",
+            skill_path=f"{self.REPO_B}/pdf",
+            input_tokens=100,
+        )
+        _, rows = get_stats_count(repo_root=Path(self.REPO_A))
         assert len(rows) == 1
         assert rows[0].skill_name == "commit"
 
     def test_count_global_returns_all(self, tmp_db: Path) -> None:
         conn = _create_db(tmp_db)
-        _insert_skill_stats(conn, "commit", use_count=1, total_tokens=100, repo_root_hash=self.HASH_A)
-        _insert_skill_stats(conn, "pdf", use_count=1, total_tokens=100, repo_root_hash=self.HASH_B)
+        _insert(
+            conn,
+            "skill-invoke",
+            skill_name="commit",
+            skill_path=f"{self.REPO_A}/commit",
+            input_tokens=100,
+        )
+        _insert(
+            conn,
+            "skill-invoke",
+            skill_name="pdf",
+            skill_path=f"{self.REPO_B}/pdf",
+            input_tokens=100,
+        )
         _, rows = get_stats_count()
         assert len(rows) == 2
 
-    def test_score_not_filtered_by_repo(self, tmp_db: Path) -> None:
-        """Score data in skill_events is always global — repo hash is ignored."""
+    def test_score_filters_by_repo(self, tmp_db: Path) -> None:
         conn = _create_db(tmp_db)
-        _insert(conn, "evaluate", skill_name="commit", score=80.0,
-                skill_path=f"{self.REPO_A}/commit")
-        _insert(conn, "evaluate", skill_name="pdf", score=70.0,
-                skill_path=f"{self.REPO_B}/pdf")
-        rows = get_stats_score(repo_root_hash=self.HASH_A)
-        # Both skills returned — score view is global
-        assert len(rows) == 2
+        _insert(
+            conn, "evaluate", skill_name="commit", score=80.0, skill_path=f"{self.REPO_A}/commit"
+        )
+        _insert(conn, "evaluate", skill_name="pdf", score=70.0, skill_path=f"{self.REPO_B}/pdf")
+        rows = get_stats_score(repo_root=Path(self.REPO_A))
+        assert len(rows) == 1
+        assert rows[0].skill_name == "commit"
 
     def test_score_global_returns_all(self, tmp_db: Path) -> None:
         conn = _create_db(tmp_db)
-        _insert(conn, "evaluate", skill_name="commit", score=80.0,
-                skill_path=f"{self.REPO_A}/commit")
-        _insert(conn, "evaluate", skill_name="pdf", score=70.0,
-                skill_path=f"{self.REPO_B}/pdf")
+        _insert(
+            conn, "evaluate", skill_name="commit", score=80.0, skill_path=f"{self.REPO_A}/commit"
+        )
+        _insert(conn, "evaluate", skill_name="pdf", score=70.0, skill_path=f"{self.REPO_B}/pdf")
         rows = get_stats_score()
         assert len(rows) == 2
 
     def test_tokens_filters_by_repo(self, tmp_db: Path) -> None:
         conn = _create_db(tmp_db)
-        _insert_skill_stats(conn, "commit", use_count=1, total_tokens=200, repo_root_hash=self.HASH_A)
-        _insert_skill_stats(conn, "pdf", use_count=1, total_tokens=400, repo_root_hash=self.HASH_B)
-        _, rows = get_stats_tokens(repo_root_hash=self.HASH_A)
+        _insert(
+            conn,
+            "skill-invoke",
+            skill_name="commit",
+            skill_path=f"{self.REPO_A}/commit",
+            input_tokens=200,
+        )
+        _insert(
+            conn,
+            "skill-invoke",
+            skill_name="pdf",
+            skill_path=f"{self.REPO_B}/pdf",
+            input_tokens=400,
+        )
+        _, rows = get_stats_tokens(repo_root=Path(self.REPO_A))
         assert len(rows) == 1
         assert rows[0].skill_name == "commit"
 
     def test_tokens_global_returns_all(self, tmp_db: Path) -> None:
         conn = _create_db(tmp_db)
-        _insert_skill_stats(conn, "commit", use_count=1, total_tokens=200, repo_root_hash=self.HASH_A)
-        _insert_skill_stats(conn, "pdf", use_count=1, total_tokens=400, repo_root_hash=self.HASH_B)
+        _insert(
+            conn,
+            "skill-invoke",
+            skill_name="commit",
+            skill_path=f"{self.REPO_A}/commit",
+            input_tokens=200,
+        )
+        _insert(
+            conn,
+            "skill-invoke",
+            skill_name="pdf",
+            skill_path=f"{self.REPO_B}/pdf",
+            input_tokens=400,
+        )
         _, rows = get_stats_tokens()
         assert len(rows) == 2
 
-    def test_filter_unknown_hash_returns_empty(self, tmp_db: Path) -> None:
-        """--here with a hash that has no matching rows returns empty."""
+    def test_filter_excludes_null_skill_path(self, tmp_db: Path) -> None:
+        """Skills with no path recorded are excluded when --here is used."""
         conn = _create_db(tmp_db)
-        _insert_skill_stats(conn, "commit", use_count=1, total_tokens=100, repo_root_hash=self.HASH_B)
-        _, rows = get_stats_count(repo_root_hash=self.HASH_A)
+        _insert(conn, "skill-invoke", skill_name="commit", skill_path=None, input_tokens=100)
+        _, rows = get_stats_count(repo_root=Path(self.REPO_A))
         assert rows == []
 
     def test_cli_stats_count_here_flag(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        import hashlib
-
         db = tmp_path / "usage.db"
         repo = tmp_path / "my-repo"
         repo.mkdir()
         monkeypatch.setattr("skill_lab.core.stats.SKLAB_DB", db)
         conn = _create_db(db)
-        repo_hash = hashlib.sha256(str(repo).encode()).hexdigest()
-        other_hash = hashlib.sha256(b"/other/repo").hexdigest()
-        _insert_skill_stats(conn, "commit", use_count=1, total_tokens=100, repo_root_hash=repo_hash)
-        _insert_skill_stats(conn, "pdf", use_count=1, total_tokens=100, repo_root_hash=other_hash)
+        _insert(
+            conn,
+            "skill-invoke",
+            skill_name="commit",
+            skill_path=str(repo / "commit"),
+            input_tokens=100,
+        )
+        _insert(
+            conn, "skill-invoke", skill_name="pdf", skill_path="/other/repo/pdf", input_tokens=100
+        )
         monkeypatch.chdir(repo)
         # Simulate being inside the repo (no .git, falls back to cwd)
         result = runner.invoke(app, ["stats", "count", "--here"])

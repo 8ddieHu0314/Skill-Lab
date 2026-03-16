@@ -15,10 +15,12 @@ class NameMatchesDirectoryCheck(StaticCheck):
     check_id: ClassVar[str] = "naming.matches-directory"
     check_name: ClassVar[str] = "Name Matches Directory"
     description: ClassVar[str] = "Name must match the parent directory name"
-    severity: ClassVar[Severity] = Severity.ERROR
+    severity: ClassVar[Severity] = Severity.HIGH
     dimension: ClassVar[EvalDimension] = EvalDimension.NAMING
     spec_required: ClassVar[bool] = True
-    fix: ClassVar[str] = "Rename the directory to match name: (or update name: to match the directory)"
+    fix: ClassVar[str] = (
+        "Rename the directory to match name: (or update name: to match the directory)"
+    )
 
     def run(self, skill: Skill) -> CheckResult:
         if skill.metadata is None or not skill.metadata.name:

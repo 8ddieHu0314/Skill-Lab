@@ -1,0 +1,24 @@
+# Trace checks for the creating-reports skill
+checks:
+  - id: npm-install-ran
+    type: command_presence
+    description: "Verify npm install was executed"
+    pattern: "npm install"
+
+  - id: correct-build-sequence
+    type: event_sequence
+    description: "Verify correct order of npm commands"
+    sequence:
+      - "npm init"
+      - "npm install"
+      - "npm run build"
+
+  - id: no-excessive-retries
+    type: loop_detection
+    description: "Ensure no command loops"
+    max_retries: 3
+
+  - id: efficient-execution
+    type: efficiency
+    description: "Keep command count reasonable"
+    max_commands: 20
