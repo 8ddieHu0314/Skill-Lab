@@ -1420,13 +1420,12 @@ def stats(ctx: typer.Context) -> None:
     print_stats_overview(data)
 
 
-def _resolve_repo_filter(here: bool) -> str | None:
-    """Return SHA256 hash of repo root if --here is set, else None (global)."""
+def _resolve_repo_filter(here: bool) -> Path | None:
+    """Return repo root Path if --here is set, else None (global)."""
     if not here:
         return None
     root = _find_repo_root(Path.cwd())
-    target = root if root is not None else Path.cwd()
-    return compute_repo_root_hash(str(target))
+    return root if root is not None else Path.cwd()
 
 
 @stats_app.command("count")
@@ -1441,7 +1440,7 @@ def stats_count(
     from skill_lab.core.stats import get_stats_count
     from skill_lab.reporters.stats_reporter import print_stats_count
 
-    month_label, rows = get_stats_count(repo_root_hash=_resolve_repo_filter(here))
+    month_label, rows = get_stats_count(repo_root=_resolve_repo_filter(here))
     print_stats_count(month_label, rows)
 
 
@@ -1457,7 +1456,7 @@ def stats_score(
     from skill_lab.core.stats import get_stats_score
     from skill_lab.reporters.stats_reporter import print_stats_score
 
-    rows = get_stats_score(repo_root_hash=_resolve_repo_filter(here))
+    rows = get_stats_score(repo_root=_resolve_repo_filter(here))
     print_stats_score(rows)
 
 
@@ -1473,7 +1472,7 @@ def stats_tokens(
     from skill_lab.core.stats import get_stats_tokens
     from skill_lab.reporters.stats_reporter import print_stats_tokens
 
-    month_label, rows = get_stats_tokens(repo_root_hash=_resolve_repo_filter(here))
+    month_label, rows = get_stats_tokens(repo_root=_resolve_repo_filter(here))
     print_stats_tokens(month_label, rows)
 
 
