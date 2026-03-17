@@ -656,6 +656,7 @@ scenarios:
 | **90-day retention** | Local telemetry rows older than 90 days are auto-deleted (throttled to once/day). |
 | **Telemetry debug mode** | `SKLAB_TELEMETRY_DEBUG=1` prints the JSON payload to stderr and skips the POST — allows users to audit exactly what would be sent |
 | **Telemetry independent of analytics opt-in** | PyPI version update checks run regardless of whether the user opted into analytics |
+| **Telemetry subcommands untracked** | `telemetry status/enable/disable/show` intentionally have no `@_with_telemetry` decorator — managing telemetry settings should not itself generate telemetry events |
 
 ---
 

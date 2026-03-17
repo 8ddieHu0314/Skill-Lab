@@ -234,7 +234,7 @@ def validate(
             f"[green]Validation passed![/green] ({skill_path.name} \u2014 {check_count} checks)"
         )
     else:
-        console.print("[red]Validation failed![/red]")
+        console.print(f"[red]Validation failed![/red] ({skill_path.name})")
         console.print()
         for error in errors:
             console.print(f"  [red]X[/red] [{error.check_id}] {error.message}")

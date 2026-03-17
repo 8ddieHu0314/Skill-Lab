@@ -1,14 +1,13 @@
 """Stats subcommands."""
 
-import contextlib
 import time
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
-from skill_lab.cli import _find_repo_root, _with_telemetry, app, console
-from skill_lab.core.telemetry import init_telemetry, record_event
+from skill_lab.cli import _find_repo_root, _record_telemetry, _with_telemetry, app, console
+from skill_lab.core.telemetry import _store_pending_error, init_telemetry
 
 stats_app = typer.Typer(
     name="stats",
@@ -39,20 +38,23 @@ def stats(ctx: typer.Context) -> None:
         return
 
     start = time.perf_counter()
+    exit_code = 0
+    try:
+        from skill_lab.core.stats import get_overview_stats
+        from skill_lab.reporters.stats_reporter import print_stats_overview
 
-    from skill_lab.core.stats import get_overview_stats
-    from skill_lab.reporters.stats_reporter import print_stats_overview
-
-    data = get_overview_stats()
-    if data is None:
-        console.print("[yellow]No usage data found yet.[/yellow]")
-        console.print("[dim]Run some sklab commands first, then check back here.[/dim]")
-    else:
-        print_stats_overview(data)
-
-    duration_ms = (time.perf_counter() - start) * 1000
-    with contextlib.suppress(Exception):
-        record_event("stats", duration_ms, 0)
+        data = get_overview_stats()
+        if data is None:
+            console.print("[yellow]No usage data found yet.[/yellow]")
+            console.print("[dim]Run some sklab commands first, then check back here.[/dim]")
+        else:
+            print_stats_overview(data)
+    except Exception as e:
+        exit_code = 1
+        _store_pending_error(e)
+        raise
+    finally:
+        _record_telemetry("stats", start, exit_code)
 
 
 @stats_app.command("count")
