@@ -67,6 +67,13 @@ def _run_bulk_evaluate(
         if not report.overall_pass:
             any_failed = True
 
+    if summary_rows:
+        scores = [float(row[2]) for row in summary_rows]
+        push_telemetry_extra(
+            skill_name=f"bulk({len(summary_rows)})",
+            score=round(sum(scores) / len(scores), 2),
+        )
+
     # Summary table
     if format == OutputFormat.console:
         console.print()
@@ -178,6 +185,9 @@ def evaluate(
         score=report.quality_score,
     )
 
+    if output and format == OutputFormat.console:
+        format = OutputFormat.json
+
     if format == OutputFormat.json:
         json_reporter = JsonReporter()
         if output:
@@ -218,8 +228,11 @@ def validate(
         evaluator = StaticEvaluator(spec_only=spec_only)
         passed, errors = evaluator.validate(skill_path)
 
+    check_count = len(evaluator._get_checks())
     if passed:
-        console.print("[green]Validation passed![/green]")
+        console.print(
+            f"[green]Validation passed![/green] ({skill_path.name} \u2014 {check_count} checks)"
+        )
     else:
         console.print("[red]Validation failed![/red]")
         console.print()
@@ -230,6 +243,7 @@ def validate(
 
 
 @app.command("list-checks")
+@_with_telemetry("list-checks")
 def list_checks(
     dimension: Annotated[
         str | None,

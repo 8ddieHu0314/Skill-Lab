@@ -9,6 +9,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Annotated, Any
 
+import click.exceptions
 import typer
 from rich import box
 from rich.console import Console
@@ -136,6 +137,11 @@ def _record_telemetry(command: str, start: float, exit_code: int) -> None:
 # Params treated as positional args — not captured as flags
 _POSITIONAL_PARAMS = {"skill_path", "skill_paths", "trace"}
 
+# Kwarg names that don't map to --{name} flags
+_KWARG_TO_FLAG: dict[str, str] = {
+    "all_skills": "--all",
+}
+
 
 def _with_telemetry(command_name: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Decorator that wraps a CLI command with init + timing + event recording."""
@@ -150,7 +156,7 @@ def _with_telemetry(command_name: str) -> Callable[[Callable[..., Any]], Callabl
 
             # Capture boolean flags explicitly set to True
             flags = [
-                f"--{k.replace('_', '-')}"
+                _KWARG_TO_FLAG.get(k, f"--{k.replace('_', '-')}")
                 for k, v in kwargs.items()
                 if k not in _POSITIONAL_PARAMS and v is True
             ]
@@ -163,6 +169,9 @@ def _with_telemetry(command_name: str) -> Callable[[Callable[..., Any]], Callabl
                 return fn(*args, **kwargs)
             except SystemExit as e:
                 exit_code = e.code if isinstance(e.code, int) else 0
+                raise
+            except click.exceptions.Exit as e:
+                exit_code = e.exit_code
                 raise
             except Exception as e:
                 exit_code = 1
@@ -216,11 +225,6 @@ def _maybe_first_run_scan() -> bool:
         roots.append(repo_root)
         seen.add(repo_root)
 
-    claude_skills = Path.home() / ".claude" / ".skill"
-    if claude_skills.exists() and claude_skills not in seen:
-        roots.append(claude_skills)
-        seen.add(claude_skills)
-
     if cwd not in seen:
         roots.append(cwd)
         seen.add(cwd)
@@ -234,8 +238,7 @@ def _maybe_first_run_scan() -> bool:
     console.print()
     console.print(
         Panel(
-            "[bold]Welcome to sklab![/bold]\n\n"
-            "Scanning for skills across your repo and installed skills...",
+            "[bold]Welcome to sklab![/bold]\n\nScanning for skills in your repo...",
             expand=False,
             border_style="cyan",
         )
@@ -243,7 +246,7 @@ def _maybe_first_run_scan() -> bool:
     console.print()
 
     if not skill_paths:
-        console.print("[yellow]No skills found in your repo or installed skills.[/yellow]")
+        console.print("[yellow]No skills found in your repo.[/yellow]")
         console.print()
         _print_getting_started()
         return True
@@ -316,6 +319,19 @@ def _print_getting_started() -> None:
     guide.add_row("  [dim]count[/dim]", "Skill invocation counts for the current month")
     guide.add_row("  [dim]score[/dim]", "Score trend for all evaluated skills")
     guide.add_row("  [dim]tokens[/dim]", "Token usage per skill for the current month")
+    guide.add_row("", "")
+    guide.add_row(
+        "sklab generate [green]./my-skill[/green]",
+        "Auto-generate trigger tests via LLM",
+    )
+    guide.add_row("  [dim]--model <model>[/dim]", "Override the default model")
+    guide.add_row("  [dim]--force[/dim]", "Overwrite existing test file")
+    guide.add_row("", "")
+    guide.add_row(
+        "sklab trigger [green]./my-skill[/green]",
+        "Run trigger tests against a live runtime",
+    )
+    guide.add_row("  [dim]--type <type>[/dim]", "Filter by trigger type")
     guide.add_row("", "")
     guide.add_row("sklab", "Re-run this guide anytime")
 

@@ -41,7 +41,7 @@ Data is stored locally at `~/.sklab/usage.db` (SQLite) and synced to a private S
 
 ## Retention
 
-- **Local:** Rows older than 90 days are automatically deleted. Run `sklab telemetry purge` for an immediate wipe.
+- **Local:** Rows older than 90 days are automatically deleted.
 - **Server:** Retained for 12 months, then permanently deleted.
 
 ## How to opt out
@@ -54,7 +54,6 @@ You can also manage telemetry via CLI commands:
 sklab telemetry status   # View current telemetry configuration
 sklab telemetry disable  # Disable telemetry
 sklab telemetry enable   # Re-enable telemetry
-sklab telemetry purge    # Delete all local telemetry data
 sklab telemetry show     # View recent events
 ```
 

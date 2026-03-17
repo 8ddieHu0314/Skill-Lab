@@ -1,12 +1,14 @@
 """Stats subcommands."""
 
+import contextlib
+import time
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
 from skill_lab.cli import _find_repo_root, _with_telemetry, app, console
-from skill_lab.core.telemetry import init_telemetry
+from skill_lab.core.telemetry import init_telemetry, record_event
 
 stats_app = typer.Typer(
     name="stats",
@@ -36,6 +38,8 @@ def stats(ctx: typer.Context) -> None:
     if ctx.invoked_subcommand is not None:
         return
 
+    start = time.perf_counter()
+
     from skill_lab.core.stats import get_overview_stats
     from skill_lab.reporters.stats_reporter import print_stats_overview
 
@@ -43,8 +47,12 @@ def stats(ctx: typer.Context) -> None:
     if data is None:
         console.print("[yellow]No usage data found yet.[/yellow]")
         console.print("[dim]Run some sklab commands first, then check back here.[/dim]")
-        return
-    print_stats_overview(data)
+    else:
+        print_stats_overview(data)
+
+    duration_ms = (time.perf_counter() - start) * 1000
+    with contextlib.suppress(Exception):
+        record_event("stats", duration_ms, 0)
 
 
 @stats_app.command("count")
