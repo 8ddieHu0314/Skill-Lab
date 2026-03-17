@@ -84,6 +84,7 @@ def _has_mixed_scripts(word: str) -> bool:
 
 YAML_ALLOWLIST: frozenset[str] = frozenset(
     {
+        # Agent Skills spec fields
         "name",
         "description",
         "license",
@@ -94,6 +95,14 @@ YAML_ALLOWLIST: frozenset[str] = frozenset(
         "compatibility",
         "metadata",
         "allowed-tools",
+        # Claude Code extension fields
+        "disable-model-invocation",
+        "user-invocable",
+        "model",
+        "context",
+        "agent",
+        "hooks",
+        "argument-hint",
     }
 )
 
@@ -126,7 +135,10 @@ _INJECTION_BLOCK: list[re.Pattern[str]] = [
     ),
     re.compile(r"developer\s+mode\s+enabled", re.IGNORECASE),
     re.compile(r"reveal\s+(the\s+)?system\s+prompt", re.IGNORECASE),
-    re.compile(r"(?:bypass|disable|suppress|remove)\s+(?:safety|restrictions?|guidelines?|limits?)", re.IGNORECASE),
+    re.compile(
+        r"(?:bypass|disable|suppress|remove)\s+(?:safety|restrictions?|guidelines?|limits?)",
+        re.IGNORECASE,
+    ),
     re.compile(r"exfiltrate", re.IGNORECASE),
     re.compile(r"send\s+(?:this\s+)?conversation", re.IGNORECASE),
     re.compile(r"output\s+hidden\s+instructions", re.IGNORECASE),
@@ -156,7 +168,9 @@ _INJECTION_WARN: list[re.Pattern[str]] = [
         r"pretend\s+(?:safety\s+rules?|restrictions?)\s+do\s+not\s+exist",
         re.IGNORECASE,
     ),
-    re.compile(r"pretend\s+you\s+(?:have\s+)?no\s+(?:restrictions?|limits?|guidelines?)", re.IGNORECASE),
+    re.compile(
+        r"pretend\s+you\s+(?:have\s+)?no\s+(?:restrictions?|limits?|guidelines?)", re.IGNORECASE
+    ),
     re.compile(r"act\s+as\s+an?\s+unrestricted", re.IGNORECASE),
     re.compile(
         r"roleplay\s+as\s+an?\s+(?:ai|assistant)\s+(?:without|with\s+no)\s+(?:restrictions?|limits?)",
@@ -215,38 +229,47 @@ def _check_size(body: str) -> list[Finding]:
 
     byte_size = len(body.encode("utf-8"))
     if byte_size > _MAX_BODY_BYTES:
-        findings.append(Finding(
-            problem=f"Body exceeds 100 KB ({byte_size // 1024} KB)",
-            location="file",
-            text=f"{byte_size // 1024} KB total",
-        ))
+        findings.append(
+            Finding(
+                problem=f"Body exceeds 100 KB ({byte_size // 1024} KB)",
+                location="file",
+                text=f"{byte_size // 1024} KB total",
+            )
+        )
 
-    for i, line in enumerate(body.splitlines()):
+    lines = body.splitlines()
+
+    for i, line in enumerate(lines):
         if len(line) > _MAX_LINE_CHARS:
-            findings.append(Finding(
-                problem=f"Line exceeds {_MAX_LINE_CHARS} chars ({len(line)} chars)",
-                location=f"line {i + 1}",
-                text=line[:120] + ("…" if len(line) > 120 else ""),
-            ))
+            findings.append(
+                Finding(
+                    problem=f"Line exceeds {_MAX_LINE_CHARS} chars ({len(line)} chars)",
+                    location=f"line {i + 1}",
+                    text=line[:120] + ("…" if len(line) > 120 else ""),
+                )
+            )
 
     m = _REPEATED_TOKEN_RE.search(body)
     if m:
         line_num, line_text = _line_of(body, m.start())
-        findings.append(Finding(
-            problem="Repeated token patterns (possible DoS payload)",
-            location=f"line {line_num}",
-            text=line_text[:120] + ("…" if len(line_text) > 120 else ""),
-        ))
+        findings.append(
+            Finding(
+                problem="Repeated token patterns (possible DoS payload)",
+                location=f"line {line_num}",
+                text=line_text[:120] + ("…" if len(line_text) > 120 else ""),
+            )
+        )
 
-    lines = body.splitlines()
     if lines:
         whitespace_count = sum(1 for line in lines if not line.strip())
         if whitespace_count / len(lines) > _WHITESPACE_LINE_RATIO:
-            findings.append(Finding(
-                problem=f"Excessive whitespace-only lines ({whitespace_count}/{len(lines)})",
-                location="file",
-                text=f"{whitespace_count} blank lines out of {len(lines)}",
-            ))
+            findings.append(
+                Finding(
+                    problem=f"Excessive whitespace-only lines ({whitespace_count}/{len(lines)})",
+                    location="file",
+                    text=f"{whitespace_count} blank lines out of {len(lines)}",
+                )
+            )
 
     return findings
 
@@ -259,11 +282,13 @@ def _check_unicode(body: str) -> list[Finding]:
             window = body[max(0, i - 50) : i + 50]
             if _RISKY_KEYWORD_RE.search(window):
                 line_num, line_text = _line_of(body, i)
-                findings.append(Finding(
-                    problem=f"Suspicious unicode character (U+{ord(c):04X}) near risky keyword",
-                    location=f"line {line_num}",
-                    text=repr(line_text[:80])[1:-1],  # show escape sequences
-                ))
+                findings.append(
+                    Finding(
+                        problem=f"Suspicious unicode character (U+{ord(c):04X}) near risky keyword",
+                        location=f"line {line_num}",
+                        text=repr(line_text[:80])[1:-1],  # show escape sequences
+                    )
+                )
                 break  # one finding per block of suspicious chars
 
     normalised = unicodedata.normalize("NFKC", body)
@@ -271,50 +296,81 @@ def _check_unicode(body: str) -> list[Finding]:
         word = m.group()
         if _has_mixed_scripts(word):
             line_num, line_text = _line_of(body, m.start())
-            findings.append(Finding(
-                problem=f"Homoglyph word (mixed scripts): '{word}'",
-                location=f"line {line_num}",
-                text=line_text,
-            ))
+            findings.append(
+                Finding(
+                    problem=f"Homoglyph word (mixed scripts): '{word}'",
+                    location=f"line {line_num}",
+                    text=line_text,
+                )
+            )
 
     return findings
 
 
-def _scan_text_for_injections(text: str, source_label: str) -> list[Finding]:
-    """Run Layer D + E patterns against an arbitrary text string."""
+def _match_patterns(
+    patterns: list[re.Pattern[str]],
+    text: str,
+    normalised: str,
+    source_label: str,
+    problem_prefix: str,
+    *,
+    check_meta_commentary: bool = False,
+) -> list[Finding]:
+    """Scan normalised text against a pattern list and return findings."""
     findings: list[Finding] = []
-    normalised = unicodedata.normalize("NFKC", text)
-
-    for pattern in _INJECTION_BLOCK:
+    for pattern in patterns:
         for m in pattern.finditer(normalised):
-            if not _is_near_meta_commentary(normalised, m.start(), m.end()):
-                line_num, line_text = _line_of(text, m.start())
-                findings.append(Finding(
-                    problem=f"Prompt injection: '{m.group()[:60]}'",
-                    location=source_label if source_label.startswith("frontmatter") else f"line {line_num}",
-                    text=line_text,
-                ))
-
-    for pattern in _INJECTION_WARN:
-        for m in pattern.finditer(normalised):
-            if not _is_near_meta_commentary(normalised, m.start(), m.end()):
-                line_num, line_text = _line_of(text, m.start())
-                findings.append(Finding(
-                    problem=f"Jailbreak pattern: '{m.group()[:60]}'",
-                    location=source_label if source_label.startswith("frontmatter") else f"line {line_num}",
-                    text=line_text,
-                ))
-
-    for pattern in _EVALUATOR_PATTERNS:
-        for m in pattern.finditer(normalised):
+            if check_meta_commentary and _is_near_meta_commentary(normalised, m.start(), m.end()):
+                continue
             line_num, line_text = _line_of(text, m.start())
-            findings.append(Finding(
-                problem=f"Evaluator manipulation: '{m.group()[:60]}'",
-                location=source_label if source_label.startswith("frontmatter") else f"line {line_num}",
-                text=line_text,
-            ))
-
+            findings.append(
+                Finding(
+                    problem=f"{problem_prefix}: '{m.group()[:60]}'",
+                    location=source_label
+                    if source_label.startswith("frontmatter")
+                    else f"line {line_num}",
+                    text=line_text,
+                )
+            )
     return findings
+
+
+def _scan_text_for_injections(
+    text: str, source_label: str, normalised: str | None = None
+) -> list[Finding]:
+    """Run Layer D (injection block + warn) patterns against a text string."""
+    if normalised is None:
+        normalised = unicodedata.normalize("NFKC", text)
+    return _match_patterns(
+        _INJECTION_BLOCK,
+        text,
+        normalised,
+        source_label,
+        "Prompt injection",
+        check_meta_commentary=True,
+    ) + _match_patterns(
+        _INJECTION_WARN,
+        text,
+        normalised,
+        source_label,
+        "Jailbreak pattern",
+        check_meta_commentary=True,
+    )
+
+
+def _scan_text_for_evaluator(
+    text: str, source_label: str, normalised: str | None = None
+) -> list[Finding]:
+    """Run Layer E (evaluator-manipulation) patterns against a text string."""
+    if normalised is None:
+        normalised = unicodedata.normalize("NFKC", text)
+    return _match_patterns(
+        _EVALUATOR_PATTERNS,
+        text,
+        normalised,
+        source_label,
+        "Evaluator manipulation",
+    )
 
 
 def _check_yaml(metadata: SkillMetadata | None) -> list[Finding]:
@@ -326,67 +382,70 @@ def _check_yaml(metadata: SkillMetadata | None) -> list[Finding]:
 
     for key in sorted(set(raw.keys()) - YAML_ALLOWLIST):
         val = raw[key]
-        findings.append(Finding(
-            problem=f"Unexpected YAML key: '{key}'",
-            location=f"frontmatter.{key}",
-            text=f"{key}: {str(val)[:80]}",
-        ))
+        findings.append(
+            Finding(
+                problem=f"Unexpected YAML key: '{key}'",
+                location=f"frontmatter.{key}",
+                text=f"{key}: {str(val)[:80]}",
+            )
+        )
 
     name_val = raw.get("name")
     if isinstance(name_val, str) and "\n" in name_val:
-        findings.append(Finding(
-            problem="'name' field contains newlines",
-            location="frontmatter.name",
-            text=repr(name_val[:80]),
-        ))
+        findings.append(
+            Finding(
+                problem="'name' field contains newlines",
+                location="frontmatter.name",
+                text=repr(name_val[:80]),
+            )
+        )
 
     desc_val = raw.get("description")
     if isinstance(desc_val, str) and len(desc_val) > 500:
-        findings.append(Finding(
-            problem=f"'description' field exceeds 500 chars ({len(desc_val)} chars)",
-            location="frontmatter.description",
-            text=desc_val[:80] + "…",
-        ))
+        findings.append(
+            Finding(
+                problem=f"'description' field exceeds 500 chars ({len(desc_val)} chars)",
+                location="frontmatter.description",
+                text=desc_val[:80] + "…",
+            )
+        )
 
     tags_val = raw.get("tags")
     if tags_val is not None and not isinstance(tags_val, list):
-        findings.append(Finding(
-            problem="'tags' field must be a list of strings",
-            location="frontmatter.tags",
-            text=f"tags: {str(tags_val)[:80]}",
-        ))
+        findings.append(
+            Finding(
+                problem="'tags' field must be a list of strings",
+                location="frontmatter.tags",
+                text=f"tags: {str(tags_val)[:80]}",
+            )
+        )
 
     for key, val in raw.items():
         if key != "metadata" and isinstance(val, dict):
-            findings.append(Finding(
-                problem=f"Unexpected nested dict in frontmatter field '{key}'",
-                location=f"frontmatter.{key}",
-                text=f"{key}: {{…}}",
-            ))
+            findings.append(
+                Finding(
+                    problem=f"Unexpected nested dict in frontmatter field '{key}'",
+                    location=f"frontmatter.{key}",
+                    text=f"{key}: {{…}}",
+                )
+            )
 
     for key, val in raw.items():
         if isinstance(val, str) and val.strip():
-            findings.extend(_scan_text_for_injections(val, f"frontmatter.{key}"))
+            label = f"frontmatter.{key}"
+            val_normalised = unicodedata.normalize("NFKC", val)
+            findings.extend(_scan_text_for_injections(val, label, normalised=val_normalised))
+            findings.extend(_scan_text_for_evaluator(val, label, normalised=val_normalised))
 
     return findings
 
 
 def _check_injection(body: str, normalised: str) -> list[Finding]:
-    return _scan_text_for_injections(body, "body")
+    return _scan_text_for_injections(body, "body", normalised=normalised)
 
 
 def _check_evaluator(body: str, normalised: str) -> list[Finding]:
-    findings: list[Finding] = []
-    normalised_text = unicodedata.normalize("NFKC", body)
-    for pattern in _EVALUATOR_PATTERNS:
-        for m in pattern.finditer(normalised_text):
-            line_num, line_text = _line_of(body, m.start())
-            findings.append(Finding(
-                problem=f"Evaluator manipulation: '{m.group()[:60]}'",
-                location=f"line {line_num}",
-                text=line_text,
-            ))
-    return findings
+    return _scan_text_for_evaluator(body, "body", normalised=normalised)
 
 
 # ─── Registered check ─────────────────────────────────────────────────────────

@@ -48,8 +48,12 @@ def _run_bulk_evaluate(
     summary_rows: list[tuple[str, str, str, str]] = []  # name, path, score, status
 
     for sp in skill_paths:
-        with _cli_error_handler():
+        try:
             report = evaluator.evaluate(sp)
+        except Exception as e:
+            console.print(f"[red]Error evaluating {sp.name}: {e}[/red]")
+            any_failed = True
+            continue
 
         if format == OutputFormat.json:
             json_reporter = JsonReporter()
@@ -210,8 +214,12 @@ def _run_bulk_validate(roots: list[Path], spec_only: bool) -> None:
     summary_rows: list[tuple[str, str, str]] = []
 
     for sp in skill_paths:
-        with _cli_error_handler():
+        try:
             passed, errors = evaluator.validate(sp)
+        except Exception as e:
+            console.print(f"[red]Error validating {sp.name}: {e}[/red]")
+            any_failed = True
+            continue
 
         skill_name = sp.name
         rel_path = str(sp.relative_to(Path.cwd())) if sp.is_relative_to(Path.cwd()) else str(sp)

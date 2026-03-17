@@ -128,7 +128,8 @@ class ConsoleReporter:
                     else f"[{self._severity_style(result.severity)}]{self._severity_icon(result.severity)}[/{self._severity_style(result.severity)}]"
                 )
                 severity_text = Text(
-                    self._severity_label(result.severity).upper(), style=self._severity_style(result.severity)
+                    self._severity_label(result.severity).upper(),
+                    style=self._severity_style(result.severity),
                 )
                 display_message = (
                     (result.fix or result.message) if not result.passed else result.message
