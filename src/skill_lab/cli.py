@@ -15,6 +15,7 @@ from rich import box
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
 
 from skill_lab import __version__
 from skill_lab.core.constants import SKLAB_HOME, SKLAB_INITIALIZED
@@ -235,14 +236,8 @@ def _maybe_first_run_scan() -> bool:
         skill_paths.extend(_discover_skills(root))
 
     # Welcome banner
-    console.print()
-    console.print(
-        Panel(
-            "[bold]Welcome to sklab![/bold]\n\nScanning for skills in your repo...",
-            expand=False,
-            border_style="cyan",
-        )
-    )
+    _print_banner()
+    console.print("  [dim]Scanning for skills in your repo...[/dim]")
     console.print()
 
     if not skill_paths:
@@ -288,6 +283,27 @@ def _maybe_first_run_scan() -> bool:
 
     _print_getting_started()
     return True
+
+
+_BANNER_LINES = [
+    " ███████╗██╗  ██╗██╗██╗     ██╗          ██╗      █████╗ ██████╗ ",
+    " ██╔════╝██║ ██╔╝██║██║     ██║          ██║     ██╔══██╗██╔══██╗",
+    " ███████╗█████╔╝ ██║██║     ██║          ██║     ███████║██████╔╝",
+    " ╚════██║██╔═██╗ ██║██║     ██║          ██║     ██╔══██║██╔══██╗",
+    " ███████║██║  ██╗██║███████╗███████╗     ███████╗██║  ██║██████╔╝",
+    " ╚══════╝╚═╝  ╚═╝╚═╝╚══════╝╚══════╝     ╚══════╝╚═╝  ╚═╝╚═════╝",
+]
+_BANNER_COLORS = ["#5fd7ff", "#00afff", "#0087d7", "#0070c0", "#005faf", "#004080"]
+
+
+def _print_banner() -> None:
+    """Print the SKILL LAB ASCII banner with a blue gradient."""
+    console.print()
+    for line, color in zip(_BANNER_LINES, _BANNER_COLORS, strict=True):
+        console.print(Text(line, style=color))
+    console.print()
+    console.print(f"  [dim]Agent Skills Evaluation Framework — v{__version__}[/dim]")
+    console.print()
 
 
 def _print_getting_started() -> None:
@@ -367,6 +383,7 @@ def app_callback(
 ) -> None:
     """Evaluate agent skills through static analysis and quality checks."""
     if ctx.invoked_subcommand is None and not _maybe_first_run_scan():
+        _print_banner()
         _print_getting_started()
 
 
