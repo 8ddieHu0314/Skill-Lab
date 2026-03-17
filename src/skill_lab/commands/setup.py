@@ -5,7 +5,7 @@ import json as json_module
 import sys
 from pathlib import Path
 
-from skill_lab.cli import app, console
+from skill_lab.cli import _with_telemetry, app, console
 from skill_lab.core.telemetry import record_event
 
 
@@ -29,6 +29,7 @@ def _find_skill_md(skill_name: str, cwd: str) -> Path | None:
 
 
 @app.command("setup")
+@_with_telemetry("setup")
 def setup() -> None:
     """Configure hooks for automatic skill invocation tracking.
 

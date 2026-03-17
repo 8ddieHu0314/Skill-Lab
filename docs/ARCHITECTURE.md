@@ -450,7 +450,6 @@ sklab telemetry               # Show status (same as status)
 sklab telemetry enable        # Enable analytics
 sklab telemetry disable       # Disable analytics
 sklab telemetry status        # Rich panel: enabled/disabled, env overrides, DB path, row counts
-sklab telemetry purge         # Delete local usage.db (with confirmation)
 sklab telemetry show [-n N] [--json]  # View recent events as table or JSON
 
 # One-time hook setup for invocation tracking (v0.5.0)
@@ -459,7 +458,7 @@ sklab setup
 
 **Path Defaults:** The `evaluate`, `validate`, `trigger`, `generate`, `info`, and `prompt` commands default to the current directory when no skill path is provided. They validate that `SKILL.md` exists in the target directory via the shared `_resolve_skill_path()` helper.
 
-**First-run onboarding (`app_callback`):** Running bare `sklab` (no subcommand) checks for `~/.sklab/.initialized`. If absent, it scans the git repo root → `~/.claude/.skill/` → cwd for skills, runs `evaluate` on each, prints a summary table, then shows the Getting Started guide. The sentinel is written before scanning so a crash doesn't re-trigger it. On all subsequent bare `sklab` invocations, only the Getting Started guide is shown.
+**First-run onboarding (`app_callback`):** Running bare `sklab` (no subcommand) checks for `~/.sklab/.initialized`. If absent, it scans the git repo root → cwd for skills, runs `evaluate` on each, prints a summary table, then shows the Getting Started guide. The sentinel is written before scanning so a crash doesn't re-trigger it. On all subsequent bare `sklab` invocations, only the Getting Started guide is shown.
 
 **Bulk evaluation helpers:**
 - `_find_repo_root(start)` — walks up the directory tree looking for `.git`, returns the repo root or `None`
@@ -659,9 +658,10 @@ scenarios:
 | **Custom YAML loader** | `_SkillYAMLLoader` prevents `yes`→`True`, `null`→`None` coercion; values stay as strings |
 | **Inline per-event sync** | Each `record_event()` / `record_error()` call builds a flat JSON payload (`_build_event_payload`) and POSTs it inline via `_post_event()` (2s timeout). Rows are marked `synced=1` only on success. A daemon thread (`_retry_stale_events`) retries unsynced events older than 1 hour. All exceptions silently swallowed — network failures never crash the CLI. |
 | **Local-only sensitive fields** | `skill_path`, `skill_version`, `skill_source` are stored locally but excluded from server sync payloads. `skill_name` is synced for product analytics. |
-| **90-day retention** | Local telemetry rows older than 90 days are auto-deleted (throttled to once/day). `sklab telemetry purge` for immediate wipe. |
+| **90-day retention** | Local telemetry rows older than 90 days are auto-deleted (throttled to once/day). |
 | **Telemetry debug mode** | `SKLAB_TELEMETRY_DEBUG=1` prints the JSON payload to stderr and skips the POST — allows users to audit exactly what would be sent |
 | **Telemetry independent of analytics opt-in** | PyPI version update checks run regardless of whether the user opted into analytics |
+| **Telemetry subcommands untracked** | `telemetry status/enable/disable/show` intentionally have no `@_with_telemetry` decorator — managing telemetry settings should not itself generate telemetry events |
 
 ---
 
