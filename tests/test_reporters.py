@@ -17,7 +17,6 @@ from skill_lab.core.models import (
 )
 from skill_lab.reporters.console_reporter import (
     SEVERITY_ICONS,
-    SEVERITY_LABELS,
     SEVERITY_STYLES,
     ConsoleReporter,
 )
@@ -165,43 +164,6 @@ class TestSeverityMappings:
     def test_values_match(self, severity, expected_icon, expected_style):
         assert SEVERITY_ICONS[severity] == expected_icon
         assert SEVERITY_STYLES[severity] == expected_style
-
-
-class TestSeverityLabels:
-    def test_labels_has_high(self):
-        assert "high" in SEVERITY_LABELS
-
-    def test_labels_has_medium(self):
-        assert "medium" in SEVERITY_LABELS
-
-    def test_labels_has_low(self):
-        assert "low" in SEVERITY_LABELS
-
-    def test_high_maps_to_high(self):
-        assert SEVERITY_LABELS["high"] == "high"
-
-    def test_medium_maps_to_medium(self):
-        assert SEVERITY_LABELS["medium"] == "medium"
-
-    def test_low_maps_to_low(self):
-        assert SEVERITY_LABELS["low"] == "low"
-
-
-class TestSeverityLabel:
-    def test_high(self):
-        assert ConsoleReporter()._severity_label(Severity.HIGH) == "high"
-
-    def test_medium(self):
-        assert ConsoleReporter()._severity_label(Severity.MEDIUM) == "medium"
-
-    def test_low(self):
-        assert ConsoleReporter()._severity_label(Severity.LOW) == "low"
-
-    def test_unknown_value_returns_raw(self):
-        class FakeSeverity:
-            value = "nonexistent"
-
-        assert ConsoleReporter()._severity_label(FakeSeverity()) == "nonexistent"  # type: ignore[arg-type]
 
 
 # ─── ConsoleReporter init & private methods ────────────────────────────────────

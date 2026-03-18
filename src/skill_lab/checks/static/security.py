@@ -38,6 +38,7 @@ class Finding(TypedDict):
 _MAX_BODY_BYTES = 100_000  # 100 KB
 _MAX_LINE_CHARS = 2_000
 _REPEATED_TOKEN_RE = re.compile(r"(.)\1{9,}")  # same char repeated 10+ times
+_FORMATTING_CHARS: frozenset[str] = frozenset("-=*_#~ .`")
 _WHITESPACE_LINE_RATIO = 0.60  # > 60% whitespace-only lines
 
 # ─── Layer B: Unicode / obfuscation ──────────────────────────────────────────
@@ -215,6 +216,14 @@ def _line_of(body: str, pos: int) -> tuple[int, str]:
     return line_num, line_text.strip()
 
 
+def _line_text_by_num(text: str, line_num: int) -> str:
+    """Return the stripped text of a 1-based line number."""
+    lines = text.splitlines()
+    if 1 <= line_num <= len(lines):
+        return lines[line_num - 1].strip()
+    return ""
+
+
 def _is_near_meta_commentary(text: str, match_start: int, match_end: int) -> bool:
     lo = max(0, match_start - _META_COMMENTARY_WINDOW)
     hi = min(len(text), match_end + _META_COMMENTARY_WINDOW)
@@ -250,7 +259,7 @@ def _check_size(body: str) -> list[Finding]:
             )
 
     m = _REPEATED_TOKEN_RE.search(body)
-    if m:
+    if m and m.group(1) not in _FORMATTING_CHARS:
         line_num, line_text = _line_of(body, m.start())
         findings.append(
             Finding(
@@ -295,7 +304,8 @@ def _check_unicode(body: str) -> list[Finding]:
     for m in re.finditer(r"\b\w+\b", normalised):
         word = m.group()
         if _has_mixed_scripts(word):
-            line_num, line_text = _line_of(body, m.start())
+            line_num, _ = _line_of(normalised, m.start())
+            line_text = _line_text_by_num(body, line_num)
             findings.append(
                 Finding(
                     problem=f"Homoglyph word (mixed scripts): '{word}'",
@@ -322,7 +332,8 @@ def _match_patterns(
         for m in pattern.finditer(normalised):
             if check_meta_commentary and _is_near_meta_commentary(normalised, m.start(), m.end()):
                 continue
-            line_num, line_text = _line_of(text, m.start())
+            line_num, _ = _line_of(normalised, m.start())
+            line_text = _line_text_by_num(text, line_num)
             findings.append(
                 Finding(
                     problem=f"{problem_prefix}: '{m.group()[:60]}'",
@@ -436,6 +447,17 @@ def _check_yaml(metadata: SkillMetadata | None) -> list[Finding]:
             val_normalised = unicodedata.normalize("NFKC", val)
             findings.extend(_scan_text_for_injections(val, label, normalised=val_normalised))
             findings.extend(_scan_text_for_evaluator(val, label, normalised=val_normalised))
+        elif isinstance(val, list):
+            for i, item in enumerate(val):
+                if isinstance(item, str) and item.strip():
+                    label = f"frontmatter.{key}[{i}]"
+                    item_normalised = unicodedata.normalize("NFKC", item)
+                    findings.extend(
+                        _scan_text_for_injections(item, label, normalised=item_normalised)
+                    )
+                    findings.extend(
+                        _scan_text_for_evaluator(item, label, normalised=item_normalised)
+                    )
 
     return findings
 
