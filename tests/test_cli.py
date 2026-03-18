@@ -184,3 +184,41 @@ class TestTriggerCommand:
         assert result.exit_code == 1
         assert "No trigger tests found" in result.stdout
         assert "sklab generate" in result.stdout
+
+
+class TestBanner:
+    """Tests for the ASCII banner."""
+
+    def test_banner_wide_terminal(self):
+        """Banner renders ASCII art on wide terminals."""
+        from unittest.mock import PropertyMock, patch
+
+        from skill_lab.cli import _print_banner, console
+
+        with patch.object(type(console), "width", new_callable=PropertyMock, return_value=120):
+            _print_banner()  # should not raise
+
+    def test_banner_narrow_terminal_fallback(self):
+        """Narrow terminals get a plain-text fallback instead of ASCII art."""
+        from io import StringIO
+        from unittest.mock import PropertyMock, patch
+
+        from rich.console import Console
+
+        from skill_lab import cli
+
+        buf = StringIO()
+        narrow_console = Console(file=buf, width=50)
+        original = cli.console
+        cli.console = narrow_console
+        try:
+            with patch.object(
+                type(narrow_console), "width", new_callable=PropertyMock, return_value=50
+            ):
+                cli._print_banner()
+            output = buf.getvalue()
+            assert "SKILL LAB" in output
+            # Should NOT contain box-drawing characters from the ASCII art
+            assert "███" not in output
+        finally:
+            cli.console = original
