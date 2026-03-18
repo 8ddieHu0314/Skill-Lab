@@ -106,10 +106,10 @@ class ConsoleReporter:
 
         if results_to_show:
             table = Table(title="Check Results" if self.verbose else "Failed Checks")
-            table.add_column("Status", width=6)
-            table.add_column("Severity", width=8)
-            table.add_column("Check", width=30)
-            table.add_column("Message", width=50)
+            table.add_column("", width=4, no_wrap=True)
+            table.add_column("Severity", min_width=6, no_wrap=True)
+            table.add_column("Check", min_width=20)
+            table.add_column("Message")
 
             for result in results_to_show:
                 status_icon = (
@@ -118,7 +118,8 @@ class ConsoleReporter:
                     else f"[{self._severity_style(result.severity)}]{self._severity_icon(result.severity)}[/{self._severity_style(result.severity)}]"
                 )
                 severity_text = Text(
-                    result.severity.value.upper(), style=self._severity_style(result.severity)
+                    result.severity.value.upper(),
+                    style=self._severity_style(result.severity),
                 )
                 display_message = result.message
                 if not result.passed and result.fix:
@@ -182,10 +183,10 @@ class ConsoleReporter:
 
         if results_to_show:
             table = Table(title="Check Results" if self.verbose else "Failed Checks")
-            table.add_column("Status", width=6)
-            table.add_column("Check ID", style="cyan", width=25)
-            table.add_column("Type", style="blue", width=18)
-            table.add_column("Message", width=50)
+            table.add_column("", width=4, no_wrap=True)
+            table.add_column("Check ID", style="cyan", min_width=20)
+            table.add_column("Type", style="blue", min_width=10, no_wrap=True)
+            table.add_column("Message")
 
             for result in results_to_show:
                 status = "[green]PASS[/green]" if result.passed else "[red]FAIL[/red]"

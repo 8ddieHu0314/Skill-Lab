@@ -48,8 +48,12 @@ def _run_bulk_evaluate(
     summary_rows: list[tuple[str, str, str, str]] = []  # name, path, score, status
 
     for sp in skill_paths:
-        with _cli_error_handler():
+        try:
             report = evaluator.evaluate(sp)
+        except Exception as e:
+            console.print(f"[red]Error evaluating {sp.name}: {e}[/red]")
+            any_failed = True
+            continue
 
         if format == OutputFormat.json:
             json_reporter = JsonReporter()
@@ -203,6 +207,71 @@ def evaluate(
         raise typer.Exit(code=1)
 
 
+def _run_bulk_validate(roots: list[Path], spec_only: bool) -> None:
+    """Discover and validate all skills under the given root directories."""
+    skill_paths: list[Path] = []
+    for root in roots:
+        skill_paths.extend(_discover_skills(root))
+
+    if not skill_paths:
+        console.print("[yellow]No skill folders found (no SKILL.md files discovered).[/yellow]")
+        raise typer.Exit(code=0)
+
+    console.print(f"[dim]Found {len(skill_paths)} skill(s). Running validate...[/dim]\n")
+
+    evaluator = StaticEvaluator(spec_only=spec_only, include_security=True)
+    any_failed = False
+    summary_rows: list[tuple[str, str, str]] = []
+
+    for sp in skill_paths:
+        try:
+            passed, errors = evaluator.validate(sp)
+        except Exception as e:
+            console.print(f"[red]Error validating {sp.name}: {e}[/red]")
+            any_failed = True
+            continue
+
+        skill_name = sp.name
+        rel_path = str(sp.relative_to(Path.cwd())) if sp.is_relative_to(Path.cwd()) else str(sp)
+
+        if passed:
+            summary_rows.append((skill_name, rel_path, "[green]PASS[/green]"))
+        else:
+            console.print(f"[bold]{skill_name}[/bold] ({rel_path})")
+            for error in errors:
+                console.print(f"  [red]X[/red] [{error.check_id}] {error.message}")
+            has_security = any(e.check_id == "security.scan" for e in errors)
+            has_other = any(e.check_id != "security.scan" for e in errors)
+            if has_security and has_other:
+                console.print(
+                    f"  [dim]Run [bold]sklab evaluate {rel_path}[/bold] for full quality details "
+                    f"or [bold]sklab scan {rel_path}[/bold] for security findings.[/dim]"
+                )
+            elif has_security:
+                console.print(
+                    f"  [dim]Run [bold]sklab scan {rel_path}[/bold] for full security findings.[/dim]"
+                )
+            else:
+                console.print(
+                    f"  [dim]Run [bold]sklab evaluate {rel_path}[/bold] for full details.[/dim]"
+                )
+            console.print()
+            any_failed = True
+            summary_rows.append((skill_name, rel_path, "[red]FAIL[/red]"))
+
+    console.print()
+    table = Table(title=f"Summary — {len(skill_paths)} skill(s)", box=box.ROUNDED)
+    table.add_column("Skill", style="cyan")
+    table.add_column("Path", style="dim")
+    table.add_column("Status", justify="center")
+    for name, path, status in summary_rows:
+        table.add_row(name, path, status)
+    console.print(table)
+
+    if any_failed:
+        raise typer.Exit(code=1)
+
+
 @app.command()
 @_with_telemetry("validate")
 def validate(
@@ -220,12 +289,48 @@ def validate(
             help="Only run checks required by the Agent Skills spec (skip quality suggestions)",
         ),
     ] = False,
+    all_skills: Annotated[
+        bool,
+        typer.Option(
+            "--all",
+            "-a",
+            help="Discover and validate all skills in the current directory (recursive)",
+        ),
+    ] = False,
+    repo: Annotated[
+        bool,
+        typer.Option(
+            "--repo",
+            help="Discover and validate all skills from the git repo root (recursive)",
+        ),
+    ] = False,
 ) -> None:
     """Quick validation that reports only high-severity failures."""
+    if (all_skills or repo) and skill_path is not None:
+        console.print("[red]Error: Cannot combine --all/--repo with a skill path argument.[/red]")
+        raise typer.Exit(code=1)
+
+    if all_skills and repo:
+        console.print("[red]Error: --all and --repo are mutually exclusive.[/red]")
+        raise typer.Exit(code=1)
+
+    if all_skills:
+        _run_bulk_validate([Path.cwd()], spec_only)
+        return
+
+    if repo:
+        repo_root = _find_repo_root(Path.cwd())
+        if repo_root is None:
+            console.print("[red]Error: Not inside a git repository.[/red]")
+            raise typer.Exit(code=1)
+        console.print(f"[dim]Repo root: {repo_root}[/dim]")
+        _run_bulk_validate([repo_root], spec_only)
+        return
+
     skill_path = _resolve_skill_path(skill_path)
 
     with _cli_error_handler():
-        evaluator = StaticEvaluator(spec_only=spec_only)
+        evaluator = StaticEvaluator(spec_only=spec_only, include_security=True)
         passed, errors = evaluator.validate(skill_path)
 
     check_count = len(evaluator._get_checks())

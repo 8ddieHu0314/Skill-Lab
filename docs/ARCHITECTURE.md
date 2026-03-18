@@ -35,6 +35,7 @@ src/skill_lab/
 ├── commands/                 # CLI command modules
 │   ├── __init__.py           # Imports all command modules
 │   ├── evaluate.py           # evaluate, validate, list-checks
+│   ├── scan.py               # security scan
 │   ├── trigger.py            # trigger tests
 │   ├── generate.py           # LLM-based test generation
 │   ├── info.py               # info, prompt, eval-trace
@@ -62,6 +63,7 @@ src/skill_lab/
 │       ├── structure.py      # 7 checks
 │       ├── schema.py         # 9 checks (declarative FieldRule)
 │       ├── naming.py         # 1 check
+│       ├── security.py       # 1 check (5-layer security scan)
 │       └── content.py        # 11 checks
 ├── evaluators/
 │   ├── static_evaluator.py   # Orchestrates static check execution
@@ -139,10 +141,10 @@ src/skill_lab/
                                                     │ @register_check
                     ┌───────────────────────────────┴────────────────────────┐
                     │                    │                    │              │
-            ┌───────────────┐    ┌───────────────┐    ┌───────────────┐ ┌──────────┐
-            │ structure.py  │    │  schema.py    │    │  naming.py    │ │content.py │
-            │ (7 checks)    │    │  (9 checks)   │    │ (1 check)    │ │(11 checks)│
-            └───────────────┘    └───────────────┘    └───────────────┘ └──────────┘
+            ┌───────────────┐    ┌───────────────┐    ┌───────────────┐ ┌──────────┐ ┌────────────┐
+            │ structure.py  │    │  schema.py    │    │  naming.py    │ │content.py │ │security.py │
+            │ (7 checks)    │    │  (9 checks)   │    │ (1 check)    │ │(11 checks)│ │ (1 check)  │
+            └───────────────┘    └───────────────┘    └───────────────┘ └──────────┘ └────────────┘
 ```
 
 ---
@@ -165,6 +167,7 @@ class EvalDimension(str, Enum):
     DESCRIPTION = "description"  # 25% weight
     CONTENT = "content"          # 25% weight
     EXECUTION = "execution"      # 0% (evaluated separately via trace checks)
+    SECURITY = "security"        # 0% (gate check, not a scoring dimension)
 
 class TriggerType(str, Enum):  # Phase 2
     EXPLICIT = "explicit"        # Skill named with $ prefix
@@ -304,10 +307,10 @@ def run(self, skill: Skill) -> CheckResult:
 
 ```python
 # evaluators/static_evaluator.py
-from skill_lab.checks.static import content, description, naming, schema, structure
+from skill_lab.checks.static import content, naming, schema, security, structure
 
 # This import executes the module code, which runs @register_check decorators
-# Now registry.get_all() returns all 28 check classes
+# Now registry.get_all() returns all 29 check classes
 ```
 
 #### Why This Pattern?
@@ -415,9 +418,15 @@ sklab evaluate --repo            # Discover + evaluate all skills from git repo 
 
 # Quick validation (exit 0 or 1, defaults to current directory)
 sklab validate [./my-skill] [-s]
+sklab validate --all             # Discover + validate all skills under cwd (recursive)
+sklab validate --repo            # Discover + validate all skills from git repo root
+
+# Security scan (exits 1 on BLOCK)
+sklab scan [./my-skill]
+sklab scan --all                 # Scan all skills under cwd (recursive)
 
 # List available checks
-sklab list-checks [-d structure|naming|description|content] [-s] [--suggestions-only]
+sklab list-checks [-s] [--suggestions-only]
 
 # Trigger testing (defaults to current directory if path omitted)
 sklab trigger [./my-skill] [-t explicit|implicit|contextual|negative] [-f console|json] [-o file.json]

@@ -29,8 +29,6 @@ from skill_lab.core.telemetry import (
     record_error,
     record_event,
 )
-from skill_lab.evaluators.static_evaluator import StaticEvaluator
-from skill_lab.reporters.console_reporter import ConsoleReporter
 
 app = typer.Typer(
     name="sklab",
@@ -39,11 +37,6 @@ app = typer.Typer(
     context_settings={"help_option_names": ["-h", "--help"]},
 )
 console = Console()
-
-
-# =============================================================================
-# Shared helpers (used by command modules)
-# =============================================================================
 
 
 def version_callback(value: bool) -> None:
@@ -248,6 +241,9 @@ def _maybe_first_run_scan() -> bool:
 
     console.print(f"[dim]Found {len(skill_paths)} skill(s). Running initial evaluation...[/dim]\n")
 
+    from skill_lab.evaluators.static_evaluator import StaticEvaluator
+    from skill_lab.reporters.console_reporter import ConsoleReporter
+
     evaluator = StaticEvaluator()
     summary_rows: list[tuple[str, str, str, str]] = []
 
@@ -271,7 +267,7 @@ def _maybe_first_run_scan() -> bool:
 
     # Summary table
     console.print()
-    table = Table(title=f"Initial Scan \u2014 {len(skill_paths)} skill(s)", box=box.ROUNDED)
+    table = Table(title=f"Initial Scan — {len(skill_paths)} skill(s)", box=box.ROUNDED)
     table.add_column("Skill", style="cyan")
     table.add_column("Path", style="dim")
     table.add_column("Score", justify="right")
@@ -316,21 +312,25 @@ def _print_getting_started() -> None:
     guide.add_column(style="dim")
 
     guide.add_row(
-        "sklab evaluate [green]./my-skill[/green]", "Full quality evaluation (0\u2013100 score)"
+        "sklab evaluate [green]./my-skill[/green]", "Full quality evaluation (0–100 score)"
     )
     guide.add_row("  [dim]--verbose / -V[/dim]", "Show all checks, not just failures")
     guide.add_row("  [dim]--spec-only / -s[/dim]", "Only run the 10 spec-required checks")
     guide.add_row("  [dim]--all[/dim]", "Evaluate every skill in the current directory")
-    guide.add_row("  [dim]--repo[/dim]", "Evaluate every skill from the git repo root")
     guide.add_row("", "")
     guide.add_row(
-        "sklab validate [green]./my-skill[/green]",
-        "Quick pass/fail \u2014 exits 0 or 1 (great for CI)",
+        "sklab validate [green]./my-skill[/green]", "Quick pass/fail — exits 0 or 1 (great for CI)"
     )
     guide.add_row("  [dim]--spec-only / -s[/dim]", "Only validate against the Agent Skills spec")
+    guide.add_row("  [dim]--all[/dim]", "Validate every skill in the current directory")
+    guide.add_row("  [dim]--repo[/dim]", "Validate every skill from the git repo root")
+    guide.add_row("", "")
+    guide.add_row(
+        "sklab scan [green]./my-skill[/green]", "Security scan — shows BLOCK / SUS / ALLOW status"
+    )
+    guide.add_row("  [dim]--all[/dim]", "Scan every skill in the current directory")
     guide.add_row("", "")
     guide.add_row("sklab list-checks", "Browse all 28 checks across 4 dimensions")
-    guide.add_row("  [dim]--dimension <dim>[/dim]", "Filter by dimension")
     guide.add_row("  [dim]--spec-only[/dim]", "Only spec-required checks")
     guide.add_row("  [dim]--suggestions-only[/dim]", "Only quality suggestions")
     guide.add_row("", "")
@@ -363,11 +363,6 @@ def _print_getting_started() -> None:
         )
     )
     console.print()
-
-
-# =============================================================================
-# App callback (bare `sklab` invocation)
-# =============================================================================
 
 
 @app.callback(invoke_without_command=True)
