@@ -225,7 +225,7 @@ def _run_bulk_validate(roots: list[Path], spec_only: bool) -> None:
 
     for sp in skill_paths:
         try:
-            passed, errors = evaluator.validate(sp)
+            passed, errors = evaluator.check(sp)
         except Exception as e:
             console.print(f"[red]Error validating {sp.name}: {e}[/red]")
             any_failed = True
@@ -319,7 +319,7 @@ def check(
 
     with _cli_error_handler():
         evaluator = StaticEvaluator(spec_only=spec_only)
-        passed, errors = evaluator.validate(skill_path)
+        passed, errors = evaluator.check(skill_path)
 
     push_telemetry_extra(skill_name=skill_path.name)
 

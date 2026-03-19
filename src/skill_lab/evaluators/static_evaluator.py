@@ -136,7 +136,7 @@ class StaticEvaluator:
             summary=summary,
         )
 
-    def validate(self, skill_path: str | Path) -> tuple[bool, list[CheckResult]]:
+    def check(self, skill_path: str | Path) -> tuple[bool, list[CheckResult]]:
         """Quick validation that returns only HIGH-severity failures.
 
         Args:
