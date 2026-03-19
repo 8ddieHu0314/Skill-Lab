@@ -1,4 +1,4 @@
-"""Evaluate, validate, and list-checks commands."""
+"""Evaluate, check, and list-checks commands."""
 
 from pathlib import Path
 from typing import Annotated
@@ -207,8 +207,8 @@ def evaluate(
         raise typer.Exit(code=1)
 
 
-def _run_bulk_validate(roots: list[Path], spec_only: bool) -> None:
-    """Discover and validate all skills under the given root directories."""
+def _run_bulk_check(roots: list[Path], spec_only: bool) -> None:
+    """Discover and check all skills under the given root directories."""
     skill_paths: list[Path] = []
     for root in roots:
         skill_paths.extend(_discover_skills(root))
@@ -227,7 +227,7 @@ def _run_bulk_validate(roots: list[Path], spec_only: bool) -> None:
         try:
             passed, errors = evaluator.check(sp)
         except Exception as e:
-            console.print(f"[red]Error validating {sp.name}: {e}[/red]")
+            console.print(f"[red]Error checking {sp.name}: {e}[/red]")
             any_failed = True
             continue
 
@@ -282,14 +282,14 @@ def check(
         typer.Option(
             "--all",
             "-a",
-            help="Discover and validate all skills in the current directory (recursive)",
+            help="Discover and check all skills in the current directory (recursive)",
         ),
     ] = False,
     repo: Annotated[
         bool,
         typer.Option(
             "--repo",
-            help="Discover and validate all skills from the git repo root (recursive)",
+            help="Discover and check all skills from the git repo root (recursive)",
         ),
     ] = False,
 ) -> None:
@@ -303,7 +303,7 @@ def check(
         raise typer.Exit(code=1)
 
     if all_skills:
-        _run_bulk_validate([Path.cwd()], spec_only)
+        _run_bulk_check([Path.cwd()], spec_only)
         return
 
     if repo:
@@ -312,7 +312,7 @@ def check(
             console.print("[red]Error: Not inside a git repository.[/red]")
             raise typer.Exit(code=1)
         console.print(f"[dim]Repo root: {repo_root}[/dim]")
-        _run_bulk_validate([repo_root], spec_only)
+        _run_bulk_check([repo_root], spec_only)
         return
 
     skill_path = _resolve_skill_path(skill_path)
@@ -326,10 +326,10 @@ def check(
     check_count = len(evaluator._get_checks())
     if passed:
         console.print(
-            f"[green]Validation passed![/green] ({skill_path.name} \u2014 {check_count} checks)"
+            f"[green]Check passed![/green] ({skill_path.name} \u2014 {check_count} checks)"
         )
     else:
-        console.print(f"[red]Validation failed![/red] ({skill_path.name})")
+        console.print(f"[red]Check failed![/red] ({skill_path.name})")
         console.print()
         for error in errors:
             console.print(f"  [red]X[/red] [{error.check_id}] {error.message}")

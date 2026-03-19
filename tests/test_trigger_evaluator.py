@@ -473,7 +473,7 @@ class TestRunSingleTest:
         ]
         runtime = FakeRuntime(events=events)
         evaluator = TriggerEvaluator()
-        evaluator._trace_dir = tmp_path / ".skill-lab" / "traces"
+        evaluator._trace_dir = tmp_path / ".sklab" / "traces"
 
         test_case = _make_test_case(skill_name="my-skill", skill_triggered=True)
         result = evaluator._run_single_test(test_case, skill_path, runtime)
@@ -690,13 +690,13 @@ class TestEvaluate:
 
     def test_load_errors_reported_when_no_tests(self, tmp_path: Path):
         ev = self._evaluator_with_runtime()
-        errors = ["No .skill-lab/tests/ directory found"]
+        errors = ["No .sklab/tests/ directory found"]
         with patch(self._PATCH_LOAD, return_value=([], errors)):
             report = ev.evaluate(tmp_path / "skill")
         assert report.tests_run == 1  # one error result
         assert report.overall_pass is False
         assert report.results[0].test_id == "load-error"
-        assert "No .skill-lab/tests" in report.results[0].message
+        assert "No .sklab/tests" in report.results[0].message
 
     def test_multiple_load_errors_create_multiple_results(self, tmp_path: Path):
         ev = self._evaluator_with_runtime()

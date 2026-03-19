@@ -383,7 +383,7 @@ class TestParseRealTraces:
             fixtures_dir
             / "skills"
             / "creating-reports"
-            / ".skill-lab"
+            / ".sklab"
             / "traces"
             / "scenario-1.jsonl"
         )

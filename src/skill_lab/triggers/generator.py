@@ -126,7 +126,7 @@ class TriggerGenerator:
         return str(yaml.dump(data, default_flow_style=False, sort_keys=False, allow_unicode=True))
 
     def generate_and_write(self, skill_path: Path, *, force: bool = False) -> Path:
-        """Generate trigger tests and write to .skill-lab/tests/triggers.yaml.
+        """Generate trigger tests and write to .sklab/tests/triggers.yaml.
 
         Args:
             skill_path: Path to the skill directory.

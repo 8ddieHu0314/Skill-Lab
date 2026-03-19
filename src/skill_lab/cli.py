@@ -335,8 +335,9 @@ def _print_getting_started() -> None:
     guide.add_row("  [dim]score[/dim]", "Score trend for all evaluated skills")
     guide.add_row("  [dim]tokens[/dim]", "Token usage per skill for the current month")
     guide.add_row("", "")
-    guide.add_row("sklab list-checks", "Browse all 28 checks across 4 dimensions")
+    guide.add_row("sklab list-checks", "Browse all 29 checks across 5 dimensions")
     guide.add_row("  [dim]--spec-only[/dim]", "Only spec-required checks")
+    guide.add_row("  [dim]--suggestions-only[/dim]", "Only quality suggestions")
 
     guide.add_row("", "")
     guide.add_row(

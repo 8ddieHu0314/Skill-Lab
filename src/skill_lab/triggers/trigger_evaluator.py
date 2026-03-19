@@ -94,7 +94,7 @@ class TriggerEvaluator:
         start_time = time.time()
         skill_path = Path(skill_path)
 
-        # Store traces in the skill's .skill-lab/traces directory
+        # Store traces in the skill's .sklab/traces directory
         self._trace_dir = skill_path / TRACES_DIR
 
         # Find project root for implicit tests (where .claude/skills/ is visible)

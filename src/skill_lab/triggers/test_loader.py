@@ -1,8 +1,8 @@
 """Load trigger test cases from YAML files.
 
 Supports two formats:
-1. Given/When/Then DSL (.skill-lab/tests/scenarios.yaml)
-2. Simple flat format (.skill-lab/tests/triggers.yaml)
+1. Given/When/Then DSL (.sklab/tests/scenarios.yaml)
+2. Simple flat format (.sklab/tests/triggers.yaml)
 """
 
 from pathlib import Path
@@ -18,8 +18,8 @@ def load_trigger_tests(skill_path: Path) -> tuple[list[TriggerTestCase], list[st
     """Load trigger test cases from a skill directory.
 
     Looks for test definitions in:
-    - .skill-lab/tests/scenarios.yaml (Given/When/Then DSL)
-    - .skill-lab/tests/triggers.yaml (simple format)
+    - .sklab/tests/scenarios.yaml (Given/When/Then DSL)
+    - .sklab/tests/triggers.yaml (simple format)
 
     Args:
         skill_path: Path to the skill directory.

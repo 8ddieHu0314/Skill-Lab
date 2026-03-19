@@ -37,7 +37,7 @@ def _run_bulk_scan(roots: list[Path], verbose: bool = False) -> None:
 
     check = SecurityScanCheck()
     any_blocked = False
-    summary_rows: list[tuple[str, str, str]] = []  # name, path, status
+    summary_rows: list[tuple[str, str, str, str]] = []  # name, path, plain_status, rich_status
 
     for sp in skill_paths:
         try:
@@ -66,25 +66,29 @@ def _run_bulk_scan(roots: list[Path], verbose: bool = False) -> None:
             if verbose:
                 console.print(f"[bold]{skill_name}[/bold] ({rel_path})")
                 for f in findings:
-                    console.print(f"  [yellow]~[/yellow] {f.get('problem', '')} — {f.get('text', '')}")
+                    console.print(
+                        f"  [yellow]~[/yellow] {f.get('problem', '')} — {f.get('text', '')}"
+                    )
                 console.print()
         else:
             status_str = "[bold green]ALLOW[/bold green]"
 
-        summary_rows.append((skill_name, rel_path, status_str))
+        summary_rows.append((skill_name, rel_path, status, status_str))
 
     console.print()
     table = Table(title=f"Security Summary — {len(skill_paths)} skill(s)", box=box.ROUNDED)
     table.add_column("Skill", style="cyan")
     table.add_column("Path", style="dim")
     table.add_column("Status", justify="center")
-    for name, path, status_str in summary_rows:
-        table.add_row(name, path, status_str)
+    for name, path, _status, rich_status in summary_rows:
+        table.add_row(name, path, rich_status)
     console.print(table)
 
-    has_issues = any_blocked or any("SUS" in status_str for _, _, status_str in summary_rows)
+    has_issues = any_blocked or any(s == "sus" for _, _, s, _ in summary_rows)
     if has_issues:
-        console.print("[dim]Run [bold]sklab scan <path>[/bold] on any skill above for full details.[/dim]")
+        console.print(
+            "[dim]Run [bold]sklab scan <path>[/bold] on any skill above for full details.[/dim]"
+        )
 
     if any_blocked:
         raise typer.Exit(code=1)
