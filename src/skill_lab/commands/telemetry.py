@@ -59,6 +59,16 @@ def telemetry_disable() -> None:
     """Disable anonymous usage telemetry."""
     from skill_lab.core.telemetry import disable_telemetry
 
+    console.print(
+        "[yellow]Warning:[/yellow] Disabling telemetry stops all local data collection. "
+        "You will no longer accumulate data for [bold]sklab stats[/bold] "
+        "(invocation counts, score trends, token usage)."
+    )
+    confirmed = typer.confirm("Disable telemetry?", default=True)
+    if not confirmed:
+        console.print("[dim]Cancelled.[/dim]")
+        raise typer.Exit(code=0)
+
     disable_telemetry()
     console.print("[yellow]Telemetry disabled.[/yellow]")
 
