@@ -180,7 +180,7 @@ Output goes to stdout for easy piping. A token estimate summary is printed to st
 Auto-generate trigger test cases from a SKILL.md using an LLM:
 
 ```bash
-# Generate tests (writes to .skill-lab/tests/triggers.yaml)
+# Generate tests (writes to .sklab/tests/triggers.yaml)
 sklab generate ./my-skill
 
 # Use a specific model
@@ -215,7 +215,7 @@ sklab trigger --type negative
 **Prerequisites:** Trigger testing requires:
 - **Claude CLI**: Install via `npm install -g @anthropic-ai/claude-code`
 
-**Test Definition** (`.skill-lab/tests/triggers.yaml`):
+**Test Definition** (`.sklab/tests/triggers.yaml`):
 
 ```yaml
 skill: my-skill

@@ -154,7 +154,7 @@ class TestTriggerGenerator:
         result_path = generator.generate_and_write(skill_dir)
 
         assert result_path.exists()
-        assert result_path == skill_dir / ".skill-lab" / "tests" / "triggers.yaml"
+        assert result_path == skill_dir / ".sklab" / "tests" / "triggers.yaml"
         data = yaml.safe_load(result_path.read_text())
         assert data["skill"] == "my-skill"
 
@@ -168,7 +168,7 @@ class TestTriggerGenerator:
             "---\nname: my-skill\ndescription: A test skill\n---\n\nBody"
         )
         # Create existing file
-        output_dir = skill_dir / ".skill-lab" / "tests"
+        output_dir = skill_dir / ".sklab" / "tests"
         output_dir.mkdir(parents=True)
         (output_dir / "triggers.yaml").write_text("existing content")
 
@@ -185,7 +185,7 @@ class TestTriggerGenerator:
             "---\nname: my-skill\ndescription: A test skill\n---\n\nBody"
         )
         # Create existing file
-        output_dir = skill_dir / ".skill-lab" / "tests"
+        output_dir = skill_dir / ".sklab" / "tests"
         output_dir.mkdir(parents=True)
         (output_dir / "triggers.yaml").write_text("existing content")
 

@@ -56,7 +56,7 @@ ruff check src/ && ruff format src/
 - **Scoring**: Weighted across 5 dimensions (Structure, Naming, Description, Content, Execution) by severity (HIGH > MEDIUM > LOW). Execution is trace-based (`tracechecks/`) and scored separately. See `scoring.py` for exact weights.
 - **Anthropic SDK**: `anthropic` is a required dependency, used by `sklab generate` for LLM-based trigger test generation.
 - **Test fixtures**: `tests/fixtures/skills/` — each subdirectory is a mock skill with `SKILL.md`.
-- **Trigger test files**: `.skill-lab/tests/triggers.yaml`.
+- **Trigger test files**: `.sklab/tests/triggers.yaml`.
 
 ## Workflow Orchestration
 

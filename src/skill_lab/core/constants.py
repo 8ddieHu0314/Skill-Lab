@@ -2,16 +2,16 @@
 
 from pathlib import Path
 
-# Directory paths for .skill-lab artifacts
-SKILLLAB_DIR = ".skill-lab"
+# Directory paths for .sklab project artifacts
+SKILLLAB_DIR = ".sklab"
 
 # ~/.sklab home directory and config paths
 SKLAB_HOME = Path.home() / ".sklab"
 SKLAB_CONFIG = SKLAB_HOME / "config.json"
 SKLAB_DB = SKLAB_HOME / "usage.db"
 SKLAB_INITIALIZED = SKLAB_HOME / ".initialized"
-TESTS_DIR = ".skill-lab/tests"
-TRACES_DIR = ".skill-lab/traces"
+TESTS_DIR = ".sklab/tests"
+TRACES_DIR = ".sklab/traces"
 
 
 def skill_script_patterns(skill_name: str) -> list[str]:

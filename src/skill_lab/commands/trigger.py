@@ -128,7 +128,7 @@ def trigger(
     - contextual: Realistic noisy prompt with domain context
     - negative: Should NOT trigger (catches false positives)
 
-    Requires test definitions in .skill-lab/tests/scenarios.yaml or .skill-lab/tests/triggers.yaml.
+    Requires test definitions in .sklab/tests/scenarios.yaml or .sklab/tests/triggers.yaml.
     """
     skill_path = _resolve_skill_path(skill_path)
     push_telemetry_extra(skill_name=skill_path.name)
@@ -145,7 +145,7 @@ def trigger(
         console.print(
             f"[dim]Run [bold]sklab generate {skill_path}[/bold] to auto-generate "
             f"trigger tests, or create them manually at "
-            f".skill-lab/tests/triggers.yaml[/dim]"
+            f".sklab/tests/triggers.yaml[/dim]"
         )
         raise typer.Exit(code=1)
 
