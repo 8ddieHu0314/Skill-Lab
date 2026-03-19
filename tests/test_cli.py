@@ -44,15 +44,15 @@ class TestEvaluateCommand:
 
 
 class TestValidateCommand:
-    """Tests for the validate command."""
+    """Tests for the check command."""
 
     def test_validate_valid_skill(self, valid_skill_path: Path):
-        result = runner.invoke(app, ["validate", str(valid_skill_path)])
+        result = runner.invoke(app, ["check", str(valid_skill_path)])
         assert result.exit_code == 0
         assert "passed" in result.stdout.lower()
 
     def test_validate_invalid_skill(self, invalid_skill_path: Path):
-        result = runner.invoke(app, ["validate", str(invalid_skill_path)])
+        result = runner.invoke(app, ["check", str(invalid_skill_path)])
         assert result.exit_code == 1
         assert "failed" in result.stdout.lower()
 

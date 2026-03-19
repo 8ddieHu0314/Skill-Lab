@@ -22,6 +22,9 @@ class StaticCheck(ABC):
     # Whether this check is required by the Agent Skills spec (default: False = quality suggestion)
     spec_required: ClassVar[bool] = False
 
+    # Whether this check appears in `sklab list-checks` (False for scan-only checks like security.scan)
+    listable: ClassVar[bool] = True
+
     # Actionable instruction shown to users when this check fails (optional)
     fix: ClassVar[str] = ""
 

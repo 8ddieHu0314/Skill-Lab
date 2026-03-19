@@ -35,13 +35,13 @@ class TestStaticEvaluator:
         )
 
     def test_validate_valid_skill(self, evaluator: StaticEvaluator, valid_skill_path: Path):
-        passed, errors = evaluator.validate(valid_skill_path)
+        passed, errors = evaluator.check(valid_skill_path)
 
         assert passed
         assert len(errors) == 0
 
     def test_validate_invalid_skill(self, evaluator: StaticEvaluator, invalid_skill_path: Path):
-        passed, errors = evaluator.validate(invalid_skill_path)
+        passed, errors = evaluator.check(invalid_skill_path)
 
         assert not passed
         assert len(errors) > 0

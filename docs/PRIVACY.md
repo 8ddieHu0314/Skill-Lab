@@ -51,7 +51,7 @@ Set `SKLAB_NO_ANALYTICS=1` or `DO_NOT_TRACK=1` in your environment before runnin
 You can also manage telemetry via CLI commands:
 
 ```bash
-sklab telemetry status   # View current telemetry configuration
+sklab telemetry          # View current telemetry configuration
 sklab telemetry disable  # Disable telemetry
 sklab telemetry enable   # Re-enable telemetry
 sklab telemetry show     # View recent events

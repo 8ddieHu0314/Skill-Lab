@@ -1,4 +1,4 @@
-"""Evaluate, validate, and list-checks commands."""
+"""Evaluate, check, and list-checks commands."""
 
 from pathlib import Path
 from typing import Annotated
@@ -207,8 +207,8 @@ def evaluate(
         raise typer.Exit(code=1)
 
 
-def _run_bulk_validate(roots: list[Path], spec_only: bool) -> None:
-    """Discover and validate all skills under the given root directories."""
+def _run_bulk_check(roots: list[Path], spec_only: bool) -> None:
+    """Discover and check all skills under the given root directories."""
     skill_paths: list[Path] = []
     for root in roots:
         skill_paths.extend(_discover_skills(root))
@@ -217,7 +217,7 @@ def _run_bulk_validate(roots: list[Path], spec_only: bool) -> None:
         console.print("[yellow]No skill folders found (no SKILL.md files discovered).[/yellow]")
         raise typer.Exit(code=0)
 
-    console.print(f"[dim]Found {len(skill_paths)} skill(s). Running validate...[/dim]\n")
+    console.print(f"[dim]Found {len(skill_paths)} skill(s). Running check...[/dim]\n")
 
     evaluator = StaticEvaluator(spec_only=spec_only, include_security=True)
     any_failed = False
@@ -225,9 +225,9 @@ def _run_bulk_validate(roots: list[Path], spec_only: bool) -> None:
 
     for sp in skill_paths:
         try:
-            passed, errors = evaluator.validate(sp)
+            passed, errors = evaluator.check(sp)
         except Exception as e:
-            console.print(f"[red]Error validating {sp.name}: {e}[/red]")
+            console.print(f"[red]Error checking {sp.name}: {e}[/red]")
             any_failed = True
             continue
 
@@ -240,21 +240,9 @@ def _run_bulk_validate(roots: list[Path], spec_only: bool) -> None:
             console.print(f"[bold]{skill_name}[/bold] ({rel_path})")
             for error in errors:
                 console.print(f"  [red]X[/red] [{error.check_id}] {error.message}")
-            has_security = any(e.check_id == "security.scan" for e in errors)
-            has_other = any(e.check_id != "security.scan" for e in errors)
-            if has_security and has_other:
-                console.print(
-                    f"  [dim]Run [bold]sklab evaluate {rel_path}[/bold] for full quality details "
-                    f"or [bold]sklab scan {rel_path}[/bold] for security findings.[/dim]"
-                )
-            elif has_security:
-                console.print(
-                    f"  [dim]Run [bold]sklab scan {rel_path}[/bold] for full security findings.[/dim]"
-                )
-            else:
-                console.print(
-                    f"  [dim]Run [bold]sklab evaluate {rel_path}[/bold] for full details.[/dim]"
-                )
+            console.print(
+                f"  [dim]Run [bold]sklab evaluate {rel_path}[/bold] for full details.[/dim]"
+            )
             console.print()
             any_failed = True
             summary_rows.append((skill_name, rel_path, "[red]FAIL[/red]"))
@@ -273,8 +261,8 @@ def _run_bulk_validate(roots: list[Path], spec_only: bool) -> None:
 
 
 @app.command()
-@_with_telemetry("validate")
-def validate(
+@_with_telemetry("check")
+def check(
     skill_path: Annotated[
         Path | None,
         typer.Argument(
@@ -294,14 +282,14 @@ def validate(
         typer.Option(
             "--all",
             "-a",
-            help="Discover and validate all skills in the current directory (recursive)",
+            help="Discover and check all skills in the current directory (recursive)",
         ),
     ] = False,
     repo: Annotated[
         bool,
         typer.Option(
             "--repo",
-            help="Discover and validate all skills from the git repo root (recursive)",
+            help="Discover and check all skills from the git repo root (recursive)",
         ),
     ] = False,
 ) -> None:
@@ -315,7 +303,7 @@ def validate(
         raise typer.Exit(code=1)
 
     if all_skills:
-        _run_bulk_validate([Path.cwd()], spec_only)
+        _run_bulk_check([Path.cwd()], spec_only)
         return
 
     if repo:
@@ -324,24 +312,24 @@ def validate(
             console.print("[red]Error: Not inside a git repository.[/red]")
             raise typer.Exit(code=1)
         console.print(f"[dim]Repo root: {repo_root}[/dim]")
-        _run_bulk_validate([repo_root], spec_only)
+        _run_bulk_check([repo_root], spec_only)
         return
 
     skill_path = _resolve_skill_path(skill_path)
 
     with _cli_error_handler():
         evaluator = StaticEvaluator(spec_only=spec_only, include_security=True)
-        passed, errors = evaluator.validate(skill_path)
+        passed, errors = evaluator.check(skill_path)
 
     push_telemetry_extra(skill_name=skill_path.name)
 
     check_count = len(evaluator._get_checks())
     if passed:
         console.print(
-            f"[green]Validation passed![/green] ({skill_path.name} \u2014 {check_count} checks)"
+            f"[green]Check passed![/green] ({skill_path.name} \u2014 {check_count} checks)"
         )
     else:
-        console.print(f"[red]Validation failed![/red] ({skill_path.name})")
+        console.print(f"[red]Check failed![/red] ({skill_path.name})")
         console.print()
         for error in errors:
             console.print(f"  [red]X[/red] [{error.check_id}] {error.message}")
@@ -357,7 +345,7 @@ def list_checks(
         typer.Option(
             "--dimension",
             "-d",
-            help="Filter by dimension (structure, naming, description, content)",
+            help="Filter by dimension (structure, naming, description, content, security)",
         ),
     ] = None,
     spec_only: Annotated[
@@ -392,6 +380,7 @@ def list_checks(
         checks = registry.get_quality_suggestions()
     else:
         checks = registry.get_all()
+    checks = [c for c in checks if c.listable]
 
     if not checks:
         console.print("[yellow]No checks found.[/yellow]")

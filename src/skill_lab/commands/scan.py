@@ -19,7 +19,7 @@ from skill_lab.cli import (
 from skill_lab.core.telemetry import push_telemetry_extra
 
 
-def _run_bulk_scan(roots: list[Path]) -> None:
+def _run_bulk_scan(roots: list[Path], verbose: bool = False) -> None:
     """Discover and security-scan all skills under the given root directories."""
     from skill_lab.checks.static.security import SecurityScanCheck
     from skill_lab.parsers.skill_parser import parse_skill
@@ -37,7 +37,7 @@ def _run_bulk_scan(roots: list[Path]) -> None:
 
     check = SecurityScanCheck()
     any_blocked = False
-    summary_rows: list[tuple[str, str, str]] = []  # name, path, status
+    summary_rows: list[tuple[str, str, str, str]] = []  # name, path, plain_status, rich_status
 
     for sp in skill_paths:
         try:
@@ -63,19 +63,32 @@ def _run_bulk_scan(roots: list[Path]) -> None:
             console.print()
         elif status == "sus":
             status_str = "[bold yellow]SUS[/bold yellow]"
+            if verbose:
+                console.print(f"[bold]{skill_name}[/bold] ({rel_path})")
+                for f in findings:
+                    console.print(
+                        f"  [yellow]~[/yellow] {f.get('problem', '')} — {f.get('text', '')}"
+                    )
+                console.print()
         else:
             status_str = "[bold green]ALLOW[/bold green]"
 
-        summary_rows.append((skill_name, rel_path, status_str))
+        summary_rows.append((skill_name, rel_path, status, status_str))
 
     console.print()
     table = Table(title=f"Security Summary — {len(skill_paths)} skill(s)", box=box.ROUNDED)
     table.add_column("Skill", style="cyan")
     table.add_column("Path", style="dim")
     table.add_column("Status", justify="center")
-    for name, path, status_str in summary_rows:
-        table.add_row(name, path, status_str)
+    for name, path, _status, rich_status in summary_rows:
+        table.add_row(name, path, rich_status)
     console.print(table)
+
+    has_issues = any_blocked or any(s == "sus" for _, _, s, _ in summary_rows)
+    if has_issues:
+        console.print(
+            "[dim]Run [bold]sklab scan <path>[/bold] on any skill above for full details.[/dim]"
+        )
 
     if any_blocked:
         raise typer.Exit(code=1)
@@ -98,6 +111,14 @@ def scan(
             help="Discover and scan all skills in the current directory (recursive)",
         ),
     ] = False,
+    verbose: Annotated[
+        bool,
+        typer.Option(
+            "--verbose",
+            "-v",
+            help="Show findings for SUS skills in addition to BLOCK (bulk mode only)",
+        ),
+    ] = False,
 ) -> None:
     """Run the security scan and show detailed findings.
 
@@ -115,7 +136,7 @@ def scan(
         raise typer.Exit(code=1)
 
     if all_skills:
-        _run_bulk_scan([Path.cwd()])
+        _run_bulk_scan([Path.cwd()], verbose=verbose)
         return
 
     skill_path = _resolve_skill_path(skill_path)

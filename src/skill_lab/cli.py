@@ -65,8 +65,10 @@ def _discover_skills(root: Path) -> list[Path]:
     """
     skills: list[Path] = []
     for path in sorted(root.rglob("SKILL.md")):
-        # Skip hidden dirs in the path (e.g. .claude/.skill/...)
-        if any(part.startswith(".") for part in path.parts):
+        # Skip hidden dirs relative to root (e.g. .git, .skill-lab subdirs),
+        # but allow root itself to be a hidden directory.
+        relative = path.relative_to(root)
+        if any(part.startswith(".") for part in relative.parts):
             continue
         skills.append(path.parent)
     return skills
@@ -242,38 +244,36 @@ def _maybe_first_run_scan() -> bool:
     console.print(f"[dim]Found {len(skill_paths)} skill(s). Running initial evaluation...[/dim]\n")
 
     from skill_lab.evaluators.static_evaluator import StaticEvaluator
-    from skill_lab.reporters.console_reporter import ConsoleReporter
 
     evaluator = StaticEvaluator()
-    summary_rows: list[tuple[str, str, str, str]] = []
+    summary_rows: list[tuple[str, str, str]] = []
 
     for sp in skill_paths:
         try:
-            report = evaluator.evaluate(sp)
+            passed, errors = evaluator.check(sp)
         except Exception as e:
-            console.print(f"[red]Error evaluating {sp.name}: {e}[/red]")
+            console.print(f"[red]Error checking {sp.name}: {e}[/red]")
             continue
 
-        ConsoleReporter(verbose=False).report(report)
-
-        score_str = f"{report.quality_score:.1f}"
-        status_str = "[green]PASS[/green]" if report.overall_pass else "[red]FAIL[/red]"
-        skill_name = report.skill_name or sp.name
+        status_str = "[green]PASS[/green]" if passed else "[red]FAIL[/red]"
         try:
             rel_path = str(sp.relative_to(cwd))
         except ValueError:
             rel_path = str(sp)
-        summary_rows.append((skill_name, rel_path, score_str, status_str))
+        summary_rows.append((sp.name, rel_path, status_str))
+
+        if not passed:
+            for error in errors:
+                console.print(f"  [red]X[/red] [{error.check_id}] {error.message}")
 
     # Summary table
     console.print()
     table = Table(title=f"Initial Scan — {len(skill_paths)} skill(s)", box=box.ROUNDED)
     table.add_column("Skill", style="cyan")
     table.add_column("Path", style="dim")
-    table.add_column("Score", justify="right")
     table.add_column("Status", justify="center")
-    for name, path, score, status in summary_rows:
-        table.add_row(name, path, score, status)
+    for name, path, status in summary_rows:
+        table.add_row(name, path, status)
     console.print(table)
     console.print()
 
@@ -312,6 +312,13 @@ def _print_getting_started() -> None:
     guide.add_column(style="dim")
 
     guide.add_row(
+        "sklab check [green]./my-skill[/green]", "Quick pass/fail — exits 0 or 1 (great for CI)"
+    )
+    guide.add_row("  [dim]--spec-only / -s[/dim]", "Only validate against the Agent Skills spec")
+    guide.add_row("  [dim]--all[/dim]", "Validate every skill in the current directory")
+    guide.add_row("  [dim]--repo[/dim]", "Validate every skill from the git repo root")
+    guide.add_row("", "")
+    guide.add_row(
         "sklab evaluate [green]./my-skill[/green]", "Full quality evaluation (0–100 score)"
     )
     guide.add_row("  [dim]--verbose / -V[/dim]", "Show all checks, not just failures")
@@ -319,38 +326,29 @@ def _print_getting_started() -> None:
     guide.add_row("  [dim]--all[/dim]", "Evaluate every skill in the current directory")
     guide.add_row("", "")
     guide.add_row(
-        "sklab validate [green]./my-skill[/green]", "Quick pass/fail — exits 0 or 1 (great for CI)"
-    )
-    guide.add_row("  [dim]--spec-only / -s[/dim]", "Only validate against the Agent Skills spec")
-    guide.add_row("  [dim]--all[/dim]", "Validate every skill in the current directory")
-    guide.add_row("  [dim]--repo[/dim]", "Validate every skill from the git repo root")
-    guide.add_row("", "")
-    guide.add_row(
         "sklab scan [green]./my-skill[/green]", "Security scan — shows BLOCK / SUS / ALLOW status"
     )
     guide.add_row("  [dim]--all[/dim]", "Scan every skill in the current directory")
-    guide.add_row("", "")
-    guide.add_row("sklab list-checks", "Browse all 28 checks across 4 dimensions")
-    guide.add_row("  [dim]--spec-only[/dim]", "Only spec-required checks")
-    guide.add_row("  [dim]--suggestions-only[/dim]", "Only quality suggestions")
     guide.add_row("", "")
     guide.add_row("sklab stats", "Your personal usage history and score trends")
     guide.add_row("  [dim]count[/dim]", "Skill invocation counts for the current month")
     guide.add_row("  [dim]score[/dim]", "Score trend for all evaluated skills")
     guide.add_row("  [dim]tokens[/dim]", "Token usage per skill for the current month")
     guide.add_row("", "")
+    guide.add_row("sklab list-checks", "Browse all 29 checks across 5 dimensions")
+    guide.add_row("  [dim]--spec-only[/dim]", "Only spec-required checks")
+    guide.add_row("  [dim]--suggestions-only[/dim]", "Only quality suggestions")
+
+    guide.add_row("", "")
     guide.add_row(
         "sklab generate [green]./my-skill[/green]",
         "Auto-generate trigger tests via LLM",
     )
-    guide.add_row("  [dim]--model <model>[/dim]", "Override the default model")
-    guide.add_row("  [dim]--force[/dim]", "Overwrite existing test file")
     guide.add_row("", "")
     guide.add_row(
         "sklab trigger [green]./my-skill[/green]",
         "Run trigger tests against a live runtime",
     )
-    guide.add_row("  [dim]--type <type>[/dim]", "Filter by trigger type")
     guide.add_row("", "")
     guide.add_row("sklab", "Re-run this guide anytime")
 

@@ -52,14 +52,21 @@ class TestEnableDisableCommands:
 
     def test_disable_sets_config(self, tmp_telemetry: dict[str, Path]) -> None:
         _write_config({"analytics_enabled": True, "user_uuid": "u1"})
-        result = runner.invoke(app, ["telemetry", "disable"])
+        result = runner.invoke(app, ["telemetry", "disable"], input="y\n")
         assert result.exit_code == 0
         assert "disabled" in result.output.lower()
         config = json.loads(tmp_telemetry["config"].read_text())
         assert config["analytics_enabled"] is False
 
+    def test_disable_cancelled(self, tmp_telemetry: dict[str, Path]) -> None:
+        _write_config({"analytics_enabled": True, "user_uuid": "u1"})
+        result = runner.invoke(app, ["telemetry", "disable"], input="n\n")
+        assert result.exit_code == 0
+        config = json.loads(tmp_telemetry["config"].read_text())
+        assert config["analytics_enabled"] is True  # unchanged
 
-# ─── sklab telemetry status ──────────────────────────────────────────────────
+
+# ─── sklab telemetry ─────────────────────────────────────────────────────────
 
 
 class TestStatusCommand:
@@ -69,7 +76,7 @@ class TestStatusCommand:
         monkeypatch.delenv("SKLAB_NO_ANALYTICS", raising=False)
         monkeypatch.delenv("DO_NOT_TRACK", raising=False)
         _write_config({"analytics_enabled": True, "user_uuid": "u1"})
-        result = runner.invoke(app, ["telemetry", "status"])
+        result = runner.invoke(app, ["telemetry"])
         assert result.exit_code == 0
         assert "enabled" in result.output.lower()
 
@@ -78,7 +85,7 @@ class TestStatusCommand:
     ) -> None:
         monkeypatch.setenv("SKLAB_NO_ANALYTICS", "1")
         _write_config({"analytics_enabled": True, "user_uuid": "u1"})
-        result = runner.invoke(app, ["telemetry", "status"])
+        result = runner.invoke(app, ["telemetry"])
         assert result.exit_code == 0
         assert "SKLAB_NO_ANALYTICS" in result.output
 

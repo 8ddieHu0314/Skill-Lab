@@ -34,7 +34,7 @@ src/skill_lab/
 ├── cli.py                    # App definition, shared helpers, entry point
 ├── commands/                 # CLI command modules
 │   ├── __init__.py           # Imports all command modules
-│   ├── evaluate.py           # evaluate, validate, list-checks
+│   ├── evaluate.py           # evaluate, check, list-checks
 │   ├── scan.py               # security scan
 │   ├── trigger.py            # trigger tests
 │   ├── generate.py           # LLM-based test generation
@@ -416,10 +416,10 @@ sklab evaluate [./my-skill] [-f console|json] [-o file.json] [-V] [-s]
 sklab evaluate --all             # Discover + evaluate all skills under cwd (recursive)
 sklab evaluate --repo            # Discover + evaluate all skills from git repo root
 
-# Quick validation (exit 0 or 1, defaults to current directory)
-sklab validate [./my-skill] [-s]
-sklab validate --all             # Discover + validate all skills under cwd (recursive)
-sklab validate --repo            # Discover + validate all skills from git repo root
+# Quick check (exit 0 or 1, defaults to current directory)
+sklab check [./my-skill] [-s]
+sklab check --all                # Discover + check all skills under cwd (recursive)
+sklab check --repo               # Discover + check all skills from git repo root
 
 # Security scan (exits 1 on BLOCK)
 sklab scan [./my-skill]
@@ -453,14 +453,13 @@ sklab stats tokens            # Table: skill name | tokens/invocation | total to
 sklab telemetry               # Show status (same as status)
 sklab telemetry enable        # Enable analytics
 sklab telemetry disable       # Disable analytics
-sklab telemetry status        # Rich panel: enabled/disabled, env overrides, DB path, row counts
 sklab telemetry show [-n N] [--json]  # View recent events as table or JSON
 
 # One-time hook setup for invocation tracking (v0.5.0)
 sklab setup
 ```
 
-**Path Defaults:** The `evaluate`, `validate`, `trigger`, `generate`, `info`, and `prompt` commands default to the current directory when no skill path is provided. They validate that `SKILL.md` exists in the target directory via the shared `_resolve_skill_path()` helper.
+**Path Defaults:** The `evaluate`, `check`, `trigger`, `generate`, `info`, and `prompt` commands default to the current directory when no skill path is provided. They validate that `SKILL.md` exists in the target directory via the shared `_resolve_skill_path()` helper.
 
 **First-run onboarding (`app_callback`):** Running bare `sklab` (no subcommand) checks for `~/.sklab/.initialized`. If absent, it scans the git repo root → cwd for skills, runs `evaluate` on each, prints a summary table, then shows the Getting Started guide. The sentinel is written before scanning so a crash doesn't re-trigger it. On all subsequent bare `sklab` invocations, only the Getting Started guide is shown.
 
@@ -665,7 +664,7 @@ scenarios:
 | **90-day retention** | Local telemetry rows older than 90 days are auto-deleted (throttled to once/day). |
 | **Telemetry debug mode** | `SKLAB_TELEMETRY_DEBUG=1` prints the JSON payload to stderr and skips the POST — allows users to audit exactly what would be sent |
 | **Telemetry independent of analytics opt-in** | PyPI version update checks run regardless of whether the user opted into analytics |
-| **Telemetry subcommands untracked** | `telemetry status/enable/disable/show` intentionally have no `@_with_telemetry` decorator — managing telemetry settings should not itself generate telemetry events |
+| **Telemetry subcommands untracked** | `telemetry enable/disable/show` intentionally have no `@_with_telemetry` decorator — managing telemetry settings should not itself generate telemetry events |
 
 ---
 

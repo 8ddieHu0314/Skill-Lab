@@ -14,12 +14,6 @@ SEVERITY_STYLES: dict[str, str] = {
     "low": "blue",
 }
 
-SEVERITY_ICONS: dict[str, str] = {
-    "high": "X",
-    "medium": "!",
-    "low": "i",
-}
-
 
 def score_color(score: float) -> str:
     """Return a rich color name based on a 0-100 quality score."""
@@ -45,10 +39,6 @@ class ConsoleReporter:
     def _severity_style(self, severity: Severity) -> str:
         """Get the rich style for a severity level."""
         return SEVERITY_STYLES.get(severity.value, "white")
-
-    def _severity_icon(self, severity: Severity) -> str:
-        """Get the icon for a severity level."""
-        return SEVERITY_ICONS.get(severity.value, "?")
 
     def _print_verbose_hint(self, total_count: int, shown_count: int) -> None:
         """Print a hint about hidden passing checks when not in verbose mode."""
@@ -115,7 +105,7 @@ class ConsoleReporter:
                 status_icon = (
                     "[green]OK[/green]"
                     if result.passed
-                    else f"[{self._severity_style(result.severity)}]{self._severity_icon(result.severity)}[/{self._severity_style(result.severity)}]"
+                    else f"[{self._severity_style(result.severity)}]X[/{self._severity_style(result.severity)}]"
                 )
                 severity_text = Text(
                     result.severity.value.upper(),
