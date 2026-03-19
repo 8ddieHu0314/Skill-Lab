@@ -217,9 +217,9 @@ def _run_bulk_validate(roots: list[Path], spec_only: bool) -> None:
         console.print("[yellow]No skill folders found (no SKILL.md files discovered).[/yellow]")
         raise typer.Exit(code=0)
 
-    console.print(f"[dim]Found {len(skill_paths)} skill(s). Running validate...[/dim]\n")
+    console.print(f"[dim]Found {len(skill_paths)} skill(s). Running check...[/dim]\n")
 
-    evaluator = StaticEvaluator(spec_only=spec_only, include_security=True)
+    evaluator = StaticEvaluator(spec_only=spec_only)
     any_failed = False
     summary_rows: list[tuple[str, str, str]] = []
 
@@ -240,21 +240,9 @@ def _run_bulk_validate(roots: list[Path], spec_only: bool) -> None:
             console.print(f"[bold]{skill_name}[/bold] ({rel_path})")
             for error in errors:
                 console.print(f"  [red]X[/red] [{error.check_id}] {error.message}")
-            has_security = any(e.check_id == "security.scan" for e in errors)
-            has_other = any(e.check_id != "security.scan" for e in errors)
-            if has_security and has_other:
-                console.print(
-                    f"  [dim]Run [bold]sklab evaluate {rel_path}[/bold] for full quality details "
-                    f"or [bold]sklab scan {rel_path}[/bold] for security findings.[/dim]"
-                )
-            elif has_security:
-                console.print(
-                    f"  [dim]Run [bold]sklab scan {rel_path}[/bold] for full security findings.[/dim]"
-                )
-            else:
-                console.print(
-                    f"  [dim]Run [bold]sklab evaluate {rel_path}[/bold] for full details.[/dim]"
-                )
+            console.print(
+                f"  [dim]Run [bold]sklab evaluate {rel_path}[/bold] for full details.[/dim]"
+            )
             console.print()
             any_failed = True
             summary_rows.append((skill_name, rel_path, "[red]FAIL[/red]"))
@@ -273,8 +261,8 @@ def _run_bulk_validate(roots: list[Path], spec_only: bool) -> None:
 
 
 @app.command()
-@_with_telemetry("validate")
-def validate(
+@_with_telemetry("check")
+def check(
     skill_path: Annotated[
         Path | None,
         typer.Argument(
@@ -330,7 +318,7 @@ def validate(
     skill_path = _resolve_skill_path(skill_path)
 
     with _cli_error_handler():
-        evaluator = StaticEvaluator(spec_only=spec_only, include_security=True)
+        evaluator = StaticEvaluator(spec_only=spec_only)
         passed, errors = evaluator.validate(skill_path)
 
     push_telemetry_extra(skill_name=skill_path.name)
@@ -377,7 +365,7 @@ def list_checks(
     ] = False,
 ) -> None:
     """List all available checks."""
-    # Get checks
+    # Get checks (always exclude non-listable checks like security.scan)
     if dimension:
         try:
             dim = EvalDimension(dimension.lower())
@@ -392,6 +380,7 @@ def list_checks(
         checks = registry.get_quality_suggestions()
     else:
         checks = registry.get_all()
+    checks = [c for c in checks if c.listable]
 
     if not checks:
         console.print("[yellow]No checks found.[/yellow]")

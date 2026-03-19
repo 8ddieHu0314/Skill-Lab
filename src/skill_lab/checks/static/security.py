@@ -491,6 +491,7 @@ class SecurityScanCheck(StaticCheck):
     )
     severity: ClassVar[Severity] = Severity.HIGH
     dimension: ClassVar[EvalDimension] = EvalDimension.SECURITY
+    listable: ClassVar[bool] = False
     fix: ClassVar[str] = (
         "Remove prompt injection, jailbreak, evaluator-manipulation, and unicode obfuscation "
         "patterns from the skill body and frontmatter"

@@ -39,9 +39,7 @@ class StaticEvaluator:
             spec_only: If True, only run checks required by the Agent Skills spec.
                       Quality suggestion checks will be skipped.
             include_security: If True, include the security.scan check.
-                      Excluded by default so it does not appear in `evaluate` output.
-                      Use `sklab validate` (which sets this True) or `sklab scan`
-                      for security results.
+                      Excluded by default. Use `sklab scan` for security results.
         """
         self.check_ids = check_ids
         self.spec_only = spec_only

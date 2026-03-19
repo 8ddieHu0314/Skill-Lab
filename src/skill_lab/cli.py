@@ -65,8 +65,10 @@ def _discover_skills(root: Path) -> list[Path]:
     """
     skills: list[Path] = []
     for path in sorted(root.rglob("SKILL.md")):
-        # Skip hidden dirs in the path (e.g. .claude/.skill/...)
-        if any(part.startswith(".") for part in path.parts):
+        # Skip hidden dirs relative to root (e.g. .git, .skill-lab subdirs),
+        # but allow root itself to be a hidden directory.
+        relative = path.relative_to(root)
+        if any(part.startswith(".") for part in relative.parts):
             continue
         skills.append(path.parent)
     return skills
@@ -319,7 +321,7 @@ def _print_getting_started() -> None:
     guide.add_row("  [dim]--all[/dim]", "Evaluate every skill in the current directory")
     guide.add_row("", "")
     guide.add_row(
-        "sklab validate [green]./my-skill[/green]", "Quick pass/fail — exits 0 or 1 (great for CI)"
+        "sklab check [green]./my-skill[/green]", "Quick pass/fail — exits 0 or 1 (great for CI)"
     )
     guide.add_row("  [dim]--spec-only / -s[/dim]", "Only validate against the Agent Skills spec")
     guide.add_row("  [dim]--all[/dim]", "Validate every skill in the current directory")
