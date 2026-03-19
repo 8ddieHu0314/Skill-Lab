@@ -63,12 +63,6 @@ def telemetry_disable() -> None:
     console.print("[yellow]Telemetry disabled.[/yellow]")
 
 
-@telemetry_app.command("status")
-def telemetry_status() -> None:
-    """Show current telemetry configuration and data summary."""
-    _telemetry_status()
-
-
 @telemetry_app.command("show")
 def telemetry_show(
     limit: Annotated[
