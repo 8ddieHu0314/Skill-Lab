@@ -143,8 +143,7 @@ test_cases:
 sklab collects anonymous usage data (command names, duration, exit codes, scores, token counts). **No skill content, file paths, or flag values are ever collected.** To opt out:
 
 ```bash
-export SKLAB_NO_ANALYTICS=1   # sklab-specific
-export DO_NOT_TRACK=1          # standard cross-tool opt-out
+sklab telemetry disable
 ```
 
 See [docs/PRIVACY.md](docs/PRIVACY.md) for the full privacy policy.
