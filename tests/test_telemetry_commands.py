@@ -59,7 +59,7 @@ class TestEnableDisableCommands:
         assert config["analytics_enabled"] is False
 
 
-# ─── sklab telemetry status ──────────────────────────────────────────────────
+# ─── sklab telemetry ─────────────────────────────────────────────────────────
 
 
 class TestStatusCommand:
@@ -69,7 +69,7 @@ class TestStatusCommand:
         monkeypatch.delenv("SKLAB_NO_ANALYTICS", raising=False)
         monkeypatch.delenv("DO_NOT_TRACK", raising=False)
         _write_config({"analytics_enabled": True, "user_uuid": "u1"})
-        result = runner.invoke(app, ["telemetry", "status"])
+        result = runner.invoke(app, ["telemetry"])
         assert result.exit_code == 0
         assert "enabled" in result.output.lower()
 
@@ -78,7 +78,7 @@ class TestStatusCommand:
     ) -> None:
         monkeypatch.setenv("SKLAB_NO_ANALYTICS", "1")
         _write_config({"analytics_enabled": True, "user_uuid": "u1"})
-        result = runner.invoke(app, ["telemetry", "status"])
+        result = runner.invoke(app, ["telemetry"])
         assert result.exit_code == 0
         assert "SKLAB_NO_ANALYTICS" in result.output
 

@@ -314,13 +314,6 @@ def _print_getting_started() -> None:
     guide.add_column(style="dim")
 
     guide.add_row(
-        "sklab evaluate [green]./my-skill[/green]", "Full quality evaluation (0–100 score)"
-    )
-    guide.add_row("  [dim]--verbose / -V[/dim]", "Show all checks, not just failures")
-    guide.add_row("  [dim]--spec-only / -s[/dim]", "Only run the 10 spec-required checks")
-    guide.add_row("  [dim]--all[/dim]", "Evaluate every skill in the current directory")
-    guide.add_row("", "")
-    guide.add_row(
         "sklab check [green]./my-skill[/green]", "Quick pass/fail — exits 0 or 1 (great for CI)"
     )
     guide.add_row("  [dim]--spec-only / -s[/dim]", "Only validate against the Agent Skills spec")
@@ -328,31 +321,35 @@ def _print_getting_started() -> None:
     guide.add_row("  [dim]--repo[/dim]", "Validate every skill from the git repo root")
     guide.add_row("", "")
     guide.add_row(
+        "sklab evaluate [green]./my-skill[/green]", "Full quality evaluation (0–100 score)"
+    )
+    guide.add_row("  [dim]--verbose / -V[/dim]", "Show all checks, not just failures")
+    guide.add_row("  [dim]--spec-only / -s[/dim]", "Only run the 10 spec-required checks")
+    guide.add_row("  [dim]--all[/dim]", "Evaluate every skill in the current directory")
+    guide.add_row("", "")
+    guide.add_row(
         "sklab scan [green]./my-skill[/green]", "Security scan — shows BLOCK / SUS / ALLOW status"
     )
     guide.add_row("  [dim]--all[/dim]", "Scan every skill in the current directory")
-    guide.add_row("", "")
-    guide.add_row("sklab list-checks", "Browse all 28 checks across 4 dimensions")
-    guide.add_row("  [dim]--spec-only[/dim]", "Only spec-required checks")
-    guide.add_row("  [dim]--suggestions-only[/dim]", "Only quality suggestions")
     guide.add_row("", "")
     guide.add_row("sklab stats", "Your personal usage history and score trends")
     guide.add_row("  [dim]count[/dim]", "Skill invocation counts for the current month")
     guide.add_row("  [dim]score[/dim]", "Score trend for all evaluated skills")
     guide.add_row("  [dim]tokens[/dim]", "Token usage per skill for the current month")
     guide.add_row("", "")
+    guide.add_row("sklab list-checks", "Browse all 28 checks across 4 dimensions")
+    guide.add_row("  [dim]--spec-only[/dim]", "Only spec-required checks")
+
+    guide.add_row("", "")
     guide.add_row(
         "sklab generate [green]./my-skill[/green]",
         "Auto-generate trigger tests via LLM",
     )
-    guide.add_row("  [dim]--model <model>[/dim]", "Override the default model")
-    guide.add_row("  [dim]--force[/dim]", "Overwrite existing test file")
     guide.add_row("", "")
     guide.add_row(
         "sklab trigger [green]./my-skill[/green]",
         "Run trigger tests against a live runtime",
     )
-    guide.add_row("  [dim]--type <type>[/dim]", "Filter by trigger type")
     guide.add_row("", "")
     guide.add_row("sklab", "Re-run this guide anytime")
 
