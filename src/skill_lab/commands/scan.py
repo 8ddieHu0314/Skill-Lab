@@ -16,6 +16,7 @@ from skill_lab.cli import (
     app,
     console,
 )
+from skill_lab.core.telemetry import push_telemetry_extra
 
 
 def _run_bulk_scan(roots: list[Path]) -> None:
@@ -118,6 +119,7 @@ def scan(
         return
 
     skill_path = _resolve_skill_path(skill_path)
+    push_telemetry_extra(skill_name=skill_path.name)
 
     with _cli_error_handler():
         from skill_lab.parsers.skill_parser import parse_skill

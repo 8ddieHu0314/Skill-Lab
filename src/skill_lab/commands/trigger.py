@@ -17,6 +17,7 @@ from skill_lab.cli import (
 )
 from skill_lab.core.constants import TESTS_DIR
 from skill_lab.core.models import TriggerReport, TriggerType
+from skill_lab.core.telemetry import push_telemetry_extra
 from skill_lab.triggers.trigger_evaluator import TriggerEvaluator
 
 
@@ -130,6 +131,7 @@ def trigger(
     Requires test definitions in .skill-lab/tests/scenarios.yaml or .skill-lab/tests/triggers.yaml.
     """
     skill_path = _resolve_skill_path(skill_path)
+    push_telemetry_extra(skill_name=skill_path.name)
 
     # Check for trigger test files
     tests_dir = skill_path / TESTS_DIR

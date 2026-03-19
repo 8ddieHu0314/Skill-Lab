@@ -15,6 +15,7 @@ from skill_lab.cli import (
     app,
     console,
 )
+from skill_lab.core.telemetry import push_telemetry_extra
 from skill_lab.core.tokens import estimate_tokens
 from skill_lab.evaluators.trace_evaluator import TraceEvaluator
 from skill_lab.parsers.skill_parser import parse_skill
@@ -48,6 +49,7 @@ def info(
 ) -> None:
     """Show skill metadata and token cost estimates."""
     skill_path = _resolve_skill_path(skill_path)
+    push_telemetry_extra(skill_name=skill_path.name)
     skill = parse_skill(skill_path)
 
     if skill.metadata is None:
@@ -156,6 +158,8 @@ def prompt(
         raise typer.Exit(code=1)
 
     paths = skill_paths if skill_paths else [Path.cwd()]
+    resolved_names = [_resolve_skill_path(sp).name for sp in paths]
+    push_telemetry_extra(skill_name=",".join(resolved_names))
     skills_data: list[dict[str, str]] = []
 
     for sp in paths:

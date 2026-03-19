@@ -14,6 +14,8 @@ from skill_lab.cli import (
     console,
 )
 from skill_lab.core.constants import TESTS_DIR
+from skill_lab.core.telemetry import push_telemetry_extra
+from skill_lab.triggers.generator import TriggerGenerator
 
 
 @app.command("generate")
@@ -47,19 +49,9 @@ def generate(
     ~10-12 test cases across all 4 trigger types (explicit, implicit,
     contextual, negative).
 
-    Requires the 'anthropic' package: pip install skill-lab[generate]
     """
     skill_path = _resolve_skill_path(skill_path)
-
-    # Lazy import — anthropic is an optional dependency
-    try:
-        from skill_lab.triggers.generator import TriggerGenerator
-    except ImportError:
-        console.print(
-            "[red]Error: The 'anthropic' package is required for test generation.[/red]\n"
-            "[dim]Install it with:[/dim] pip install skill-lab[generate]"
-        )
-        raise typer.Exit(code=1) from None
+    push_telemetry_extra(skill_name=skill_path.name)
 
     # Check API key
     api_key = os.environ.get("ANTHROPIC_API_KEY")

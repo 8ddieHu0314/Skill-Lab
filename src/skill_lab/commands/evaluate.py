@@ -333,6 +333,8 @@ def validate(
         evaluator = StaticEvaluator(spec_only=spec_only, include_security=True)
         passed, errors = evaluator.validate(skill_path)
 
+    push_telemetry_extra(skill_name=skill_path.name)
+
     check_count = len(evaluator._get_checks())
     if passed:
         console.print(

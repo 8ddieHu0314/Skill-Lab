@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Python CLI tool that evaluates agent skills (SKILL.md files) via static analysis, trigger testing, and LLM-based test generation. Produces a 0-100 score across 28 checks (structure:7, naming:1, schema:9, content:11) / 5 dimensions.
+Python CLI tool that evaluates agent skills (SKILL.md files) via static analysis, trigger testing, and LLM-based test generation. Produces a 0-100 score across 29 checks (structure:7, naming:1, schema:9, content:11, security:1) / 5 dimensions.
 
 ## Naming
 
@@ -18,6 +18,8 @@ Python CLI tool that evaluates agent skills (SKILL.md files) via static analysis
 |----------|----------|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Tech stack, data flow, CLI commands, check systems, design patterns |
 | [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) | Vision, roadmap, design decisions |
+| [docs/SECURITY.md](docs/SECURITY.md) | 5-layer security scan details |
+| [docs/PRIVACY.md](docs/PRIVACY.md) | Telemetry & privacy policy |
 | [docs/versions/](docs/versions/) | Per-version specs (v0.1.0–v1.0.0) |
 
 After code changes: update `ARCHITECTURE.md` (modules/CLI) and the relevant `docs/versions/vX.X.X.md`.
@@ -36,6 +38,8 @@ sklab trigger                 # run trigger tests (requires Claude CLI)
 sklab generate                # generate trigger tests via LLM (requires anthropic)
 sklab stats                   # usage statistics
 sklab setup                   # configure hooks for Claude Code/Cursor
+sklab scan ./my-skill         # security scan (BLOCK/SUS/ALLOW)
+sklab list-checks             # browse all checks (--spec-only, --suggestions-only)
 pytest tests/ -v                            # run all tests
 pytest tests/test_checks.py -v              # run single test file
 pytest tests/test_checks.py -k "keyword" -v # filter by keyword
@@ -47,10 +51,10 @@ ruff check src/ && ruff format src/
 ## Critical Architecture Notes
 
 - **Two check systems**: behavioral (`@register_check` classes in `structure.py`, `naming.py`, `content.py`) and schema-based (`FieldRule` in `schema.py` — append to add a check, no class needed). See ARCHITECTURE.md for full details.
-- **Side-effect registration**: `StaticEvaluator.__init__()` imports check modules (`content`, `naming`, `schema`, `structure`) to trigger `@register_check` decorators. All checks must be registered before `registry.get_all()` is called.
+- **Side-effect registration**: `StaticEvaluator.__init__()` imports check modules (`content`, `naming`, `schema`, `security`, `structure`) to trigger `@register_check` decorators. All checks must be registered before `registry.get_all()` is called.
 - **Sync requirement**: `SPEC_FRONTMATTER_FIELDS` in `structure.py` must stay in sync with `FRONTMATTER_SCHEMA` in `schema.py`.
 - **Scoring**: Weighted across 5 dimensions (Structure, Naming, Description, Content, Execution) by severity (HIGH > MEDIUM > LOW). Execution is trace-based (`tracechecks/`) and scored separately. See `scoring.py` for exact weights.
-- **Optional dep**: `anthropic` is not imported in `triggers/__init__.py` — only lazy-imported inside the `generate` CLI command. Install via `pip install skill-lab[generate]`.
+- **Anthropic SDK**: `anthropic` is a required dependency, used by `sklab generate` for LLM-based trigger test generation.
 - **Test fixtures**: `tests/fixtures/skills/` — each subdirectory is a mock skill with `SKILL.md`.
 - **Trigger test files**: `.skill-lab/tests/triggers.yaml`.
 

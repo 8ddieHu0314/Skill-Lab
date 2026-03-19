@@ -12,7 +12,7 @@ This document provides a comprehensive overview of Skill-Lab's technology stack 
 | **Typer** | ≥0.9.0 | CLI framework built on Click with type hints |
 | **Rich** | ≥13.0.0 | Terminal formatting (tables, panels, colors) |
 | **PyYAML** | ≥6.0 | YAML frontmatter parsing |
-| **anthropic** | ≥0.39.0 | LLM-based test generation (optional, `pip install skill-lab[generate]`) |
+| **anthropic** | ≥0.39.0 | LLM-based test generation (`sklab generate`) |
 
 ### Development Dependencies
 

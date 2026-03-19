@@ -27,9 +27,6 @@ A Python CLI tool for evaluating agent skills through static analysis, trigger t
 # From PyPI
 pip install skill-lab
 
-# With LLM-based trigger generation (requires Anthropic API)
-pip install skill-lab[generate]
-
 # From source
 pip install -e .
 
