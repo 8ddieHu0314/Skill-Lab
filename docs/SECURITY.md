@@ -49,7 +49,7 @@ Tokenises the NFKC-normalised body and flags any word that mixes ASCII letters w
 
 Validates that the frontmatter contains only expected keys and well-formed values. Any unexpected key or malformed value is a **BLOCK** finding.
 
-**Allowlisted keys:** `name`, `description`, `license`, `version`, `trigger`, `tags`, `author`, `compatibility`, `metadata`, `allowed-tools`
+**Allowlisted keys:** `name`, `description`, `license`, `version`, `trigger`, `tags`, `author`, `compatibility`, `metadata`, `allowed-tools`, `disable-model-invocation`, `user-invocable`, `model`, `context`, `agent`, `hooks`, `argument-hint`
 
 | Check | Detail |
 |-------|--------|
@@ -58,7 +58,7 @@ Validates that the frontmatter contains only expected keys and well-formed value
 | Oversized `description` | > 500 characters |
 | Non-list `tags` value | `tags` must be a list of strings |
 | Nested dict in any field | Unexpected object values (except `metadata`) |
-| Injection in field values | All string field values are also scanned by Layers D and E |
+| Injection in field values | All string and list-item field values are also scanned by Layers D and E |
 
 ---
 
@@ -79,7 +79,7 @@ Runs regex patterns against the NFKC-normalised body and all frontmatter string 
 - Data exfiltration: `exfiltrate`, `send this conversation`, `output hidden instructions`
 - Developer mode: `developer mode enabled`
 
-**WARN patterns** (also **BLOCK** — softer phrasing, same result):
+**Indirect patterns** (softer phrasing, still produces **BLOCK**):
 
 - Fictional framing: `in a fictional/hypothetical world/scenario/context`
 - Safety negation: `pretend safety rules do not exist`, `pretend you have no restrictions`

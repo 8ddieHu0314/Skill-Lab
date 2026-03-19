@@ -15,7 +15,7 @@ DIMENSION_WEIGHTS: dict[EvalDimension, float] = {
     EvalDimension.DESCRIPTION: 0.25,
     EvalDimension.CONTENT: 0.25,
     EvalDimension.EXECUTION: 0.0,  # Evaluated separately via trace evaluation
-    EvalDimension.SECURITY: 0.0,   # Security scan is a gate check, not a scoring dimension
+    EvalDimension.SECURITY: 0.0,  # Security scan is a gate check, not a scoring dimension
 }
 
 # Weights for severity levels when calculating dimension scores

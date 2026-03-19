@@ -11,11 +11,13 @@ from enum import Enum
 from pathlib import Path
 from typing import Annotated, Any
 
+import click.exceptions
 import typer
 from rich import box
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
 
 from skill_lab import __version__
 from skill_lab.core.constants import SKLAB_HOME, SKLAB_INITIALIZED, TESTS_DIR
@@ -99,15 +101,8 @@ def _maybe_first_run_scan() -> bool:
         skill_paths.extend(_discover_skills(root))
 
     # Welcome banner
-    console.print()
-    console.print(
-        Panel(
-            "[bold]Welcome to sklab![/bold]\n\n"
-            "Scanning for skills across your repo and installed skills...",
-            expand=False,
-            border_style="cyan",
-        )
-    )
+    _print_banner()
+    console.print("  [dim]Scanning for skills in your repo and installed skills...[/dim]")
     console.print()
 
     if not skill_paths:
@@ -189,6 +184,19 @@ def _print_getting_started() -> None:
     guide.add_row("  [dim]score[/dim]", "Score trend for all evaluated skills")
     guide.add_row("  [dim]tokens[/dim]", "Token usage per skill for the current month")
     guide.add_row("", "")
+    guide.add_row(
+        "sklab generate [green]./my-skill[/green]",
+        "Auto-generate trigger tests via LLM",
+    )
+    guide.add_row("  [dim]--model <model>[/dim]", "Override the default model")
+    guide.add_row("  [dim]--force[/dim]", "Overwrite existing test file")
+    guide.add_row("", "")
+    guide.add_row(
+        "sklab trigger [green]./my-skill[/green]",
+        "Run trigger tests against a live runtime",
+    )
+    guide.add_row("  [dim]--type <type>[/dim]", "Filter by trigger type")
+    guide.add_row("", "")
     guide.add_row("sklab", "Re-run this guide anytime")
 
     console.print(
@@ -218,6 +226,7 @@ def app_callback(
 ) -> None:
     """Evaluate agent skills through static analysis and quality checks."""
     if ctx.invoked_subcommand is None and not _maybe_first_run_scan():
+        _print_banner()
         _print_getting_started()
 
 
@@ -306,6 +315,11 @@ def _record_telemetry(command: str, start: float, exit_code: int) -> None:
 # Params treated as positional args — not captured as flags
 _POSITIONAL_PARAMS = {"skill_path", "skill_paths", "trace"}
 
+# Kwarg names that don't map to --{name} flags
+_KWARG_TO_FLAG: dict[str, str] = {
+    "all_skills": "--all",
+}
+
 
 def _with_telemetry(command_name: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Decorator that wraps a CLI command with init + timing + event recording."""
@@ -320,7 +334,7 @@ def _with_telemetry(command_name: str) -> Callable[[Callable[..., Any]], Callabl
 
             # Capture boolean flags explicitly set to True
             flags = [
-                f"--{k.replace('_', '-')}"
+                _KWARG_TO_FLAG.get(k, f"--{k.replace('_', '-')}")
                 for k, v in kwargs.items()
                 if k not in _POSITIONAL_PARAMS and v is True
             ]
@@ -333,6 +347,9 @@ def _with_telemetry(command_name: str) -> Callable[[Callable[..., Any]], Callabl
                 return fn(*args, **kwargs)
             except SystemExit as e:
                 exit_code = e.code if isinstance(e.code, int) else 0
+                raise
+            except click.exceptions.Exit as e:
+                exit_code = e.exit_code
                 raise
             except Exception as e:
                 exit_code = 1
@@ -473,6 +490,30 @@ def _run_bulk_validate(roots: list[Path], spec_only: bool) -> None:
 
     if any_failed:
         raise typer.Exit(code=1)
+
+
+_BANNER_LINES = [
+    " ███████╗██╗  ██╗██╗██╗     ██╗          ██╗      █████╗ ██████╗ ",
+    " ██╔════╝██║ ██╔╝██║██║     ██║          ██║     ██╔══██╗██╔══██╗",
+    " ███████╗█████╔╝ ██║██║     ██║          ██║     ███████║██████╔╝",
+    " ╚════██║██╔═██╗ ██║██║     ██║          ██║     ██╔══██║██╔══██╗",
+    " ███████║██║  ██╗██║███████╗███████╗     ███████╗██║  ██║██████╔╝",
+    " ╚══════╝╚═╝  ╚═╝╚═╝╚══════╝╚══════╝     ╚══════╝╚═╝  ╚═╝╚═════╝",
+]
+_BANNER_COLORS = ["#5fd7ff", "#00afff", "#0087d7", "#0070c0", "#005faf", "#004080"]
+
+
+def _print_banner() -> None:
+    """Print the SKILL LAB ASCII banner with a blue gradient."""
+    console.print()
+    if console.width >= 70:
+        for line, color in zip(_BANNER_LINES, _BANNER_COLORS, strict=True):
+            console.print(Text(line, style=color))
+    else:
+        console.print(Text("  SKILL LAB", style="bold #00afff"))
+    console.print()
+    console.print(f"  [dim]Agent Skills Evaluation Framework — v{__version__}[/dim]")
+    console.print()
 
 
 @app.command()
@@ -646,13 +687,9 @@ def validate(
                 f"[dim]Run [bold]sklab scan{path_str}[/bold] for full security findings.[/dim]"
             )
         else:
-            console.print(
-                f"[dim]Run [bold]sklab evaluate{path_str}[/bold] for full details.[/dim]"
-            )
+            console.print(f"[dim]Run [bold]sklab evaluate{path_str}[/bold] for full details.[/dim]")
         console.print()
         raise typer.Exit(code=1)
-
-
 
 
 def _run_bulk_scan(roots: list[Path]) -> None:
@@ -804,6 +841,7 @@ def scan(
 
     if status == "block":
         raise typer.Exit(code=1)
+
 
 @app.command("list-checks")
 def list_checks(

@@ -687,6 +687,25 @@ def _inline_sync(
                     "UPDATE skill_events SET synced = 1 WHERE command_event_id = ?",
                     (command_event_id,),
                 )
+
+        # Also sync install data
+        if "install_uuid" in payload:
+            install_payload: dict[str, Any] = {
+                "event_kind": "install",
+                "install_uuid": payload["install_uuid"],
+                "sklab_version": payload.get("sklab_version"),
+                "os": payload.get("os"),
+                "python_version": payload.get("python_version"),
+                "is_ci": payload.get("is_ci"),
+                "ci_provider": payload.get("ci_provider"),
+                "timestamp": payload.get("timestamp"),
+            }
+            if _post_event(install_payload):
+                with contextlib.suppress(Exception), sqlite3.connect(SKLAB_DB) as conn:
+                    conn.execute(
+                        "UPDATE installs SET synced = 1 WHERE install_uuid = ?",
+                        (payload["install_uuid"],),
+                    )
     else:
         # Revert claim so retry thread can pick it up later
         with contextlib.suppress(Exception), sqlite3.connect(SKLAB_DB) as conn:
@@ -789,6 +808,48 @@ def _retry_stale_events() -> None:
                     conn.execute(
                         "UPDATE command_events SET synced = 0 WHERE id = ?",
                         (cmd_id,),
+                    )
+
+            # Retry stale install rows
+            stale_installs = conn.execute(
+                """
+                SELECT install_uuid, sklab_version, os, python_version,
+                       is_ci, ci_provider, last_seen_at
+                FROM installs
+                WHERE synced = 0 AND last_seen_at < ?
+                LIMIT 10
+                """,
+                (cutoff,),
+            ).fetchall()
+
+            for row in stale_installs:
+                inst_uuid = row[0]
+                conn.execute(
+                    "UPDATE installs SET synced = 2 WHERE install_uuid = ? AND synced = 0",
+                    (inst_uuid,),
+                )
+                if conn.execute("SELECT changes()").fetchone()[0] == 0:
+                    continue
+
+                inst_payload: dict[str, Any] = {
+                    "event_kind": "install",
+                    "install_uuid": inst_uuid,
+                    "sklab_version": row[1],
+                    "os": row[2],
+                    "python_version": row[3],
+                    "is_ci": bool(row[4]),
+                    "ci_provider": row[5],
+                    "timestamp": row[6],
+                }
+                if _post_event(inst_payload):
+                    conn.execute(
+                        "UPDATE installs SET synced = 1 WHERE install_uuid = ?",
+                        (inst_uuid,),
+                    )
+                else:
+                    conn.execute(
+                        "UPDATE installs SET synced = 0 WHERE install_uuid = ?",
+                        (inst_uuid,),
                     )
 
             # Retry stale error events

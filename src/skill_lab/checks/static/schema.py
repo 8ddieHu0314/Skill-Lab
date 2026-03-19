@@ -68,6 +68,7 @@ class FieldRule:
 
     # Actionable fix instruction for failures
     fix: str = ""
+    type_fix: str = ""  # Override fix when the failure is a type mismatch
 
 
 # ---------------------------------------------------------------------------
@@ -182,6 +183,7 @@ FRONTMATTER_SCHEMA: list[FieldRule] = [
         absent_pass_message="Compatibility field not present (optional)",
         no_metadata_context="check compatibility field",
         fix="Shorten the compatibility field to under 500 characters",
+        type_fix="Use a comma-separated string instead of a YAML list (e.g., 'claude-code, cursor')",
     ),
     # --- frontmatter.metadata-format ---
     FieldRule(
@@ -289,7 +291,8 @@ def _validate_rule(check: StaticCheck, skill: Skill, rule: FieldRule) -> CheckRe
         details: dict[str, Any] = {"type": actual_type}
         if rule.type_fail_details:
             details.update(rule.type_fail_details)
-        return check._fail(message, fix=fix, details=details, location=location)
+        type_fix = rule.type_fix or fix
+        return check._fail(message, fix=type_fix, details=details, location=location)
 
     # 5. Not-blank check (for string values)
     if rule.not_blank and isinstance(value, str) and not value.strip():

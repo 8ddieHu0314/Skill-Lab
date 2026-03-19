@@ -48,8 +48,12 @@ def _run_bulk_evaluate(
     summary_rows: list[tuple[str, str, str, str]] = []  # name, path, score, status
 
     for sp in skill_paths:
-        with _cli_error_handler():
+        try:
             report = evaluator.evaluate(sp)
+        except Exception as e:
+            console.print(f"[red]Error evaluating {sp.name}: {e}[/red]")
+            any_failed = True
+            continue
 
         if format == OutputFormat.json:
             json_reporter = JsonReporter()
@@ -66,6 +70,13 @@ def _run_bulk_evaluate(
 
         if not report.overall_pass:
             any_failed = True
+
+    if summary_rows:
+        scores = [float(row[2]) for row in summary_rows]
+        push_telemetry_extra(
+            skill_name=f"bulk({len(summary_rows)})",
+            score=round(sum(scores) / len(scores), 2),
+        )
 
     # Summary table
     if format == OutputFormat.console:
@@ -178,6 +189,9 @@ def evaluate(
         score=report.quality_score,
     )
 
+    if output and format == OutputFormat.console:
+        format = OutputFormat.json
+
     if format == OutputFormat.json:
         json_reporter = JsonReporter()
         if output:
@@ -210,8 +224,12 @@ def _run_bulk_validate(roots: list[Path], spec_only: bool) -> None:
     summary_rows: list[tuple[str, str, str]] = []
 
     for sp in skill_paths:
-        with _cli_error_handler():
+        try:
             passed, errors = evaluator.validate(sp)
+        except Exception as e:
+            console.print(f"[red]Error validating {sp.name}: {e}[/red]")
+            any_failed = True
+            continue
 
         skill_name = sp.name
         rel_path = str(sp.relative_to(Path.cwd())) if sp.is_relative_to(Path.cwd()) else str(sp)
@@ -315,10 +333,13 @@ def validate(
         evaluator = StaticEvaluator(spec_only=spec_only, include_security=True)
         passed, errors = evaluator.validate(skill_path)
 
+    check_count = len(evaluator._get_checks())
     if passed:
-        console.print("[green]Validation passed![/green]")
+        console.print(
+            f"[green]Validation passed![/green] ({skill_path.name} \u2014 {check_count} checks)"
+        )
     else:
-        console.print("[red]Validation failed![/red]")
+        console.print(f"[red]Validation failed![/red] ({skill_path.name})")
         console.print()
         for error in errors:
             console.print(f"  [red]X[/red] [{error.check_id}] {error.message}")
@@ -327,6 +348,7 @@ def validate(
 
 
 @app.command("list-checks")
+@_with_telemetry("list-checks")
 def list_checks(
     dimension: Annotated[
         str | None,

@@ -1,12 +1,13 @@
 [project]
 name = "skill-lab"
-version = "0.4.0"
+version = "0.5.0"
 description = "Evaluate agent skills via static analysis, trigger testing, and trace analysis. Run `sklab` after installing to scan your skills."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 authors = [
-    { name = "Eddie Hu", email = "eddiehu0314@gmail.com" }
+    { name = "Eddie Hu", email = "eddiehu0314@gmail.com" },
+    { name = "Claudia Wong", email = "wongclaudiawm@gmail.com"}
 ]
 keywords = [
     "agent",

@@ -128,11 +128,12 @@ class ConsoleReporter:
                     else f"[{self._severity_style(result.severity)}]{self._severity_icon(result.severity)}[/{self._severity_style(result.severity)}]"
                 )
                 severity_text = Text(
-                    self._severity_label(result.severity).upper(), style=self._severity_style(result.severity)
+                    self._severity_label(result.severity).upper(),
+                    style=self._severity_style(result.severity),
                 )
-                display_message = (
-                    (result.fix or result.message) if not result.passed else result.message
-                )
+                display_message = result.message
+                if not result.passed and result.fix:
+                    display_message = f"{result.message}\n[dim]Fix: {result.fix}[/dim]"
                 table.add_row(
                     status_icon,
                     severity_text,
