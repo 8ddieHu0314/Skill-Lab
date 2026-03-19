@@ -411,16 +411,6 @@ def _check_yaml(metadata: SkillMetadata | None) -> list[Finding]:
             )
         )
 
-    desc_val = raw.get("description")
-    if isinstance(desc_val, str) and len(desc_val) > 500:
-        findings.append(
-            Finding(
-                problem=f"'description' field exceeds 500 chars ({len(desc_val)} chars)",
-                location="frontmatter.description",
-                text=desc_val[:80] + "…",
-            )
-        )
-
     tags_val = raw.get("tags")
     if tags_val is not None and not isinstance(tags_val, list):
         findings.append(
@@ -470,10 +460,135 @@ def _check_evaluator(body: str, normalised: str) -> list[Finding]:
     return _scan_text_for_evaluator(body, "body", normalised=normalised)
 
 
-# ─── Registered check ─────────────────────────────────────────────────────────
+# ─── Registered sub-checks ────────────────────────────────────────────────────
 
 
 @register_check
+class SecurityInjectionCheck(StaticCheck):
+    """Detects prompt injection and jailbreak patterns in the skill body."""
+
+    check_id: ClassVar[str] = "security.injection"
+    check_name: ClassVar[str] = "Prompt Injection & Jailbreak"
+    description: ClassVar[str] = (
+        "Detects prompt injection and jailbreak patterns in the skill body and frontmatter"
+    )
+    severity: ClassVar[Severity] = Severity.HIGH
+    dimension: ClassVar[EvalDimension] = EvalDimension.SECURITY
+    fix: ClassVar[str] = "Remove prompt injection and jailbreak patterns from the skill"
+
+    def run(self, skill: Skill) -> CheckResult:
+        body = skill.body or ""
+        normalised = unicodedata.normalize("NFKC", body)
+        findings = _check_injection(body, normalised)
+        if findings:
+            return self._fail(
+                f"Prompt injection detected: {findings[0]['problem']}",
+                details={"findings": findings},
+            )
+        return self._pass("No prompt injection detected", details={"findings": []})
+
+
+@register_check
+class SecurityEvaluatorCheck(StaticCheck):
+    """Detects evaluator-manipulation patterns in the skill body."""
+
+    check_id: ClassVar[str] = "security.evaluator"
+    check_name: ClassVar[str] = "Evaluator Manipulation"
+    description: ClassVar[str] = (
+        "Detects evaluator-manipulation patterns that attempt to bias automated scoring"
+    )
+    severity: ClassVar[Severity] = Severity.HIGH
+    dimension: ClassVar[EvalDimension] = EvalDimension.SECURITY
+    fix: ClassVar[str] = "Remove evaluator-manipulation patterns from the skill"
+
+    def run(self, skill: Skill) -> CheckResult:
+        body = skill.body or ""
+        normalised = unicodedata.normalize("NFKC", body)
+        findings = _check_evaluator(body, normalised)
+        if findings:
+            return self._fail(
+                f"Evaluator manipulation detected: {findings[0]['problem']}",
+                details={"findings": findings},
+            )
+        return self._pass("No evaluator manipulation detected", details={"findings": []})
+
+
+@register_check
+class SecurityUnicodeCheck(StaticCheck):
+    """Detects unicode obfuscation including zero-width chars, bidi overrides, and homoglyphs."""
+
+    check_id: ClassVar[str] = "security.unicode"
+    check_name: ClassVar[str] = "Unicode Obfuscation"
+    description: ClassVar[str] = (
+        "Detects unicode obfuscation patterns including zero-width chars, "
+        "bidi overrides, and homoglyph substitution"
+    )
+    severity: ClassVar[Severity] = Severity.HIGH
+    dimension: ClassVar[EvalDimension] = EvalDimension.SECURITY
+    fix: ClassVar[str] = "Remove suspicious unicode characters from the skill"
+
+    def run(self, skill: Skill) -> CheckResult:
+        body = skill.body or ""
+        findings = _check_unicode(body)
+        if findings:
+            return self._fail(
+                f"Unicode obfuscation detected: {findings[0]['problem']}",
+                details={"findings": findings},
+            )
+        return self._pass("No unicode obfuscation detected", details={"findings": []})
+
+
+@register_check
+class SecurityYamlCheck(StaticCheck):
+    """Detects unexpected YAML keys, type violations, and injection patterns in frontmatter."""
+
+    check_id: ClassVar[str] = "security.yaml"
+    check_name: ClassVar[str] = "YAML Anomalies"
+    description: ClassVar[str] = (
+        "Detects unexpected YAML keys, type violations, and injection patterns in frontmatter"
+    )
+    severity: ClassVar[Severity] = Severity.HIGH
+    dimension: ClassVar[EvalDimension] = EvalDimension.SECURITY
+    fix: ClassVar[str] = "Remove unexpected YAML keys and injection patterns from the frontmatter"
+
+    def run(self, skill: Skill) -> CheckResult:
+        findings = _check_yaml(skill.metadata)
+        if findings:
+            return self._fail(
+                f"YAML anomaly detected: {findings[0]['problem']}",
+                details={"findings": findings},
+            )
+        return self._pass("No YAML anomalies detected", details={"findings": []})
+
+
+@register_check
+class SecuritySizeCheck(StaticCheck):
+    """Detects suspicious size and structural anomalies like oversized bodies or repeated tokens."""
+
+    check_id: ClassVar[str] = "security.size"
+    check_name: ClassVar[str] = "Suspicious Size & Structure"
+    description: ClassVar[str] = (
+        "Detects suspicious size and structural anomalies such as oversized bodies, "
+        "excessively long lines, or repeated token patterns"
+    )
+    severity: ClassVar[Severity] = Severity.MEDIUM
+    dimension: ClassVar[EvalDimension] = EvalDimension.SECURITY
+    fix: ClassVar[str] = "Reduce the skill body size and remove repeated token patterns"
+
+    def run(self, skill: Skill) -> CheckResult:
+        body = skill.body or ""
+        findings = _check_size(body)
+        if findings:
+            return self._fail(
+                f"Suspicious size/structure: {findings[0]['problem']}",
+                details={"findings": findings},
+            )
+        return self._pass("No size or structure anomalies detected", details={"findings": []})
+
+
+# ─── Utility class (used by sklab scan, not registered in evaluation pipeline) ─
+
+
 class SecurityScanCheck(StaticCheck):
     """Composite security scan across five layers.
 

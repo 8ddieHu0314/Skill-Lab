@@ -16,7 +16,6 @@ from skill_lab.core.models import (
     TraceReport,
 )
 from skill_lab.reporters.console_reporter import (
-    SEVERITY_ICONS,
     SEVERITY_STYLES,
     ConsoleReporter,
 )
@@ -130,39 +129,23 @@ def _capture(reporter: ConsoleReporter) -> tuple[ConsoleReporter, io.StringIO]:
 
 class TestSeverityMappings:
     @pytest.mark.parametrize(
-        "severity, dict_name",
-        [
-            ("high", "SEVERITY_STYLES"),
-            ("medium", "SEVERITY_STYLES"),
-            ("low", "SEVERITY_STYLES"),
-            ("high", "SEVERITY_ICONS"),
-            ("medium", "SEVERITY_ICONS"),
-            ("low", "SEVERITY_ICONS"),
-        ],
-        ids=[
-            "styles-high",
-            "styles-medium",
-            "styles-low",
-            "icons-high",
-            "icons-medium",
-            "icons-low",
-        ],
+        "severity",
+        ["high", "medium", "low"],
+        ids=["styles-high", "styles-medium", "styles-low"],
     )
-    def test_key_exists(self, severity, dict_name):
-        mapping = SEVERITY_STYLES if dict_name == "SEVERITY_STYLES" else SEVERITY_ICONS
-        assert severity in mapping
+    def test_key_exists(self, severity):
+        assert severity in SEVERITY_STYLES
 
     @pytest.mark.parametrize(
-        "severity, expected_icon, expected_style",
+        "severity, expected_style",
         [
-            ("high", "X", "bold red"),
-            ("medium", "!", "yellow"),
-            ("low", "i", "blue"),
+            ("high", "bold red"),
+            ("medium", "yellow"),
+            ("low", "blue"),
         ],
         ids=["high", "medium", "low"],
     )
-    def test_values_match(self, severity, expected_icon, expected_style):
-        assert SEVERITY_ICONS[severity] == expected_icon
+    def test_values_match(self, severity, expected_style):
         assert SEVERITY_STYLES[severity] == expected_style
 
 
@@ -199,25 +182,6 @@ class TestSeverityStyle:
 
         assert ConsoleReporter()._severity_style(FakeSeverity()) == "white"  # type: ignore[arg-type]
 
-
-class TestSeverityIcon:
-    @pytest.mark.parametrize(
-        "severity, expected",
-        [
-            (Severity.HIGH, "X"),
-            (Severity.MEDIUM, "!"),
-            (Severity.LOW, "i"),
-        ],
-        ids=["high", "medium", "low"],
-    )
-    def test_known_severity(self, severity, expected):
-        assert ConsoleReporter()._severity_icon(severity) == expected
-
-    def test_unknown_value_returns_question_mark(self):
-        class FakeSeverity:
-            value = "nonexistent"
-
-        assert ConsoleReporter()._severity_icon(FakeSeverity()) == "?"  # type: ignore[arg-type]
 
 
 class TestPrintVerboseHint:

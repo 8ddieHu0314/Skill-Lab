@@ -219,7 +219,7 @@ def _run_bulk_validate(roots: list[Path], spec_only: bool) -> None:
 
     console.print(f"[dim]Found {len(skill_paths)} skill(s). Running check...[/dim]\n")
 
-    evaluator = StaticEvaluator(spec_only=spec_only)
+    evaluator = StaticEvaluator(spec_only=spec_only, include_security=True)
     any_failed = False
     summary_rows: list[tuple[str, str, str]] = []
 
@@ -318,7 +318,7 @@ def check(
     skill_path = _resolve_skill_path(skill_path)
 
     with _cli_error_handler():
-        evaluator = StaticEvaluator(spec_only=spec_only)
+        evaluator = StaticEvaluator(spec_only=spec_only, include_security=True)
         passed, errors = evaluator.check(skill_path)
 
     push_telemetry_extra(skill_name=skill_path.name)
@@ -345,7 +345,7 @@ def list_checks(
         typer.Option(
             "--dimension",
             "-d",
-            help="Filter by dimension (structure, naming, description, content)",
+            help="Filter by dimension (structure, naming, description, content, security)",
         ),
     ] = None,
     spec_only: Annotated[
@@ -365,7 +365,7 @@ def list_checks(
     ] = False,
 ) -> None:
     """List all available checks."""
-    # Get checks (always exclude non-listable checks like security.scan)
+    # Get checks
     if dimension:
         try:
             dim = EvalDimension(dimension.lower())
