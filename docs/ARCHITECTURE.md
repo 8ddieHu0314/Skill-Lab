@@ -526,8 +526,8 @@ Trigger testing verifies that skills activate correctly for different prompt typ
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
 │  1. Load test cases from YAML                                           │
-│     .skill-lab/tests/triggers.yaml → Simple flat format                 │
-│     .skill-lab/tests/scenarios.yaml → GWT DSL                           │
+│     .sklab/tests/triggers.yaml → Simple flat format                 │
+│     .sklab/tests/scenarios.yaml → GWT DSL                           │
 │                              │                                          │
 │  2. Execute prompts via Runtime Adapter                                 │
 │     RuntimeAdapter (Claude CLI; Codex CLI in v0.3.0)                    │
@@ -608,7 +608,7 @@ class RuntimeAdapter(ABC):
 
 ### Test Definition Format
 
-**Simple Format** (`.skill-lab/tests/triggers.yaml`):
+**Simple Format** (`.sklab/tests/triggers.yaml`):
 ```yaml
 skill: my-skill
 test_cases:
@@ -625,7 +625,7 @@ test_cases:
     expected: no_trigger
 ```
 
-**Given/When/Then DSL** (`.skill-lab/tests/scenarios.yaml`):
+**Given/When/Then DSL** (`.sklab/tests/scenarios.yaml`):
 ```yaml
 skill: my-skill
 scenarios:
