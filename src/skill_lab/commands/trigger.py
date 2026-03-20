@@ -1,6 +1,7 @@
 """Trigger test command."""
 
 import json as json_module
+import time
 from pathlib import Path
 from typing import Annotated
 
@@ -15,10 +16,28 @@ from skill_lab.cli import (
     app,
     console,
 )
-from skill_lab.core.constants import TESTS_DIR
+from skill_lab.core.constants import TESTS_DIR, TRACES_DIR
 from skill_lab.core.models import TriggerReport, TriggerType
 from skill_lab.core.telemetry import push_telemetry_extra
+from skill_lab.triggers.test_loader import load_trigger_tests
 from skill_lab.triggers.trigger_evaluator import TriggerEvaluator
+
+TYPE_DESCRIPTIONS = {
+    "explicit": "skill named directly with $ prefix",
+    "implicit": "scenario described without naming the skill",
+    "contextual": "realistic noisy prompt with domain context",
+    "negative": "should NOT trigger — catches false positives",
+}
+
+CACHE_TTL_SECONDS = 300  # Anthropic prompt cache TTL (~5 min)
+
+
+def _cache_is_warm(skill_path: Path) -> bool:
+    traces_dir = skill_path / TRACES_DIR
+    if not traces_dir.exists():
+        return False
+    cutoff = time.time() - CACHE_TTL_SECONDS
+    return any(f.stat().st_mtime > cutoff for f in traces_dir.glob("*.jsonl"))
 
 
 def _format_duration(ms: float) -> str:
@@ -158,6 +177,24 @@ def trigger(
             console.print(f"[red]Invalid trigger type: {type_filter}[/red]")
             console.print(f"Valid types: {', '.join(t.value for t in TriggerType)}")
             raise typer.Exit(code=1) from None
+
+    # Load tests upfront for type legend + time estimate
+    preview_cases, _ = load_trigger_tests(skill_path)
+    if trigger_type:
+        preview_cases = [tc for tc in preview_cases if tc.trigger_type == trigger_type]
+
+    if preview_cases:
+        types_present = dict.fromkeys(tc.trigger_type.value for tc in preview_cases)
+        console.print("[bold]Trigger types:[/bold]")
+        for t in types_present:
+            console.print(f"  [cyan]{t:<12}[/cyan] {TYPE_DESCRIPTIONS[t]}")
+        console.print()
+
+    n = len(preview_cases)
+    est_str = "~10s" if _cache_is_warm(skill_path) else "~8 min"
+    console.print(
+        f"[dim]Running {n} test{'s' if n != 1 else ''} — estimated time: {est_str}[/dim]\n"
+    )
 
     # Run evaluation with progress display
     evaluator = TriggerEvaluator(runtime=runtime)
