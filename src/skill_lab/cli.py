@@ -289,17 +289,17 @@ _BANNER_LINES = [
     " ███████║██║  ██╗██║███████╗███████╗     ███████╗██║  ██║██████╔╝",
     " ╚══════╝╚═╝  ╚═╝╚═╝╚══════╝╚══════╝     ╚══════╝╚═╝  ╚═╝╚═════╝",
 ]
-_BANNER_COLORS = ["#5fd7ff", "#00afff", "#0087d7", "#0070c0", "#005faf", "#004080"]
+_BANNER_COLORS = ["#d4ff4e", "#c4ef3e", "#b4df2e", "#a4cf1e", "#94bf0e", "#84af00"]
 
 
 def _print_banner() -> None:
-    """Print the SKILL LAB ASCII banner with a blue gradient."""
+    """Print the SKILL LAB ASCII banner with an acid yellow gradient."""
     console.print()
     if console.width >= 70:
         for line, color in zip(_BANNER_LINES, _BANNER_COLORS, strict=True):
             console.print(Text(line, style=color))
     else:
-        console.print(Text("  SKILL LAB", style="bold #00afff"))
+        console.print(Text("  SKILL LAB", style="bold #d4ff4e"))
     console.print()
     console.print(f"  [dim]Agent Skills Evaluation Framework — v{__version__}[/dim]")
     console.print()

@@ -63,7 +63,7 @@ src/skill_lab/
 │       ├── structure.py      # 7 checks
 │       ├── schema.py         # 9 checks (declarative FieldRule)
 │       ├── naming.py         # 1 check
-│       ├── security.py       # 1 check (5-layer security scan)
+│       ├── security.py       # 5 checks (individual security layers)
 │       └── content.py        # 11 checks
 ├── evaluators/
 │   ├── static_evaluator.py   # Orchestrates static check execution

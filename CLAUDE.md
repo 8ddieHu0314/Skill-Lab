@@ -50,7 +50,7 @@ ruff check src/ && ruff format src/
 
 ## Critical Architecture Notes
 
-- **Two check systems**: behavioral (`@register_check` classes in `structure.py`, `naming.py`, `content.py`) and schema-based (`FieldRule` in `schema.py` — append to add a check, no class needed). See ARCHITECTURE.md for full details.
+- **Two check systems**: behavioral (`@register_check` classes in `structure.py`, `naming.py`, `content.py`, `security.py`) and schema-based (`FieldRule` in `schema.py` — append to add a check, no class needed). See ARCHITECTURE.md for full details.
 - **Side-effect registration**: `StaticEvaluator.__init__()` imports check modules (`content`, `naming`, `schema`, `security`, `structure`) to trigger `@register_check` decorators. All checks must be registered before `registry.get_all()` is called.
 - **Sync requirement**: `SPEC_FRONTMATTER_FIELDS` in `structure.py` must stay in sync with `FRONTMATTER_SCHEMA` in `schema.py`.
 - **Scoring**: Weighted across 5 dimensions (Structure, Naming, Description, Content, Execution) by severity (HIGH > MEDIUM > LOW). Execution is trace-based (`tracechecks/`) and scored separately. See `scoring.py` for exact weights.
@@ -97,7 +97,7 @@ ruff check src/ && ruff format src/
 
 ### CLI Patterns
 
-- Commands are split into modules under `commands/` (evaluate, trigger, generate, info, stats, telemetry, setup). Shared helpers (`_resolve_skill_path()`, `_cli_error_handler()`) live in `cli.py`.
+- Commands are split into modules under `commands/` (evaluate, scan, trigger, generate, info, stats, telemetry, setup). Shared helpers (`_resolve_skill_path()`, `_cli_error_handler()`) live in `cli.py`.
 - Exit codes: 0 = success, 1 = failure (spec-required check failed or error)
 - Custom exceptions inherit from `SkillLabError` in `core/exceptions.py` (`ParseError`, `ValidationError`, `ConfigurationError`, `GenerationError`)
 
