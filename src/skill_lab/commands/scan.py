@@ -16,6 +16,7 @@ from skill_lab.cli import (
     app,
     console,
 )
+from skill_lab.core.colors import ACCENT, FAIL_COLOR, PASS_COLOR, WARN_COLOR
 from skill_lab.core.telemetry import push_telemetry_extra
 
 
@@ -30,7 +31,9 @@ def _run_bulk_scan(roots: list[Path], verbose: bool = False) -> None:
         skill_paths.extend(found)
 
     if not skill_paths:
-        console.print("[yellow]No skill folders found (no SKILL.md files discovered).[/yellow]")
+        console.print(
+            f"[{WARN_COLOR}]No skill folders found (no SKILL.md files discovered).[/{WARN_COLOR}]"
+        )
         raise typer.Exit(code=0)
 
     console.print(f"[dim]Found {len(skill_paths)} skill(s). Running scan...[/dim]\n")
@@ -43,7 +46,7 @@ def _run_bulk_scan(roots: list[Path], verbose: bool = False) -> None:
         try:
             skill = parse_skill(sp)
         except Exception as e:
-            console.print(f"[red]Error parsing {sp.name}: {e}[/red]")
+            console.print(f"[{FAIL_COLOR}]Error parsing {sp.name}: {e}[/{FAIL_COLOR}]")
             any_blocked = True
             continue
 
@@ -55,29 +58,31 @@ def _run_bulk_scan(roots: list[Path], verbose: bool = False) -> None:
         rel_path = str(sp.relative_to(Path.cwd())) if sp.is_relative_to(Path.cwd()) else str(sp)
 
         if status == "block":
-            status_str = "[bold red]BLOCK[/bold red]"
+            status_str = f"[bold {FAIL_COLOR}]BLOCK[/bold {FAIL_COLOR}]"
             any_blocked = True
             console.print(f"[bold]{skill_name}[/bold] ({rel_path})")
             for f in findings:
-                console.print(f"  [red]![/red] {f.get('problem', '')} — {f.get('text', '')}")
+                console.print(
+                    f"  [{FAIL_COLOR}]![/{FAIL_COLOR}] {f.get('problem', '')} — {f.get('text', '')}"
+                )
             console.print()
         elif status == "sus":
-            status_str = "[bold yellow]SUS[/bold yellow]"
+            status_str = f"[bold {WARN_COLOR}]SUS[/bold {WARN_COLOR}]"
             if verbose:
                 console.print(f"[bold]{skill_name}[/bold] ({rel_path})")
                 for f in findings:
                     console.print(
-                        f"  [yellow]~[/yellow] {f.get('problem', '')} — {f.get('text', '')}"
+                        f"  [{WARN_COLOR}]~[/{WARN_COLOR}] {f.get('problem', '')} — {f.get('text', '')}"
                     )
                 console.print()
         else:
-            status_str = "[bold green]ALLOW[/bold green]"
+            status_str = f"[bold {PASS_COLOR}]ALLOW[/bold {PASS_COLOR}]"
 
         summary_rows.append((skill_name, rel_path, status, status_str))
 
     console.print()
     table = Table(title=f"Security Summary — {len(skill_paths)} skill(s)", box=box.ROUNDED)
-    table.add_column("Skill", style="cyan")
+    table.add_column("Skill", style=ACCENT)
     table.add_column("Path", style="dim")
     table.add_column("Status", justify="center")
     for name, path, _status, rich_status in summary_rows:
@@ -132,7 +137,9 @@ def scan(
     from skill_lab.checks.static.security import SecurityScanCheck
 
     if all_skills and skill_path is not None:
-        console.print("[red]Error: Cannot combine --all with a skill path argument.[/red]")
+        console.print(
+            f"[{FAIL_COLOR}]Error: Cannot combine --all with a skill path argument.[/{FAIL_COLOR}]"
+        )
         raise typer.Exit(code=1)
 
     if all_skills:
@@ -153,14 +160,14 @@ def scan(
     findings: list[dict[str, str]] = details.get("findings", [])
 
     if status == "block":
-        status_label = "[bold red]BLOCK[/bold red]"
-        border = "red"
+        status_label = f"[bold {FAIL_COLOR}]BLOCK[/bold {FAIL_COLOR}]"
+        border = FAIL_COLOR
     elif status == "sus":
-        status_label = "[bold yellow]SUS[/bold yellow]"
-        border = "yellow"
+        status_label = f"[bold {WARN_COLOR}]SUS[/bold {WARN_COLOR}]"
+        border = WARN_COLOR
     else:
-        status_label = "[bold green]ALLOW[/bold green]"
-        border = "green"
+        status_label = f"[bold {PASS_COLOR}]ALLOW[/bold {PASS_COLOR}]"
+        border = PASS_COLOR
 
     skill_name = skill.metadata.name if skill.metadata else skill_path.name
     console.print()
@@ -188,7 +195,7 @@ def scan(
             )
         console.print(table)
     else:
-        console.print("[green]No security findings.[/green]")
+        console.print(f"[{PASS_COLOR}]No security findings.[/{PASS_COLOR}]")
 
     console.print()
 

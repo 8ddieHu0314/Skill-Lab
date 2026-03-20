@@ -16,6 +16,7 @@ from skill_lab.cli import (
     app,
     console,
 )
+from skill_lab.core.colors import ACCENT, FAIL_COLOR, PASS_COLOR, SECONDARY, WARN_COLOR
 from skill_lab.core.constants import TESTS_DIR, TRACES_DIR
 from skill_lab.core.models import TriggerReport, TriggerType
 from skill_lab.core.telemetry import push_telemetry_extra
@@ -54,9 +55,9 @@ def _print_trigger_report(report: TriggerReport) -> None:
     # Compact header line
     duration = _format_duration(report.duration_ms)
     pass_status = (
-        f"[green]{report.tests_passed}/{report.tests_run} passed[/green]"
+        f"[{PASS_COLOR}]{report.tests_passed}/{report.tests_run} passed[/{PASS_COLOR}]"
         if report.overall_pass
-        else f"[red]{report.tests_passed}/{report.tests_run} passed[/red]"
+        else f"[{FAIL_COLOR}]{report.tests_passed}/{report.tests_run} passed[/{FAIL_COLOR}]"
     )
     console.print(
         f"[bold]Trigger Test Report:[/bold] {report.skill_name}\n"
@@ -68,12 +69,16 @@ def _print_trigger_report(report: TriggerReport) -> None:
 
     # Results table with borders
     table = Table(box=box.ROUNDED, padding=(0, 1))
-    table.add_column("Test", style="cyan", no_wrap=True)
+    table.add_column("Test", style=ACCENT, no_wrap=True)
     table.add_column("Type", style="dim")
     table.add_column("Status", justify="center")  # Status column
 
     for result in report.results:
-        status = "[green]\u2713[/green]" if result.passed else "[red]\u2717[/red]"
+        status = (
+            f"[{PASS_COLOR}]\u2713[/{PASS_COLOR}]"
+            if result.passed
+            else f"[{FAIL_COLOR}]\u2717[/{FAIL_COLOR}]"
+        )
         table.add_row(
             result.test_name,
             result.trigger_type.value,
@@ -90,7 +95,7 @@ def _print_trigger_report(report: TriggerReport) -> None:
             passed = stats["passed"]
             total = stats["total"]
             pct = (passed / total * 100) if total > 0 else 0
-            color = "green" if passed == total else "yellow" if passed > 0 else "red"
+            color = PASS_COLOR if passed == total else WARN_COLOR if passed > 0 else FAIL_COLOR
             parts.append(f"{type_name}: [{color}]{passed}/{total}[/{color}] ({pct:.0f}%)")
         console.print("[dim]By type:[/dim] " + " [dim]\u2502[/dim] ".join(parts))
         console.print()
@@ -160,7 +165,7 @@ def trigger(
         else False
     )
     if not has_tests:
-        console.print("[yellow]No trigger tests found.[/yellow]")
+        console.print(f"[{WARN_COLOR}]No trigger tests found.[/{WARN_COLOR}]")
         console.print(
             f"[dim]Run [bold]sklab generate {skill_path}[/bold] to auto-generate "
             f"trigger tests, or create them manually at "
@@ -174,7 +179,7 @@ def trigger(
         try:
             trigger_type = TriggerType(type_filter.lower())
         except ValueError:
-            console.print(f"[red]Invalid trigger type: {type_filter}[/red]")
+            console.print(f"[{FAIL_COLOR}]Invalid trigger type: {type_filter}[/{FAIL_COLOR}]")
             console.print(f"Valid types: {', '.join(t.value for t in TriggerType)}")
             raise typer.Exit(code=1) from None
 
@@ -187,7 +192,7 @@ def trigger(
         types_present = dict.fromkeys(tc.trigger_type.value for tc in preview_cases)
         console.print("[bold]Trigger types:[/bold]")
         for t in types_present:
-            console.print(f"  [cyan]{t:<12}[/cyan] {TYPE_DESCRIPTIONS[t]}")
+            console.print(f"  [{SECONDARY}]{t:<12}[/{SECONDARY}] {TYPE_DESCRIPTIONS[t]}")
         console.print()
 
     n = len(preview_cases)
@@ -207,9 +212,11 @@ def trigger(
     with console.status("", spinner="dots") as status:
 
         def update_progress(current: int, total: int, test_name: str) -> None:
-            status.update(f"[cyan]Running trigger tests[/cyan] [{current}/{total}]: {test_name}")
+            status.update(
+                f"[{ACCENT}]Running trigger tests[/{ACCENT}] [{current}/{total}]: {test_name}"
+            )
 
-        status.update("[cyan]Loading trigger tests...[/cyan]")
+        status.update(f"[{ACCENT}]Loading trigger tests...[/{ACCENT}]")
         report = evaluator.evaluate(
             skill_path,
             type_filter=trigger_type,

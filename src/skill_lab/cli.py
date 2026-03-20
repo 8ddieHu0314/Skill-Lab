@@ -18,6 +18,14 @@ from rich.table import Table
 from rich.text import Text
 
 from skill_lab import __version__
+from skill_lab.core.colors import (
+    ACCENT,
+    BANNER_GRADIENT,
+    FAIL_COLOR,
+    PASS_COLOR,
+    SECONDARY,
+    WARN_COLOR,
+)
 from skill_lab.core.constants import SKLAB_HOME, SKLAB_INITIALIZED
 from skill_lab.core.telemetry import (
     _pop_pending_error,
@@ -88,13 +96,13 @@ def _resolve_skill_path(skill_path: Path | None) -> Path:
     """
     resolved = Path.cwd() if skill_path is None else skill_path.resolve()
     if not resolved.exists():
-        console.print(f"[red]Error: Path does not exist: {resolved}[/red]")
+        console.print(f"[{FAIL_COLOR}]Error: Path does not exist: {resolved}[/{FAIL_COLOR}]")
         raise typer.Exit(code=1)
     if not resolved.is_dir():
-        console.print(f"[red]Error: Path is not a directory: {resolved}[/red]")
+        console.print(f"[{FAIL_COLOR}]Error: Path is not a directory: {resolved}[/{FAIL_COLOR}]")
         raise typer.Exit(code=1)
     if not (resolved / "SKILL.md").exists():
-        console.print(f"[red]Error: No SKILL.md found in {resolved}[/red]")
+        console.print(f"[{FAIL_COLOR}]Error: No SKILL.md found in {resolved}[/{FAIL_COLOR}]")
         console.print("[dim]This directory does not appear to be a skill folder.[/dim]")
         raise typer.Exit(code=1)
     return resolved
@@ -106,7 +114,7 @@ def _cli_error_handler() -> Iterator[None]:
     try:
         yield
     except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
+        console.print(f"[{FAIL_COLOR}]Error: {e}[/{FAIL_COLOR}]")
         raise typer.Exit(code=1) from None
 
 
@@ -236,7 +244,7 @@ def _maybe_first_run_scan() -> bool:
     console.print()
 
     if not skill_paths:
-        console.print("[yellow]No skills found in your repo.[/yellow]")
+        console.print(f"[{WARN_COLOR}]No skills found in your repo.[/{WARN_COLOR}]")
         console.print()
         _print_getting_started()
         return True
@@ -252,10 +260,12 @@ def _maybe_first_run_scan() -> bool:
         try:
             passed, errors = evaluator.check(sp)
         except Exception as e:
-            console.print(f"[red]Error checking {sp.name}: {e}[/red]")
+            console.print(f"[{FAIL_COLOR}]Error checking {sp.name}: {e}[/{FAIL_COLOR}]")
             continue
 
-        status_str = "[green]PASS[/green]" if passed else "[red]FAIL[/red]"
+        status_str = (
+            f"[{PASS_COLOR}]PASS[/{PASS_COLOR}]" if passed else f"[{FAIL_COLOR}]FAIL[/{FAIL_COLOR}]"
+        )
         try:
             rel_path = str(sp.relative_to(cwd))
         except ValueError:
@@ -264,12 +274,14 @@ def _maybe_first_run_scan() -> bool:
 
         if not passed:
             for error in errors:
-                console.print(f"  [red]X[/red] [{error.check_id}] {error.message}")
+                console.print(
+                    f"  [{FAIL_COLOR}]X[/{FAIL_COLOR}] [{error.check_id}] {error.message}"
+                )
 
     # Summary table
     console.print()
     table = Table(title=f"Initial Scan — {len(skill_paths)} skill(s)", box=box.ROUNDED)
-    table.add_column("Skill", style="cyan")
+    table.add_column("Skill", style=ACCENT)
     table.add_column("Path", style="dim")
     table.add_column("Status", justify="center")
     for name, path, status in summary_rows:
@@ -289,7 +301,7 @@ _BANNER_LINES = [
     " ███████║██║  ██╗██║███████╗███████╗     ███████╗██║  ██║██████╔╝",
     " ╚══════╝╚═╝  ╚═╝╚═╝╚══════╝╚══════╝     ╚══════╝╚═╝  ╚═╝╚═════╝",
 ]
-_BANNER_COLORS = ["#d4ff4e", "#c4ef3e", "#b4df2e", "#a4cf1e", "#94bf0e", "#84af00"]
+_BANNER_COLORS = BANNER_GRADIENT
 
 
 def _print_banner() -> None:
@@ -299,7 +311,7 @@ def _print_banner() -> None:
         for line, color in zip(_BANNER_LINES, _BANNER_COLORS, strict=True):
             console.print(Text(line, style=color))
     else:
-        console.print(Text("  SKILL LAB", style="bold #d4ff4e"))
+        console.print(Text("  SKILL LAB", style=f"bold {ACCENT}"))
     console.print()
     console.print(f"  [dim]Agent Skills Evaluation Framework — v{__version__}[/dim]")
     console.print()
@@ -308,45 +320,66 @@ def _print_banner() -> None:
 def _print_getting_started() -> None:
     """Print a command reference guide. Shown after first-run scan and on every bare `sklab`."""
     guide = Table.grid(padding=(0, 2))
-    guide.add_column(style="bold cyan", no_wrap=True)
+    guide.add_column(style=f"bold {ACCENT}", no_wrap=True)
     guide.add_column(style="dim")
 
     guide.add_row(
-        "sklab check [green]./my-skill[/green]", "Quick pass/fail — exits 0 or 1 (great for CI)"
+        f"sklab check [{ACCENT}]./my-skill[/{ACCENT}]",
+        "Quick pass/fail — exits 0 or 1 (great for CI)",
     )
-    guide.add_row("  [dim]--spec-only / -s[/dim]", "Only validate against the Agent Skills spec")
-    guide.add_row("  [dim]--all[/dim]", "Validate every skill in the current directory")
-    guide.add_row("  [dim]--repo[/dim]", "Validate every skill from the git repo root")
+    guide.add_row(
+        f"  [{SECONDARY}]--spec-only / -s[/{SECONDARY}]",
+        "Only validate against the Agent Skills spec",
+    )
+    guide.add_row(
+        f"  [{SECONDARY}]--all[/{SECONDARY}]", "Validate every skill in the current directory"
+    )
+    guide.add_row(
+        f"  [{SECONDARY}]--repo[/{SECONDARY}]", "Validate every skill from the git repo root"
+    )
     guide.add_row("", "")
     guide.add_row(
-        "sklab evaluate [green]./my-skill[/green]", "Full quality evaluation (0–100 score)"
+        f"sklab evaluate [{ACCENT}]./my-skill[/{ACCENT}]", "Full quality evaluation (0–100 score)"
     )
-    guide.add_row("  [dim]--verbose / -V[/dim]", "Show all checks, not just failures")
-    guide.add_row("  [dim]--spec-only / -s[/dim]", "Only run the 10 spec-required checks")
-    guide.add_row("  [dim]--all[/dim]", "Evaluate every skill in the current directory")
+    guide.add_row(
+        f"  [{SECONDARY}]--verbose / -V[/{SECONDARY}]", "Show all checks, not just failures"
+    )
+    guide.add_row(
+        f"  [{SECONDARY}]--spec-only / -s[/{SECONDARY}]", "Only run the 10 spec-required checks"
+    )
+    guide.add_row(
+        f"  [{SECONDARY}]--all[/{SECONDARY}]", "Evaluate every skill in the current directory"
+    )
     guide.add_row("", "")
     guide.add_row(
-        "sklab scan [green]./my-skill[/green]", "Security scan — shows BLOCK / SUS / ALLOW status"
+        f"sklab scan [{ACCENT}]./my-skill[/{ACCENT}]",
+        "Security scan — shows BLOCK / SUS / ALLOW status",
     )
-    guide.add_row("  [dim]--all[/dim]", "Scan every skill in the current directory")
+    guide.add_row(
+        f"  [{SECONDARY}]--all[/{SECONDARY}]", "Scan every skill in the current directory"
+    )
     guide.add_row("", "")
     guide.add_row("sklab stats", "Your personal usage history and score trends")
-    guide.add_row("  [dim]count[/dim]", "Skill invocation counts for the current month")
-    guide.add_row("  [dim]score[/dim]", "Score trend for all evaluated skills")
-    guide.add_row("  [dim]tokens[/dim]", "Token usage per skill for the current month")
+    guide.add_row(
+        f"  [{SECONDARY}]count[/{SECONDARY}]", "Skill invocation counts for the current month"
+    )
+    guide.add_row(f"  [{SECONDARY}]score[/{SECONDARY}]", "Score trend for all evaluated skills")
+    guide.add_row(
+        f"  [{SECONDARY}]tokens[/{SECONDARY}]", "Token usage per skill for the current month"
+    )
     guide.add_row("", "")
     guide.add_row("sklab list-checks", "Browse all 33 checks across 5 dimensions")
-    guide.add_row("  [dim]--spec-only[/dim]", "Only spec-required checks")
-    guide.add_row("  [dim]--suggestions-only[/dim]", "Only quality suggestions")
+    guide.add_row(f"  [{SECONDARY}]--spec-only[/{SECONDARY}]", "Only spec-required checks")
+    guide.add_row(f"  [{SECONDARY}]--suggestions-only[/{SECONDARY}]", "Only quality suggestions")
 
     guide.add_row("", "")
     guide.add_row(
-        "sklab generate [green]./my-skill[/green]",
+        f"sklab generate [{ACCENT}]./my-skill[/{ACCENT}]",
         "Auto-generate trigger tests via LLM",
     )
     guide.add_row("", "")
     guide.add_row(
-        "sklab trigger [green]./my-skill[/green]",
+        f"sklab trigger [{ACCENT}]./my-skill[/{ACCENT}]",
         "Run trigger tests against a live runtime",
     )
     guide.add_row("", "")

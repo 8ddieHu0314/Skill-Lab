@@ -13,6 +13,7 @@ from skill_lab.cli import (
     app,
     console,
 )
+from skill_lab.core.colors import ACCENT, FAIL_COLOR, PASS_COLOR
 from skill_lab.core.constants import TESTS_DIR
 from skill_lab.core.telemetry import push_telemetry_extra
 from skill_lab.triggers.generator import TriggerGenerator
@@ -57,7 +58,7 @@ def generate(
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         console.print(
-            "[red]Error: ANTHROPIC_API_KEY environment variable is not set.[/red]\n"
+            f"[{FAIL_COLOR}]Error: ANTHROPIC_API_KEY environment variable is not set.[/{FAIL_COLOR}]\n"
             "[dim]Set it with:[/dim] export ANTHROPIC_API_KEY=sk-..."
         )
         raise typer.Exit(code=1)
@@ -81,7 +82,7 @@ def generate(
 
         generator = TriggerGenerator(api_key=api_key, **kwargs)
 
-        with console.status("[cyan]Generating trigger tests...[/cyan]", spinner="dots"):
+        with console.status(f"[{ACCENT}]Generating trigger tests...[/{ACCENT}]", spinner="dots"):
             written_path = generator.generate_and_write(skill_path, force=force)
 
     # Print summary
@@ -94,7 +95,7 @@ def generate(
         t = tc.get("type", "unknown")
         type_counts[t] = type_counts.get(t, 0) + 1
 
-    console.print(f"\n[green]Generated {len(test_cases)} trigger tests:[/green]")
+    console.print(f"\n[{PASS_COLOR}]Generated {len(test_cases)} trigger tests:[/{PASS_COLOR}]")
     for type_name, count in sorted(type_counts.items()):
         console.print(f"  {type_name}: {count}")
 

@@ -8,6 +8,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from skill_lab.cli import app, console
+from skill_lab.core.colors import ACCENT, FAIL_COLOR, PASS_COLOR, WARN_COLOR
 
 telemetry_app = typer.Typer(
     name="telemetry",
@@ -23,10 +24,14 @@ def _telemetry_status() -> None:
     from skill_lab.core.telemetry import get_telemetry_status
 
     status = get_telemetry_status()
-    state = "[green]enabled[/green]" if status["enabled"] else "[red]disabled[/red]"
+    state = (
+        f"[{PASS_COLOR}]enabled[/{PASS_COLOR}]"
+        if status["enabled"]
+        else f"[{FAIL_COLOR}]disabled[/{FAIL_COLOR}]"
+    )
     lines = [f"  Status: {state}"]
     if status["env_override"]:
-        lines.append(f"  Env override: [yellow]{status['env_override']}[/yellow]")
+        lines.append(f"  Env override: [{WARN_COLOR}]{status['env_override']}[/{WARN_COLOR}]")
     lines.append(f"  Database: {status['db_path']}")
     if status["db_exists"]:
         size_kb = status["db_size_bytes"] / 1024
@@ -51,7 +56,7 @@ def telemetry_enable() -> None:
     from skill_lab.core.telemetry import enable_telemetry
 
     enable_telemetry()
-    console.print("[green]Telemetry enabled.[/green]")
+    console.print(f"[{PASS_COLOR}]Telemetry enabled.[/{PASS_COLOR}]")
 
 
 @telemetry_app.command("disable")
@@ -60,7 +65,7 @@ def telemetry_disable() -> None:
     from skill_lab.core.telemetry import disable_telemetry
 
     console.print(
-        "[yellow]Warning:[/yellow] Disabling telemetry stops all local data collection. "
+        f"[{WARN_COLOR}]Warning:[/{WARN_COLOR}] Disabling telemetry stops all local data collection. "
         "You will no longer accumulate data for [bold]sklab stats[/bold] "
         "(invocation counts, score trends, token usage)."
     )
@@ -70,7 +75,7 @@ def telemetry_disable() -> None:
         raise typer.Exit(code=0)
 
     disable_telemetry()
-    console.print("[yellow]Telemetry disabled.[/yellow]")
+    console.print(f"[{WARN_COLOR}]Telemetry disabled.[/{WARN_COLOR}]")
 
 
 @telemetry_app.command("show")
@@ -111,7 +116,7 @@ def telemetry_show(
 
     table = Table(title=f"Recent Events (last {len(events)})", box=box.ROUNDED)
     table.add_column("Timestamp", style="dim")
-    table.add_column("Command", style="cyan")
+    table.add_column("Command", style=ACCENT)
     table.add_column("Duration", justify="right")
     table.add_column("Skill")
     table.add_column("Score", justify="right")
@@ -121,7 +126,7 @@ def telemetry_show(
         ts = e.timestamp[:19] if e.timestamp else ""
         dur = f"{e.duration_ms:.0f}ms" if e.duration_ms is not None else ""
         score = f"{e.score:.1f}" if e.score is not None else ""
-        synced = "[green]Y[/green]" if e.synced else "[dim]N[/dim]"
+        synced = f"[{PASS_COLOR}]Y[/{PASS_COLOR}]" if e.synced else "[dim]N[/dim]"
         table.add_row(ts, e.command, dur, e.skill_name or "", score, synced)
 
     console.print(table)

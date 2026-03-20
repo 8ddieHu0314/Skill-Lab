@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from skill_lab.cli import _with_telemetry, app, console
+from skill_lab.core.colors import PASS_COLOR
 from skill_lab.core.telemetry import record_event
 
 
@@ -44,7 +45,7 @@ def setup() -> None:
 
     for tool, status in results.items():
         if status == "configured":
-            console.print(f"  [green]\u2713[/green] {tool}: hook configured")
+            console.print(f"  [{PASS_COLOR}]\u2713[/{PASS_COLOR}] {tool}: hook configured")
         elif status == "already_configured":
             console.print(f"  [dim]\u2013[/dim] {tool}: already configured")
         else:
@@ -54,7 +55,7 @@ def setup() -> None:
     console.print()
     if newly_configured:
         console.print(
-            "[green]Done![/green] Skill invocations will be tracked automatically.\n"
+            f"[{PASS_COLOR}]Done![/{PASS_COLOR}] Skill invocations will be tracked automatically.\n"
             "[dim]Run [bold]sklab stats[/bold] to view your usage.[/dim]"
         )
     else:

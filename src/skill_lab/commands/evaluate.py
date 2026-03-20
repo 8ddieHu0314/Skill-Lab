@@ -17,11 +17,20 @@ from skill_lab.cli import (
     app,
     console,
 )
+from skill_lab.core.colors import (
+    ACCENT,
+    FAIL_COLOR,
+    NEUTRAL_COLOR,
+    PASS_COLOR,
+    SECONDARY,
+    SEVERITY_STYLES,
+    WARN_COLOR,
+)
 from skill_lab.core.models import EvalDimension
 from skill_lab.core.registry import registry
 from skill_lab.core.telemetry import push_telemetry_extra
 from skill_lab.evaluators.static_evaluator import StaticEvaluator
-from skill_lab.reporters.console_reporter import SEVERITY_STYLES, ConsoleReporter
+from skill_lab.reporters.console_reporter import ConsoleReporter
 from skill_lab.reporters.json_reporter import JsonReporter
 
 
@@ -38,7 +47,9 @@ def _run_bulk_evaluate(
         skill_paths.extend(found)
 
     if not skill_paths:
-        console.print("[yellow]No skill folders found (no SKILL.md files discovered).[/yellow]")
+        console.print(
+            f"[{WARN_COLOR}]No skill folders found (no SKILL.md files discovered).[/{WARN_COLOR}]"
+        )
         raise typer.Exit(code=0)
 
     console.print(f"[dim]Found {len(skill_paths)} skill(s). Running evaluate...[/dim]\n")
@@ -51,7 +62,7 @@ def _run_bulk_evaluate(
         try:
             report = evaluator.evaluate(sp)
         except Exception as e:
-            console.print(f"[red]Error evaluating {sp.name}: {e}[/red]")
+            console.print(f"[{FAIL_COLOR}]Error evaluating {sp.name}: {e}[/{FAIL_COLOR}]")
             any_failed = True
             continue
 
@@ -63,7 +74,11 @@ def _run_bulk_evaluate(
             console_reporter.report(report)
 
         score_str = f"{report.quality_score:.1f}"
-        status_str = "[green]PASS[/green]" if report.overall_pass else "[red]FAIL[/red]"
+        status_str = (
+            f"[{PASS_COLOR}]PASS[/{PASS_COLOR}]"
+            if report.overall_pass
+            else f"[{FAIL_COLOR}]FAIL[/{FAIL_COLOR}]"
+        )
         skill_name = report.skill_name or sp.name
         rel_path = str(sp.relative_to(Path.cwd())) if sp.is_relative_to(Path.cwd()) else str(sp)
         summary_rows.append((skill_name, rel_path, score_str, status_str))
@@ -82,7 +97,7 @@ def _run_bulk_evaluate(
     if format == OutputFormat.console:
         console.print()
         table = Table(title=f"Summary \u2014 {len(skill_paths)} skill(s)", box=box.ROUNDED)
-        table.add_column("Skill", style="cyan")
+        table.add_column("Skill", style=ACCENT)
         table.add_column("Path", style="dim")
         table.add_column("Score", justify="right")
         table.add_column("Status", justify="center")
@@ -157,11 +172,15 @@ def evaluate(
     """
     # --all and --repo are mutually exclusive with a positional path
     if (all_skills or repo) and skill_path is not None:
-        console.print("[red]Error: Cannot combine --all/--repo with a skill path argument.[/red]")
+        console.print(
+            f"[{FAIL_COLOR}]Error: Cannot combine --all/--repo with a skill path argument.[/{FAIL_COLOR}]"
+        )
         raise typer.Exit(code=1)
 
     if all_skills and repo:
-        console.print("[red]Error: --all and --repo are mutually exclusive.[/red]")
+        console.print(
+            f"[{FAIL_COLOR}]Error: --all and --repo are mutually exclusive.[/{FAIL_COLOR}]"
+        )
         raise typer.Exit(code=1)
 
     if all_skills:
@@ -171,7 +190,7 @@ def evaluate(
     if repo:
         repo_root = _find_repo_root(Path.cwd())
         if repo_root is None:
-            console.print("[red]Error: Not inside a git repository.[/red]")
+            console.print(f"[{FAIL_COLOR}]Error: Not inside a git repository.[/{FAIL_COLOR}]")
             raise typer.Exit(code=1)
         console.print(f"[dim]Repo root: {repo_root}[/dim]")
         _run_bulk_evaluate([repo_root], verbose, spec_only, format)
@@ -214,7 +233,9 @@ def _run_bulk_check(roots: list[Path], spec_only: bool) -> None:
         skill_paths.extend(_discover_skills(root))
 
     if not skill_paths:
-        console.print("[yellow]No skill folders found (no SKILL.md files discovered).[/yellow]")
+        console.print(
+            f"[{WARN_COLOR}]No skill folders found (no SKILL.md files discovered).[/{WARN_COLOR}]"
+        )
         raise typer.Exit(code=0)
 
     console.print(f"[dim]Found {len(skill_paths)} skill(s). Running check...[/dim]\n")
@@ -227,7 +248,7 @@ def _run_bulk_check(roots: list[Path], spec_only: bool) -> None:
         try:
             passed, errors = evaluator.check(sp)
         except Exception as e:
-            console.print(f"[red]Error checking {sp.name}: {e}[/red]")
+            console.print(f"[{FAIL_COLOR}]Error checking {sp.name}: {e}[/{FAIL_COLOR}]")
             any_failed = True
             continue
 
@@ -235,21 +256,23 @@ def _run_bulk_check(roots: list[Path], spec_only: bool) -> None:
         rel_path = str(sp.relative_to(Path.cwd())) if sp.is_relative_to(Path.cwd()) else str(sp)
 
         if passed:
-            summary_rows.append((skill_name, rel_path, "[green]PASS[/green]"))
+            summary_rows.append((skill_name, rel_path, f"[{PASS_COLOR}]PASS[/{PASS_COLOR}]"))
         else:
             console.print(f"[bold]{skill_name}[/bold] ({rel_path})")
             for error in errors:
-                console.print(f"  [red]X[/red] [{error.check_id}] {error.message}")
+                console.print(
+                    f"  [{FAIL_COLOR}]X[/{FAIL_COLOR}] [{error.check_id}] {error.message}"
+                )
             console.print(
                 f"  [dim]Run [bold]sklab evaluate {rel_path}[/bold] for full details.[/dim]"
             )
             console.print()
             any_failed = True
-            summary_rows.append((skill_name, rel_path, "[red]FAIL[/red]"))
+            summary_rows.append((skill_name, rel_path, f"[{FAIL_COLOR}]FAIL[/{FAIL_COLOR}]"))
 
     console.print()
     table = Table(title=f"Summary — {len(skill_paths)} skill(s)", box=box.ROUNDED)
-    table.add_column("Skill", style="cyan")
+    table.add_column("Skill", style=ACCENT)
     table.add_column("Path", style="dim")
     table.add_column("Status", justify="center")
     for name, path, status in summary_rows:
@@ -295,11 +318,15 @@ def check(
 ) -> None:
     """Quick validation that reports only high-severity failures."""
     if (all_skills or repo) and skill_path is not None:
-        console.print("[red]Error: Cannot combine --all/--repo with a skill path argument.[/red]")
+        console.print(
+            f"[{FAIL_COLOR}]Error: Cannot combine --all/--repo with a skill path argument.[/{FAIL_COLOR}]"
+        )
         raise typer.Exit(code=1)
 
     if all_skills and repo:
-        console.print("[red]Error: --all and --repo are mutually exclusive.[/red]")
+        console.print(
+            f"[{FAIL_COLOR}]Error: --all and --repo are mutually exclusive.[/{FAIL_COLOR}]"
+        )
         raise typer.Exit(code=1)
 
     if all_skills:
@@ -309,7 +336,7 @@ def check(
     if repo:
         repo_root = _find_repo_root(Path.cwd())
         if repo_root is None:
-            console.print("[red]Error: Not inside a git repository.[/red]")
+            console.print(f"[{FAIL_COLOR}]Error: Not inside a git repository.[/{FAIL_COLOR}]")
             raise typer.Exit(code=1)
         console.print(f"[dim]Repo root: {repo_root}[/dim]")
         _run_bulk_check([repo_root], spec_only)
@@ -326,13 +353,13 @@ def check(
     check_count = len(evaluator._get_checks())
     if passed:
         console.print(
-            f"[green]Check passed![/green] ({skill_path.name} \u2014 {check_count} checks)"
+            f"[{PASS_COLOR}]Check passed![/{PASS_COLOR}] ({skill_path.name} \u2014 {check_count} checks)"
         )
     else:
-        console.print(f"[red]Check failed![/red] ({skill_path.name})")
+        console.print(f"[{FAIL_COLOR}]Check failed![/{FAIL_COLOR}] ({skill_path.name})")
         console.print()
         for error in errors:
-            console.print(f"  [red]X[/red] [{error.check_id}] {error.message}")
+            console.print(f"  [{FAIL_COLOR}]X[/{FAIL_COLOR}] [{error.check_id}] {error.message}")
         console.print()
         raise typer.Exit(code=1)
 
@@ -371,7 +398,7 @@ def list_checks(
             dim = EvalDimension(dimension.lower())
             checks = registry.get_by_dimension(dim.value)
         except ValueError:
-            console.print(f"[red]Invalid dimension: {dimension}[/red]")
+            console.print(f"[{FAIL_COLOR}]Invalid dimension: {dimension}[/{FAIL_COLOR}]")
             console.print(f"Valid dimensions: {', '.join(d.value for d in EvalDimension)}")
             raise typer.Exit(code=1) from None
     elif spec_only:
@@ -383,21 +410,23 @@ def list_checks(
     checks = [c for c in checks if c.listable]
 
     if not checks:
-        console.print("[yellow]No checks found.[/yellow]")
+        console.print(f"[{WARN_COLOR}]No checks found.[/{WARN_COLOR}]")
         return
 
     # Build table
     table = Table(title="Available Checks")
-    table.add_column("Check ID", style="cyan")
+    table.add_column("Check ID", style=ACCENT)
     table.add_column("Name")
-    table.add_column("Dimension", style="blue")
+    table.add_column("Dimension", style=SECONDARY)
     table.add_column("Severity")
-    table.add_column("Spec", style="green")
+    table.add_column("Spec", style=PASS_COLOR)
     table.add_column("Description")
 
     for check_class in sorted(checks, key=lambda c: c.check_id):
-        severity_style = SEVERITY_STYLES.get(check_class.severity.value, "white")
-        spec_badge = "[green]Yes[/green]" if check_class.spec_required else "[dim]No[/dim]"
+        severity_style = SEVERITY_STYLES.get(check_class.severity.value, NEUTRAL_COLOR)
+        spec_badge = (
+            f"[{PASS_COLOR}]Yes[/{PASS_COLOR}]" if check_class.spec_required else "[dim]No[/dim]"
+        )
         table.add_row(
             check_class.check_id,
             check_class.check_name,

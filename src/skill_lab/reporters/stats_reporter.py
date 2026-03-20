@@ -7,6 +7,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from skill_lab.core.colors import ACCENT, DELTA_NEGATIVE, DELTA_POSITIVE, WARN_COLOR
 from skill_lab.core.stats import OverviewStats, SkillCount, SkillScore, SkillTokens
 from skill_lab.reporters.console_reporter import score_color
 
@@ -19,7 +20,7 @@ def print_stats_overview(stats: OverviewStats) -> None:
     # Skills fired
     lines.append("[bold]Skills Fired[/bold]")
     lines.append(f"  [dim]{stats.month_label}[/dim]")
-    lines.append(f"  [cyan]{stats.skills_fired_this_month}[/cyan] invocations this month")
+    lines.append(f"  [{ACCENT}]{stats.skills_fired_this_month}[/{ACCENT}] invocations this month")
     lines.append("")
     lines.append(
         "  [dim]\u2192 run [bold]sklab stats count[/bold] to see use count per skill[/dim]"
@@ -31,7 +32,7 @@ def print_stats_overview(stats: OverviewStats) -> None:
     if stats.avg_baseline_score is not None and stats.avg_current_score is not None:
         delta = stats.avg_current_score - stats.avg_baseline_score
         sign = "+" if delta >= 0 else ""
-        delta_color = "green" if delta >= 0 else "red"
+        delta_color = DELTA_POSITIVE if delta >= 0 else DELTA_NEGATIVE
         cur_color = score_color(stats.avg_current_score)
         lines.append(f"  Baseline   {stats.avg_baseline_score:.1f}")
         lines.append(
@@ -51,7 +52,7 @@ def print_stats_overview(stats: OverviewStats) -> None:
     lines.append("[bold]Tokens from Skills[/bold]")
     lines.append(f"  [dim]{stats.month_label}[/dim]")
     lines.append(
-        f"  [cyan]{stats.tokens_this_month:,}[/cyan] tokens"
+        f"  [{ACCENT}]{stats.tokens_this_month:,}[/{ACCENT}] tokens"
         "  [dim](estimated from SKILL.md content)[/dim]"
     )
     lines.append("")
@@ -80,7 +81,9 @@ def print_stats_overview(stats: OverviewStats) -> None:
 
 def print_stats_count(month_label: str, rows: list[SkillCount]) -> None:
     if not rows:
-        console.print(f"[yellow]No skill invocations recorded for {month_label}.[/yellow]")
+        console.print(
+            f"[{WARN_COLOR}]No skill invocations recorded for {month_label}.[/{WARN_COLOR}]"
+        )
         console.print(
             "[dim]Run [bold]sklab setup[/bold] to enable automatic invocation tracking.[/dim]"
         )
@@ -94,7 +97,7 @@ def print_stats_count(month_label: str, rows: list[SkillCount]) -> None:
         box=box.ROUNDED,
         show_footer=True,
     )
-    table.add_column("Skill Name", style="cyan", footer="Total")
+    table.add_column("Skill Name", style=ACCENT, footer="Total")
     table.add_column("Use Count", justify="right", footer=str(total_uses))
     table.add_column("Tokens Used", justify="right", footer=f"{total_tokens:,}")
 
@@ -106,14 +109,14 @@ def print_stats_count(month_label: str, rows: list[SkillCount]) -> None:
 
 def print_stats_score(rows: list[SkillScore]) -> None:
     if not rows:
-        console.print("[yellow]No evaluate runs recorded yet.[/yellow]")
+        console.print(f"[{WARN_COLOR}]No evaluate runs recorded yet.[/{WARN_COLOR}]")
         console.print(
             "[dim]Run [bold]sklab evaluate ./my-skill[/bold] to start tracking scores.[/dim]"
         )
         return
 
     table = Table(title="Skill Score Trend  \u2022  All Time", box=box.ROUNDED)
-    table.add_column("Skill Name", style="cyan")
+    table.add_column("Skill Name", style=ACCENT)
     table.add_column("Current", justify="right")
     table.add_column("Baseline", justify="right")
     table.add_column("\u0394", justify="right")
@@ -127,7 +130,7 @@ def print_stats_score(rows: list[SkillScore]) -> None:
         else:
             delta = row.current_score - row.baseline_score
             sign = "+" if delta >= 0 else ""
-            delta_color = "green" if delta >= 0 else "red"
+            delta_color = DELTA_POSITIVE if delta >= 0 else DELTA_NEGATIVE
             delta_str = f"[{delta_color}]{sign}{delta:.1f}[/{delta_color}]"
         table.add_row(row.skill_name, current_str, baseline_str, delta_str)
 
@@ -136,7 +139,7 @@ def print_stats_score(rows: list[SkillScore]) -> None:
 
 def print_stats_tokens(month_label: str, rows: list[SkillTokens]) -> None:
     if not rows:
-        console.print(f"[yellow]No token data recorded for {month_label}.[/yellow]")
+        console.print(f"[{WARN_COLOR}]No token data recorded for {month_label}.[/{WARN_COLOR}]")
         console.print(
             "[dim]Run [bold]sklab setup[/bold] to enable automatic invocation tracking.[/dim]"
         )
@@ -149,7 +152,7 @@ def print_stats_tokens(month_label: str, rows: list[SkillTokens]) -> None:
         box=box.ROUNDED,
         show_footer=True,
     )
-    table.add_column("Skill Name", style="cyan", footer="Total")
+    table.add_column("Skill Name", style=ACCENT, footer="Total")
     table.add_column("Tokens / Invocation", justify="right", footer="")
     table.add_column("Total Tokens", justify="right", footer=f"{total_tokens:,}")
 

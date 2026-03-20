@@ -7,6 +7,7 @@ from typing import Annotated
 import typer
 
 from skill_lab.cli import _find_repo_root, _record_telemetry, _with_telemetry, app, console
+from skill_lab.core.colors import WARN_COLOR
 from skill_lab.core.telemetry import _store_pending_error, init_telemetry
 
 stats_app = typer.Typer(
@@ -45,7 +46,7 @@ def stats(ctx: typer.Context) -> None:
 
         data = get_overview_stats()
         if data is None:
-            console.print("[yellow]No usage data found yet.[/yellow]")
+            console.print(f"[{WARN_COLOR}]No usage data found yet.[/{WARN_COLOR}]")
             console.print("[dim]Run some sklab commands first, then check back here.[/dim]")
         else:
             print_stats_overview(data)

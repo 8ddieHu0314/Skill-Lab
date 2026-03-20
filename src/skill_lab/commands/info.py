@@ -15,6 +15,7 @@ from skill_lab.cli import (
     app,
     console,
 )
+from skill_lab.core.colors import FAIL_COLOR
 from skill_lab.core.telemetry import push_telemetry_extra
 from skill_lab.core.tokens import estimate_tokens
 from skill_lab.evaluators.trace_evaluator import TraceEvaluator
@@ -53,7 +54,7 @@ def info(
     skill = parse_skill(skill_path)
 
     if skill.metadata is None:
-        console.print("[red]Error: Could not parse skill metadata.[/red]")
+        console.print(f"[{FAIL_COLOR}]Error: Could not parse skill metadata.[/{FAIL_COLOR}]")
         raise typer.Exit(code=1)
 
     # Read full SKILL.md content for activation cost
@@ -96,7 +97,7 @@ def info(
     if field is not None:
         value = data.get(field)
         if value is None:
-            console.print(f"[red]Unknown field: {field}[/red]")
+            console.print(f"[{FAIL_COLOR}]Unknown field: {field}[/{FAIL_COLOR}]")
             raise typer.Exit(code=1)
         if isinstance(value, (dict, list)):
             print(json_module.dumps(value))
@@ -153,7 +154,7 @@ def prompt(
     from skill_lab.exporters.prompt_exporter import render_json, render_markdown, render_xml
 
     if format not in ("xml", "markdown", "json"):
-        console.print(f"[red]Invalid format: {format}[/red]")
+        console.print(f"[{FAIL_COLOR}]Invalid format: {format}[/{FAIL_COLOR}]")
         console.print("[dim]Valid formats: xml, markdown, json[/dim]")
         raise typer.Exit(code=1)
 
@@ -166,7 +167,9 @@ def prompt(
         resolved = _resolve_skill_path(sp)
         skill = parse_skill(resolved)
         if skill.metadata is None:
-            console.print(f"[red]Error: Could not parse skill metadata in {resolved}[/red]")
+            console.print(
+                f"[{FAIL_COLOR}]Error: Could not parse skill metadata in {resolved}[/{FAIL_COLOR}]"
+            )
             raise typer.Exit(code=1)
         skills_data.append(
             {
@@ -252,10 +255,10 @@ def eval_trace(
         evaluator = TraceEvaluator()
         report = evaluator.evaluate(skill_path, trace)
     except FileNotFoundError as e:
-        console.print(f"[red]Error: {e}[/red]")
+        console.print(f"[{FAIL_COLOR}]Error: {e}[/{FAIL_COLOR}]")
         raise typer.Exit(code=1) from None
     except ValueError as e:
-        console.print(f"[red]Error: {e}[/red]")
+        console.print(f"[{FAIL_COLOR}]Error: {e}[/{FAIL_COLOR}]")
         raise typer.Exit(code=1) from None
 
     # Output results

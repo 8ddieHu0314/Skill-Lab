@@ -15,8 +15,8 @@ from skill_lab.core.models import (
     TraceCheckResult,
     TraceReport,
 )
+from skill_lab.core.colors import SEVERITY_STYLES
 from skill_lab.reporters.console_reporter import (
-    SEVERITY_STYLES,
     ConsoleReporter,
 )
 from skill_lab.reporters.json_reporter import SCHEMA_VERSION, JsonReporter

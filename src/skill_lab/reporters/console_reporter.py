@@ -5,23 +5,26 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from skill_lab.core.colors import (
+    ACCENT,
+    BORDER,
+    FAIL_COLOR,
+    NEUTRAL_COLOR,
+    PASS_COLOR,
+    SECONDARY,
+    SEVERITY_STYLES,
+    WARN_COLOR,
+)
 from skill_lab.core.models import EvaluationReport, Severity, TraceReport
-
-# Shared severity display mappings — keyed by Severity.value string
-SEVERITY_STYLES: dict[str, str] = {
-    "high": "bold red",
-    "medium": "yellow",
-    "low": "blue",
-}
 
 
 def score_color(score: float) -> str:
     """Return a rich color name based on a 0-100 quality score."""
     if score >= 80:
-        return "green"
+        return PASS_COLOR
     if score >= 60:
-        return "yellow"
-    return "red"
+        return WARN_COLOR
+    return FAIL_COLOR
 
 
 class ConsoleReporter:
@@ -38,7 +41,7 @@ class ConsoleReporter:
 
     def _severity_style(self, severity: Severity) -> str:
         """Get the rich style for a severity level."""
-        return SEVERITY_STYLES.get(severity.value, "white")
+        return SEVERITY_STYLES.get(severity.value, NEUTRAL_COLOR)
 
     def _print_verbose_hint(self, total_count: int, shown_count: int) -> None:
         """Print a hint about hidden passing checks when not in verbose mode."""
@@ -50,7 +53,7 @@ class ConsoleReporter:
                 f"[dim]({hidden} passing checks hidden, run [bold]sklab evaluate --verbose ./skill[/bold] to see all)[/dim]"
             )
         elif shown_count == 0:
-            self.console.print("[green]All checks passed![/green]")
+            self.console.print(f"[{PASS_COLOR}]All checks passed![/{PASS_COLOR}]")
             self.console.print(
                 "[dim](run [bold]sklab evaluate --verbose ./skill[/bold] to see details)[/dim]"
             )
@@ -68,13 +71,17 @@ class ConsoleReporter:
             Panel(
                 f"[bold]Skill:[/bold] {skill_name}\n[bold]Path:[/bold] {report.skill_path}",
                 title="Skill Lab Evaluation",
-                border_style="blue",
+                border_style=BORDER,
             )
         )
 
         # Score and status
         sc = score_color(report.quality_score)
-        status = "[green]PASS[/green]" if report.overall_pass else "[red]FAIL[/red]"
+        status = (
+            f"[{PASS_COLOR}]PASS[/{PASS_COLOR}]"
+            if report.overall_pass
+            else f"[{FAIL_COLOR}]FAIL[/{FAIL_COLOR}]"
+        )
 
         self.console.print()
         self.console.print(
@@ -103,7 +110,7 @@ class ConsoleReporter:
 
             for result in results_to_show:
                 status_icon = (
-                    "[green]OK[/green]"
+                    f"[{PASS_COLOR}]OK[/{PASS_COLOR}]"
                     if result.passed
                     else f"[{self._severity_style(result.severity)}]X[/{self._severity_style(result.severity)}]"
                 )
@@ -133,7 +140,7 @@ class ConsoleReporter:
             failed = counts.get("failed", 0)
             total = passed + failed
             if total > 0:
-                color = "green" if failed == 0 else "yellow" if failed < passed else "red"
+                color = PASS_COLOR if failed == 0 else WARN_COLOR if failed < passed else FAIL_COLOR
                 self.console.print(f"  {dim}: [{color}]{passed}/{total} passed[/{color}]")
 
         self.console.print()
@@ -151,17 +158,19 @@ class ConsoleReporter:
                 f"[bold]Trace:[/bold] {report.trace_path}\n"
                 f"[bold]Project:[/bold] {report.project_dir}",
                 title="Trace Evaluation Report",
-                border_style="blue",
+                border_style=BORDER,
             )
         )
 
         # Summary
         self.console.print()
         if report.overall_pass:
-            self.console.print(f"[green]All {report.checks_passed} checks passed![/green]")
+            self.console.print(
+                f"[{PASS_COLOR}]All {report.checks_passed} checks passed![/{PASS_COLOR}]"
+            )
         else:
             self.console.print(
-                f"[red]{report.checks_failed} of {report.checks_run} checks failed[/red]"
+                f"[{FAIL_COLOR}]{report.checks_failed} of {report.checks_run} checks failed[/{FAIL_COLOR}]"
             )
         self.console.print(f"Pass rate: {report.pass_rate:.1f}%")
         self.console.print()
@@ -174,12 +183,16 @@ class ConsoleReporter:
         if results_to_show:
             table = Table(title="Check Results" if self.verbose else "Failed Checks")
             table.add_column("", width=4, no_wrap=True)
-            table.add_column("Check ID", style="cyan", min_width=20)
-            table.add_column("Type", style="blue", min_width=10, no_wrap=True)
+            table.add_column("Check ID", style=ACCENT, min_width=20)
+            table.add_column("Type", style=SECONDARY, min_width=10, no_wrap=True)
             table.add_column("Message")
 
             for result in results_to_show:
-                status = "[green]PASS[/green]" if result.passed else "[red]FAIL[/red]"
+                status = (
+                    f"[{PASS_COLOR}]PASS[/{PASS_COLOR}]"
+                    if result.passed
+                    else f"[{FAIL_COLOR}]FAIL[/{FAIL_COLOR}]"
+                )
                 table.add_row(
                     status,
                     result.check_id,
@@ -199,7 +212,7 @@ class ConsoleReporter:
                 passed = stats["passed"]
                 total = stats["total"]
                 pct = (passed / total * 100) if total > 0 else 0
-                color = "green" if passed == total else "yellow" if passed > 0 else "red"
+                color = PASS_COLOR if passed == total else WARN_COLOR if passed > 0 else FAIL_COLOR
                 self.console.print(
                     f"  {type_name}: [{color}]{passed}/{total} ({pct:.0f}%)[/{color}]"
                 )
