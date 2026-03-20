@@ -186,6 +186,44 @@ class TestTriggerCommand:
         assert "sklab generate" in result.stdout
 
 
+class TestCacheIsWarm:
+    """Tests for _cache_is_warm helper."""
+
+    def test_no_traces_dir(self, tmp_path: Path) -> None:
+        from skill_lab.commands.trigger import _cache_is_warm
+
+        assert _cache_is_warm(tmp_path) is False
+
+    def test_empty_traces_dir(self, tmp_path: Path) -> None:
+        from skill_lab.commands.trigger import _cache_is_warm
+
+        (tmp_path / ".sklab" / "traces").mkdir(parents=True)
+        assert _cache_is_warm(tmp_path) is False
+
+    def test_recent_trace_is_warm(self, tmp_path: Path) -> None:
+        from skill_lab.commands.trigger import _cache_is_warm
+
+        traces = tmp_path / ".sklab" / "traces"
+        traces.mkdir(parents=True)
+        (traces / "test.jsonl").write_text("{}")
+        assert _cache_is_warm(tmp_path) is True
+
+    def test_old_trace_is_cold(self, tmp_path: Path) -> None:
+        import os
+        import time
+
+        from skill_lab.commands.trigger import _cache_is_warm
+
+        traces = tmp_path / ".sklab" / "traces"
+        traces.mkdir(parents=True)
+        trace_file = traces / "test.jsonl"
+        trace_file.write_text("{}")
+        # Set mtime to 10 minutes ago
+        old_time = time.time() - 600
+        os.utime(trace_file, (old_time, old_time))
+        assert _cache_is_warm(tmp_path) is False
+
+
 class TestBanner:
     """Tests for the ASCII banner."""
 

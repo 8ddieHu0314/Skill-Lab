@@ -590,7 +590,11 @@ class SecuritySizeCheck(StaticCheck):
 
 
 class SecurityScanCheck(StaticCheck):
-    """Composite security scan across five layers.
+    """Composite security scan used by `sklab scan` (not in the evaluation pipeline).
+
+    Runs all five security layers and returns a single BLOCK/SUS/ALLOW verdict.
+    Individual sub-checks (security.injection, security.evaluator, etc.) are
+    registered separately for `sklab evaluate` and `sklab check`.
 
     Status:
         BLOCK (ERROR)   — any finding from layers B–E

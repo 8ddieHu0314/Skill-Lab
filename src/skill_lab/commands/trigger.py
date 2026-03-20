@@ -191,9 +191,14 @@ def trigger(
         console.print()
 
     n = len(preview_cases)
-    est_str = "~10s" if _cache_is_warm(skill_path) else "~8 min"
+    warm = _cache_is_warm(skill_path)
+    per_test = 2 if warm else 60  # seconds: ~2s cached, ~60s cold
+    est_seconds = n * per_test
+    est_str = f"~{est_seconds}s" if est_seconds < 60 else f"~{est_seconds // 60} min"
+    cache_hint = "cache warm" if warm else "cache cold"
     console.print(
-        f"[dim]Running {n} test{'s' if n != 1 else ''} — estimated time: {est_str}[/dim]\n"
+        f"[dim]Running {n} test{'s' if n != 1 else ''} — estimated time: "
+        f"{est_str} ({cache_hint})[/dim]\n"
     )
 
     # Run evaluation with progress display

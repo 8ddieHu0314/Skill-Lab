@@ -72,7 +72,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 | `score` | Score trend for all evaluated skills |
 | `tokens` | Token usage per skill for the current month |
 | **Browse** | |
-| `sklab list-checks` | Browse all 29 checks across 5 dimensions |
+| `sklab list-checks` | Browse all 33 checks across 5 dimensions |
 | `--spec-only` | Only spec-required checks |
 | `--suggestions-only` | Only quality suggestions |
 | **Trigger Testing** _(requires `ANTHROPIC_API_KEY`)_ | |
@@ -91,7 +91,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 ## What Gets Checked
 
-29 checks across 5 dimensions. Run `sklab list-checks` to browse all of them with severity labels.
+33 checks across 5 dimensions. Run `sklab list-checks` to browse all of them with severity labels.
 
 **Structure** (11)
 - SKILL.md Exists · Valid Frontmatter · Standard Frontmatter Fields
@@ -109,8 +109,8 @@ export ANTHROPIC_API_KEY=sk-ant-...
 - Metadata Token Budget · Reference Depth · Asset Paths Exist · Script Paths Exist
 - Scripts Referenced · Compatibility Prerequisites
 
-**Security** (1)
-- Security Scan — 5-layer check: shell metacharacters, unsafe patterns (eval/exec), path traversal, code execution, obfuscation
+**Security** (5)
+- Prompt Injection & Jailbreak · Evaluator Manipulation · Unicode Obfuscation · YAML Anomalies · Suspicious Size & Structure
 
 ---
 
@@ -121,7 +121,7 @@ Skill Lab generates ~13 test cases per skill across 4 types — explicit, implic
 Requires Claude CLI: `npm install -g @anthropic-ai/claude-code`
 
 ```yaml
-# .skill-lab/tests/triggers.yaml
+# .sklab/tests/triggers.yaml
 skill: my-skill
 test_cases:
   # should fire
