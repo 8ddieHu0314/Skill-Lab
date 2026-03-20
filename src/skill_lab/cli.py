@@ -65,7 +65,7 @@ def _discover_skills(root: Path) -> list[Path]:
     """
     skills: list[Path] = []
     for path in sorted(root.rglob("SKILL.md")):
-        # Skip hidden dirs relative to root (e.g. .git, .skill-lab subdirs),
+        # Skip hidden dirs relative to root (e.g. .git, .sklab subdirs),
         # but allow root itself to be a hidden directory.
         relative = path.relative_to(root)
         if any(part.startswith(".") for part in relative.parts):

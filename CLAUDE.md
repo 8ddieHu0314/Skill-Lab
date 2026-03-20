@@ -31,7 +31,7 @@ ALWAYS READ THE DOCS BEFORE ACTIONING
 ```bash
 pip install -e ".[dev]"       # install with dev deps
 sklab evaluate ./my-skill     # static analysis
-sklab validate                # quick pass/fail
+sklab check                   # quick pass/fail
 sklab info ./my-skill         # metadata + token estimates
 sklab prompt ./skill-a        # export skill as XML prompt
 sklab trigger                 # run trigger tests (requires Claude CLI)
