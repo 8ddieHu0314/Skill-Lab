@@ -103,7 +103,7 @@ def optimize(
         console.print()
         console.print(
             Panel(
-                Syntax(diff_text, "diff", theme="monokai"),
+                Syntax(diff_text, "diff", theme="monokai", word_wrap=True),
                 title="Proposed Changes",
                 border_style="cyan",
             )

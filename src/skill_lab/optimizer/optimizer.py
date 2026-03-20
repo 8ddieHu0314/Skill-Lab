@@ -108,16 +108,21 @@ class SkillOptimizer:
             usage=self.last_usage,
         )
 
-    def _evaluate(self, skill_path: Path) -> EvaluationReport:
+    def _evaluate(
+        self,
+        skill_path: Path,
+        exclude_check_ids: list[str] | None = None,
+    ) -> EvaluationReport:
         """Run static evaluation on a skill.
 
         Args:
             skill_path: Path to the skill directory.
+            exclude_check_ids: Optional check IDs to skip.
 
         Returns:
             EvaluationReport with check results and score.
         """
-        evaluator = StaticEvaluator()
+        evaluator = StaticEvaluator(exclude_check_ids=exclude_check_ids)
         return evaluator.evaluate(skill_path)
 
     def _build_prompt(
@@ -179,6 +184,12 @@ class SkillOptimizer:
                 system=SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": prompt}],
             )
+            if message.stop_reason == "max_tokens":
+                raise GenerationError(
+                    "Model output was truncated (max_tokens limit reached). "
+                    "The skill may be too large to optimize in one pass.",
+                    suggestion="Try a model with a larger output window or shorten the skill.",
+                )
             # Capture token usage
             self.last_usage = GenerationUsage(
                 input_tokens=message.usage.input_tokens,
@@ -271,4 +282,7 @@ class SkillOptimizer:
                         # Fallback for platforms where symlinks fail (e.g. Windows)
                         shutil.copytree(original_subdir, target)
 
-            return self._evaluate(tmp_path)
+            # Skip the directory-name check: the temp dir name doesn't match the
+            # skill's frontmatter name, which would always fail this check and
+            # produce a misleadingly low optimized_score.
+            return self._evaluate(tmp_path, exclude_check_ids=["naming.matches-directory"])

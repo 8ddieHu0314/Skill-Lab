@@ -50,6 +50,7 @@ def _mock_anthropic_response(text: str) -> MagicMock:
     block.text = text
     message = MagicMock()
     message.content = [block]
+    message.stop_reason = "end_turn"
     message.usage = MagicMock()
     message.usage.input_tokens = 500
     message.usage.output_tokens = 300
@@ -126,12 +127,27 @@ class TestSkillOptimizer:
         """Test error handling for empty API response."""
         empty_msg = MagicMock()
         empty_msg.content = []
+        empty_msg.stop_reason = "end_turn"
         empty_msg.usage = MagicMock()
         empty_msg.usage.input_tokens = 100
         empty_msg.usage.output_tokens = 0
         optimizer._client.messages.create.return_value = empty_msg
 
         with pytest.raises(GenerationError, match="empty response"):
+            optimizer.optimize(valid_skill_path)
+
+    def test_optimize_raises_on_max_tokens(
+        self, optimizer: SkillOptimizer, valid_skill_path: Path
+    ) -> None:
+        """Test error raised when model output is truncated by max_tokens limit."""
+        truncated_msg = MagicMock()
+        truncated_msg.stop_reason = "max_tokens"
+        truncated_msg.usage = MagicMock()
+        truncated_msg.usage.input_tokens = 500
+        truncated_msg.usage.output_tokens = 8192
+        optimizer._client.messages.create.return_value = truncated_msg
+
+        with pytest.raises(GenerationError, match="truncated"):
             optimizer.optimize(valid_skill_path)
 
     def test_optimize_strips_markdown_fences(
