@@ -45,7 +45,7 @@ def generate(
 ) -> None:
     """Generate trigger test cases for a skill using an LLM.
 
-    Reads SKILL.md and generates .skill-lab/tests/triggers.yaml with
+    Reads SKILL.md and generates .sklab/tests/triggers.yaml with
     13 test cases across all 4 trigger types (explicit, implicit,
     contextual, negative).
 

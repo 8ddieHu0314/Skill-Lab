@@ -65,7 +65,7 @@ def _discover_skills(root: Path) -> list[Path]:
     """
     skills: list[Path] = []
     for path in sorted(root.rglob("SKILL.md")):
-        # Skip hidden dirs relative to root (e.g. .git, .skill-lab subdirs),
+        # Skip hidden dirs relative to root (e.g. .git, .sklab subdirs),
         # but allow root itself to be a hidden directory.
         relative = path.relative_to(root)
         if any(part.startswith(".") for part in relative.parts):
@@ -335,7 +335,7 @@ def _print_getting_started() -> None:
     guide.add_row("  [dim]score[/dim]", "Score trend for all evaluated skills")
     guide.add_row("  [dim]tokens[/dim]", "Token usage per skill for the current month")
     guide.add_row("", "")
-    guide.add_row("sklab list-checks", "Browse all 29 checks across 5 dimensions")
+    guide.add_row("sklab list-checks", "Browse all 33 checks across 5 dimensions")
     guide.add_row("  [dim]--spec-only[/dim]", "Only spec-required checks")
     guide.add_row("  [dim]--suggestions-only[/dim]", "Only quality suggestions")
 
