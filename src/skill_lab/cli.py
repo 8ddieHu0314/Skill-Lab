@@ -341,6 +341,12 @@ def _print_getting_started() -> None:
 
     guide.add_row("", "")
     guide.add_row(
+        "sklab optimize [green]./my-skill[/green]",
+        "LLM-powered SKILL.md optimization — shows diff before applying",
+    )
+    guide.add_row("  [dim]--auto[/dim]", "Apply changes without confirmation")
+    guide.add_row("", "")
+    guide.add_row(
         "sklab generate [green]./my-skill[/green]",
         "Auto-generate trigger tests via LLM",
     )
