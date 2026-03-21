@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from skill_lab.commands.optimize import _build_diff_text
 from skill_lab.core.exceptions import GenerationError
 from skill_lab.optimizer.optimizer import (
     MAX_BODY_CHARS,
@@ -282,6 +283,34 @@ class TestParseResponse:
         content = "---\nname: test\n---\nBody"
         result = optimizer._parse_response(content)
         assert result.endswith("\n")
+
+
+class TestBuildDiffText:
+    """Tests for the _build_diff_text helper."""
+
+    def test_removes_file_headers(self) -> None:
+        raw = "--- SKILL.md (original)\n+++ SKILL.md (optimized)\n@@ -5,3 +5,4 @@\n context\n-old\n+new\n"
+        result = _build_diff_text(raw).plain
+        assert "---" not in result.split("\n")[0]
+        assert "+++" not in result
+
+    def test_skips_hunk_header(self) -> None:
+        raw = "--- a\n+++ b\n@@ -5,3 +5,4 @@\n context\n-old\n+new\n"
+        result = _build_diff_text(raw).plain
+        assert "@@ " not in result
+        assert "── Line" not in result
+
+    def test_preserves_diff_lines_with_line_numbers(self) -> None:
+        raw = "--- a\n+++ b\n@@ -5,3 +5,4 @@\n context\n-old line\n+new line\n"
+        result = _build_diff_text(raw).plain
+        assert "6 -old line" in result
+        assert "6 +new line" in result
+
+    def test_multi_hunk_line_numbers(self) -> None:
+        raw = "--- a\n+++ b\n@@ -1,2 +1,2 @@\n-foo\n+bar\n@@ -10,2 +10,2 @@\n-baz\n+qux\n"
+        result = _build_diff_text(raw).plain
+        assert "1 -foo" in result
+        assert "10 -baz" in result
 
 
 class TestOptimizeCommand:

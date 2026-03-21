@@ -2,12 +2,13 @@
 
 import difflib
 import os
+import re
 from pathlib import Path
 from typing import Annotated
 
 import typer
 from rich.panel import Panel
-from rich.syntax import Syntax
+from rich.text import Text
 
 from skill_lab.cli import (
     _cli_error_handler,
@@ -18,6 +19,46 @@ from skill_lab.cli import (
 )
 from skill_lab.core.telemetry import push_telemetry_extra
 from skill_lab.optimizer.optimizer import SkillOptimizer
+
+_HUNK_RE = re.compile(r"^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@.*$")
+
+
+def _build_diff_text(raw_diff: str) -> Text:
+    """Build a Rich Text from a unified diff with human-readable formatting.
+
+    - Strips redundant file headers (--- / +++)
+    - Skips @@ hunk markers (line numbers shown inline instead)
+    - Prepends the file line number to each removed/added line
+    - Colors removed lines red, added lines green
+    - Each line is appended separately so word-wrap never bleeds between lines
+    """
+    text = Text()
+    old_line = 0
+    new_line = 0
+    first_hunk = True
+    for line in raw_diff.splitlines():
+        if line.startswith("--- ") or line.startswith("+++ "):
+            continue
+        m = _HUNK_RE.match(line)
+        if m:
+            old_line = int(m.group(1))
+            new_line = int(m.group(2))
+            if not first_hunk:
+                text.append("\n")
+            first_hunk = False
+        elif line.startswith("-"):
+            text.append(f"{old_line:4d} ", style="dim red")
+            text.append(line + "\n", style="red")
+            old_line += 1
+        elif line.startswith("+"):
+            text.append(f"{new_line:4d} ", style="dim green")
+            text.append(line + "\n", style="green")
+            new_line += 1
+        else:
+            text.append(f"     {line}\n")
+            old_line += 1
+            new_line += 1
+    return text
 
 
 @app.command("optimize")
@@ -103,8 +144,9 @@ def optimize(
         console.print()
         console.print(
             Panel(
-                Syntax(diff_text, "diff", theme="monokai", word_wrap=True),
+                _build_diff_text(diff_text),
                 title="Proposed Changes",
+                subtitle="[dim]- removed  + added[/dim]",
                 border_style="cyan",
             )
         )
