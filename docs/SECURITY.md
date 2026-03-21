@@ -8,7 +8,7 @@
 | **SUS** | Size/structure anomalies only (Layer A) |
 | **BLOCK** | Any finding from Layers B–E |
 
-`sklab validate` also runs the security scan — a BLOCK fails validation; SUS does not.
+`sklab check` also runs the security scan — a BLOCK fails the check; SUS does not.
 
 ---
 

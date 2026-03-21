@@ -4,12 +4,12 @@ from __future__ import annotations
 
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 
-# Pricing per million tokens (input, output) — updated 2025-02
+# Pricing per million tokens (input, output) — updated 2026-03
 _PRICING: dict[str, tuple[float, float]] = {
-    "claude-haiku-4-5-20251001": (0.80, 4.00),
+    "claude-haiku-4-5-20251001": (1.00, 5.00),
     "claude-sonnet-4-5-20250929": (3.00, 15.00),
     "claude-sonnet-4-6": (3.00, 15.00),
-    "claude-opus-4-6": (15.00, 75.00),
+    "claude-opus-4-6": (5.00, 25.00),
 }
 
 
@@ -18,9 +18,7 @@ class GenerationUsage:
 
     def __init__(self, input_tokens: int, output_tokens: int, model: str) -> None:
         if model not in _PRICING:
-            raise ValueError(
-                f"Unknown model '{model}' — add it to skill_lab.core.llm._PRICING"
-            )
+            raise ValueError(f"Unknown model '{model}' — add it to skill_lab.core.llm._PRICING")
         self.input_tokens = input_tokens
         self.output_tokens = output_tokens
         self.model = model

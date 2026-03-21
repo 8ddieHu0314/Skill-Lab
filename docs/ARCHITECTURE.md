@@ -346,6 +346,8 @@ DIMENSION_WEIGHTS = {
     NAMING: 0.20,        # 20%
     DESCRIPTION: 0.25,   # 25%
     CONTENT: 0.25,       # 25%
+    EXECUTION: 0.0,      # 0% (trace-based, scored separately)
+    SECURITY: 0.0,       # 0% (gate checks, not scored)
 }
 ```
 
@@ -746,7 +748,7 @@ class MyNewCheck(StaticCheck):
 
 **Check Categories:**
 - **Spec-required checks** (10): Must pass to be valid per the Agent Skills spec. Use `spec_required = True` and `Severity.HIGH`.
-- **Quality suggestions** (18): Best practices that improve skill quality. Use `spec_required = False` (default) with `Severity.MEDIUM` or `Severity.LOW`.
+- **Quality suggestions** (23): Best practices that improve skill quality. Use `spec_required = False` (default) with `Severity.MEDIUM` or `Severity.LOW`.
 
 ---
 
