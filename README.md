@@ -32,9 +32,6 @@ pip install skill-lab
 
 # First run — scans your repo and shows the getting started guide
 sklab
-
-# Optional: only needed if you want trigger test generation
-export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
 ---
