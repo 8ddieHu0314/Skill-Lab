@@ -38,6 +38,7 @@ src/skill_lab/
 │   ├── scan.py               # security scan
 │   ├── trigger.py            # trigger tests
 │   ├── generate.py           # LLM-based test generation
+│   ├── optimize.py          # LLM-powered SKILL.md optimization
 │   ├── info.py               # info, prompt, eval-trace
 │   ├── stats.py              # stats subcommands
 │   ├── telemetry.py          # telemetry subcommands
@@ -81,6 +82,9 @@ src/skill_lab/
 │       └── efficiency.py
 ├── exporters/                # Output format renderers (v0.4.0)
 │   └── prompt_exporter.py    # XML/Markdown/JSON prompt export
+├── optimizer/                # LLM-powered SKILL.md optimization
+│   ├── optimizer.py          # SkillOptimizer class + OptimizationResult
+│   └── optimize_skill.md     # System prompt for the LLM
 ├── triggers/                 # Trigger testing (Phase 2)
 │   ├── generator.py          # LLM-based trigger test generation (v0.3.0)
 │   ├── test_loader.py        # Load test cases from YAML
@@ -433,6 +437,9 @@ sklab trigger [./my-skill] [-t explicit|implicit|contextual|negative] [-f consol
 
 # Generate trigger tests via LLM (defaults to current directory, requires ANTHROPIC_API_KEY)
 sklab generate [./my-skill] [-m MODEL] [--force]
+
+# LLM-powered SKILL.md optimization (requires ANTHROPIC_API_KEY)
+sklab optimize [./my-skill] [-m MODEL] [--auto]
 
 # Skill metadata inspector (v0.4.0)
 sklab info [./my-skill] [--json] [-f FIELD]

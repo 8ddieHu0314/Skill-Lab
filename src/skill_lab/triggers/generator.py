@@ -13,6 +13,7 @@ import yaml
 
 from skill_lab.core.constants import TESTS_DIR
 from skill_lab.core.exceptions import GenerationError
+from skill_lab.core.llm import DEFAULT_MODEL, GenerationUsage
 from skill_lab.parsers.skill_parser import parse_skill
 
 _SKILL_PROMPT_PATH = Path(__file__).parent / "generate_triggers_skill.md"
@@ -24,56 +25,10 @@ SYSTEM_PROMPT = (
     + _SKILL_PROMPT_PATH.read_text(encoding="utf-8")
 )
 
-DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 MAX_BODY_CHARS = 4000
 
 VALID_TYPES = {"explicit", "implicit", "contextual", "negative"}
 VALID_EXPECTED = {"trigger", "no_trigger"}
-
-
-class GenerationUsage:
-    """Token usage and cost from a generation API call."""
-
-    # Pricing per million tokens (input, output) — updated 2025-02
-    _PRICING: dict[str, tuple[float, float]] = {
-        "claude-haiku-4-5-20251001": (0.80, 4.00),
-        "claude-sonnet-4-5-20250929": (3.00, 15.00),
-        "claude-opus-4-6": (15.00, 75.00),
-    }
-
-    def __init__(self, input_tokens: int, output_tokens: int, model: str) -> None:
-        self.input_tokens = input_tokens
-        self.output_tokens = output_tokens
-        self.model = model
-
-    @property
-    def total_tokens(self) -> int:
-        return self.input_tokens + self.output_tokens
-
-    @property
-    def input_cost(self) -> float | None:
-        """Input cost in USD, or None if model pricing is unknown."""
-        pricing = self._PRICING.get(self.model)
-        if pricing is None:
-            return None
-        return self.input_tokens * pricing[0] / 1_000_000
-
-    @property
-    def output_cost(self) -> float | None:
-        """Output cost in USD, or None if model pricing is unknown."""
-        pricing = self._PRICING.get(self.model)
-        if pricing is None:
-            return None
-        return self.output_tokens * pricing[1] / 1_000_000
-
-    @property
-    def total_cost(self) -> float | None:
-        """Total cost in USD, or None if model pricing is unknown."""
-        input_c = self.input_cost
-        output_c = self.output_cost
-        if input_c is None or output_c is None:
-            return None
-        return input_c + output_c
 
 
 class TriggerGenerator:

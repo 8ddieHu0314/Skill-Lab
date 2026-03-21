@@ -28,6 +28,7 @@ class StaticEvaluator:
     def __init__(
         self,
         check_ids: list[str] | None = None,
+        exclude_check_ids: list[str] | None = None,
         spec_only: bool = False,
         include_security: bool = False,
     ) -> None:
@@ -36,12 +37,14 @@ class StaticEvaluator:
         Args:
             check_ids: Optional list of specific check IDs to run.
                       If None, all registered checks are run.
+            exclude_check_ids: Optional list of check IDs to skip.
             spec_only: If True, only run checks required by the Agent Skills spec.
                       Quality suggestion checks will be skipped.
             include_security: If True, include the security.scan check.
                       Excluded by default. Use `sklab scan` for security results.
         """
         self.check_ids = check_ids
+        self.exclude_check_ids = set(exclude_check_ids) if exclude_check_ids else set()
         self.spec_only = spec_only
         self.include_security = include_security
 
@@ -67,6 +70,9 @@ class StaticEvaluator:
 
         if not self.include_security:
             checks = [c for c in checks if c.dimension != EvalDimension.SECURITY]
+
+        if self.exclude_check_ids:
+            checks = [c for c in checks if c.check_id not in self.exclude_check_ids]
 
         return checks
 

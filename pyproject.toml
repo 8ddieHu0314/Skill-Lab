@@ -68,7 +68,7 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-skill_lab = ["triggers/*.md"]
+skill_lab = ["triggers/*.md", "optimizer/*.md"]
 
 # Ruff - Linting and formatting
 [tool.ruff]

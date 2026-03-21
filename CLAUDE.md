@@ -36,6 +36,7 @@ sklab info ./my-skill         # metadata + token estimates
 sklab prompt ./skill-a        # export skill as XML prompt
 sklab trigger                 # run trigger tests (requires Claude CLI)
 sklab generate                # generate trigger tests via LLM (requires anthropic)
+sklab optimize ./my-skill     # LLM-powered SKILL.md optimization (requires anthropic)
 sklab stats                   # usage statistics
 sklab setup                   # configure hooks for Claude Code/Cursor
 sklab scan ./my-skill         # security scan (BLOCK/SUS/ALLOW)
@@ -51,11 +52,13 @@ ruff check src/ && ruff format src/
 ## Critical Architecture Notes
 
 - **Two check systems**: behavioral (`@register_check` classes in `structure.py`, `naming.py`, `content.py`) and schema-based (`FieldRule` in `schema.py` — append to add a check, no class needed). See ARCHITECTURE.md for full details.
+- **Adding a schema check**: append a `FieldRule` to `FRONTMATTER_SCHEMA` list in `schema.py` — no class needed. The `_make_schema_check()` factory auto-generates a registered class per rule.
 - **Side-effect registration**: `StaticEvaluator.__init__()` imports check modules (`content`, `naming`, `schema`, `security`, `structure`) to trigger `@register_check` decorators. All checks must be registered before `registry.get_all()` is called.
 - **Sync requirement**: `SPEC_FRONTMATTER_FIELDS` in `structure.py` must stay in sync with `FRONTMATTER_SCHEMA` in `schema.py`.
 - **Scoring**: Weighted across 5 dimensions (Structure, Naming, Description, Content, Execution) by severity (HIGH > MEDIUM > LOW). Execution is trace-based (`tracechecks/`) and scored separately. See `scoring.py` for exact weights.
 - **Anthropic SDK**: `anthropic` is a required dependency, used by `sklab generate` for LLM-based trigger test generation.
-- **Test fixtures**: `tests/fixtures/skills/` — each subdirectory is a mock skill with `SKILL.md`.
+- **Test fixtures**: `tests/fixtures/skills/` — each subdirectory is a mock skill with `SKILL.md`. Shared pytest fixtures (`fixtures_dir`, `skills_dir`, `valid_skill_path`, `evaluator`) are in `tests/conftest.py`.
+- **Test helper**: `_get_check(check_id)` in `test_checks.py` retrieves schema-based checks from the registry; behavioral checks are imported directly as classes.
 - **Trigger test files**: `.sklab/tests/triggers.yaml`.
 
 ## Workflow Orchestration
