@@ -11,14 +11,12 @@ from typing import Annotated, Any
 
 import click.exceptions
 import typer
-from rich import box
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
 from skill_lab import __version__
-from skill_lab.core.constants import SKLAB_HOME, SKLAB_INITIALIZED
 from skill_lab.core.telemetry import (
     _pop_pending_error,
     _pop_telemetry_extras,
@@ -193,94 +191,6 @@ class OutputFormat(str, Enum):
 # =============================================================================
 
 
-def _maybe_first_run_scan() -> bool:
-    """Return True if the first-run scan was executed, False if already initialized."""
-    """On first ever `sklab` invocation, scan for skills and show a welcome evaluation.
-
-    Discovery order:
-      1. Git repo root (if inside a repo)
-      2. ~/.claude/.skill/ (Claude-installed skills)
-      3. Current working directory (fallback)
-
-    Writes ~/.sklab/.initialized so this only runs once.
-    """
-    if SKLAB_INITIALIZED.exists():
-        return False
-
-    # Mark as initialized immediately so a crash mid-scan doesn't loop forever
-    SKLAB_HOME.mkdir(parents=True, exist_ok=True)
-    SKLAB_INITIALIZED.touch()
-
-    # Discover roots in priority order, deduplicating
-    cwd = Path.cwd()
-    roots: list[Path] = []
-    seen: set[Path] = set()
-
-    repo_root = _find_repo_root(cwd)
-    if repo_root and repo_root not in seen:
-        roots.append(repo_root)
-        seen.add(repo_root)
-
-    if cwd not in seen:
-        roots.append(cwd)
-        seen.add(cwd)
-
-    # Collect all skill paths across all roots
-    skill_paths: list[Path] = []
-    for root in roots:
-        skill_paths.extend(_discover_skills(root))
-
-    # Welcome banner
-    _print_banner()
-    console.print("  [dim]Scanning for skills in your repo...[/dim]")
-    console.print()
-
-    if not skill_paths:
-        console.print("[yellow]No skills found in your repo.[/yellow]")
-        console.print()
-        _print_getting_started()
-        return True
-
-    console.print(f"[dim]Found {len(skill_paths)} skill(s). Running initial evaluation...[/dim]\n")
-
-    from skill_lab.evaluators.static_evaluator import StaticEvaluator
-
-    evaluator = StaticEvaluator()
-    summary_rows: list[tuple[str, str, str]] = []
-
-    for sp in skill_paths:
-        try:
-            passed, errors = evaluator.check(sp)
-        except Exception as e:
-            console.print(f"[red]Error checking {sp.name}: {e}[/red]")
-            continue
-
-        status_str = "[green]PASS[/green]" if passed else "[red]FAIL[/red]"
-        try:
-            rel_path = str(sp.relative_to(cwd))
-        except ValueError:
-            rel_path = str(sp)
-        summary_rows.append((sp.name, rel_path, status_str))
-
-        if not passed:
-            for error in errors:
-                console.print(f"  [red]X[/red] [{error.check_id}] {error.message}")
-
-    # Summary table
-    console.print()
-    table = Table(title=f"Initial Scan — {len(skill_paths)} skill(s)", box=box.ROUNDED)
-    table.add_column("Skill", style="cyan")
-    table.add_column("Path", style="dim")
-    table.add_column("Status", justify="center")
-    for name, path, status in summary_rows:
-        table.add_row(name, path, status)
-    console.print(table)
-    console.print()
-
-    _print_getting_started()
-    return True
-
-
 _BANNER_LINES = [
     " ███████╗██╗  ██╗██╗██╗     ██╗          ██╗      █████╗ ██████╗ ",
     " ██╔════╝██║ ██╔╝██║██║     ██║          ██║     ██╔══██╗██╔══██╗",
@@ -384,7 +294,7 @@ def app_callback(
     ] = False,
 ) -> None:
     """Evaluate agent skills through static analysis and quality checks."""
-    if ctx.invoked_subcommand is None and not _maybe_first_run_scan():
+    if ctx.invoked_subcommand is None:
         _print_banner()
         _print_getting_started()
 

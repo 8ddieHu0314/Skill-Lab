@@ -56,10 +56,21 @@ ruff check src/ && ruff format src/
 - **Side-effect registration**: `StaticEvaluator.__init__()` imports check modules (`content`, `naming`, `schema`, `security`, `structure`) to trigger `@register_check` decorators. All checks must be registered before `registry.get_all()` is called.
 - **Sync requirement**: `SPEC_FRONTMATTER_FIELDS` in `structure.py` must stay in sync with `FRONTMATTER_SCHEMA` in `schema.py`.
 - **Scoring**: Weighted across 5 dimensions (Structure, Naming, Description, Content, Execution) by severity (HIGH > MEDIUM > LOW). Execution is trace-based (`tracechecks/`) and scored separately. See `scoring.py` for exact weights.
-- **Anthropic SDK**: `anthropic` is a required dependency, used by `sklab generate` for LLM-based trigger test generation.
+- **Security checks**: `security.py` has a single `SecurityScanCheck` class that registers 5 separate checks (injection, evaluator, unicode, yaml, size) via dynamic class creation — same pattern as schema checks.
+- **LLM config**: `core/llm.py` defines the default model (`claude-haiku-4-5-20251001`), pricing table, and `GenerationUsage` class. Model resolution: `--model` flag > `SKLAB_MODEL` env var > default. When adding new models, update `_PRICING` dict in `core/llm.py`.
+- **Optimizer**: `optimizer/optimizer.py` (SkillOptimizer) + `optimizer/optimize_skill.md` (system prompt). Uses the same Anthropic SDK + model resolution as `generate`.
+- **Anthropic SDK**: `anthropic` is a required dependency, used by `sklab generate` and `sklab optimize`.
 - **Test fixtures**: `tests/fixtures/skills/` — each subdirectory is a mock skill with `SKILL.md`. Shared pytest fixtures (`fixtures_dir`, `skills_dir`, `valid_skill_path`, `evaluator`) are in `tests/conftest.py`.
 - **Test helper**: `_get_check(check_id)` in `test_checks.py` retrieves schema-based checks from the registry; behavioral checks are imported directly as classes.
 - **Trigger test files**: `.sklab/tests/triggers.yaml`.
+- **Check count**: When adding/removing checks, update the "33 checks" count in this file's opening line and run `/update-counts` to sync docs and tests.
+
+### CLI Patterns
+
+- Commands are split into modules under `commands/` (evaluate, trigger, generate, optimize, info, stats, telemetry, setup, scan). Shared helpers (`_resolve_skill_path()`, `_cli_error_handler()`) live in `cli.py`.
+- Exit codes: 0 = success, 1 = failure (spec-required check failed or error)
+- Custom exceptions inherit from `SkillLabError` in `core/exceptions.py` (`ParseError`, `ValidationError`, `ConfigurationError`, `GenerationError`)
+- **CI env var**: Set `SKLAB_NO_ANALYTICS=1` to suppress the telemetry opt-in prompt (used in CI workflow and tests).
 
 ## Workflow Orchestration
 
@@ -98,11 +109,9 @@ ruff check src/ && ruff format src/
 - Zero context switching required from the user
 - Go fix failing CI tests without being told how
 
-### CLI Patterns
-
-- Commands are split into modules under `commands/` (evaluate, trigger, generate, info, stats, telemetry, setup). Shared helpers (`_resolve_skill_path()`, `_cli_error_handler()`) live in `cli.py`.
-- Exit codes: 0 = success, 1 = failure (spec-required check failed or error)
-- Custom exceptions inherit from `SkillLabError` in `core/exceptions.py` (`ParseError`, `ValidationError`, `ConfigurationError`, `GenerationError`)
+### Task Tracking
+- Write plan to `tasks/todo.md` with checkable items, mark items complete as you go
+- Capture reusable lessons in `.claude/.tasks/lessons.md` after corrections
 
 ## Code Style
 
@@ -111,22 +120,3 @@ ruff check src/ && ruff format src/
 - **Python**: 3.10+ (no 3.9 syntax)
 - **Data models**: frozen dataclasses (`@dataclass(frozen=True)`) for immutability
 - **CI matrix**: Python 3.10–3.13 on Ubuntu/macOS/Windows — code must pass all three
-
----
-
-## Task Management
-
-1. **Plan First**: Write plan to `tasks/todo.md` with checkable items
-2. **Verify Plan**: Check in before starting implementation
-3. **Track Progress**: Mark items complete as you go
-4. **Explain Changes**: High-level summary at each step
-5. **Document Results**: Add review section to `tasks/todo.md`
-6. **Capture Lessons**: Update `.claude/.tasks/lessons.md` after corrections — reusable lessons only and mistakes the AI has made
-
----
-
-## Core Principles
-
-- **Simplicity First**: Make every change as simple as possible. Impact minimal code.
-- **No Laziness**: Find root causes. No temporary fixes. Senior developer standards.
-- **Minimal Impact**: Changes should only touch what's necessary. Avoid introducing bugs.
