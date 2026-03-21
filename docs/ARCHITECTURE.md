@@ -64,7 +64,7 @@ src/skill_lab/
 │       ├── structure.py      # 7 checks
 │       ├── schema.py         # 9 checks (declarative FieldRule)
 │       ├── naming.py         # 1 check
-│       ├── security.py       # 1 check (5-layer security scan)
+│       ├── security.py       # 5 checks (injection, evaluator, unicode, yaml, size) + composite scan
 │       └── content.py        # 11 checks
 ├── evaluators/
 │   ├── static_evaluator.py   # Orchestrates static check execution
@@ -147,7 +147,7 @@ src/skill_lab/
                     │                    │                    │              │
             ┌───────────────┐    ┌───────────────┐    ┌───────────────┐ ┌──────────┐ ┌────────────┐
             │ structure.py  │    │  schema.py    │    │  naming.py    │ │content.py │ │security.py │
-            │ (7 checks)    │    │  (9 checks)   │    │ (1 check)    │ │(11 checks)│ │ (1 check)  │
+            │ (7 checks)    │    │  (9 checks)   │    │ (1 check)    │ │(11 checks)│ │ (5 checks) │
             └───────────────┘    └───────────────┘    └───────────────┘ └──────────┘ └────────────┘
 ```
 
