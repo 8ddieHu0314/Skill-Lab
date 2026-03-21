@@ -57,19 +57,8 @@ def _find_repo_root(start: Path) -> Path | None:
 
 
 def _discover_skills(root: Path) -> list[Path]:
-    """Recursively find all skill directories (containing SKILL.md) under root.
-
-    Skips hidden directories (dot-prefixed) to avoid .git, .claude, etc.
-    """
-    skills: list[Path] = []
-    for path in sorted(root.rglob("SKILL.md")):
-        # Skip hidden dirs relative to root (e.g. .git, .sklab subdirs),
-        # but allow root itself to be a hidden directory.
-        relative = path.relative_to(root)
-        if any(part.startswith(".") for part in relative.parts):
-            continue
-        skills.append(path.parent)
-    return skills
+    """Recursively find all skill directories (containing SKILL.md) under root."""
+    return sorted(p.parent for p in root.rglob("SKILL.md"))
 
 
 def _resolve_skill_path(skill_path: Path | None) -> Path:
