@@ -101,8 +101,7 @@ def generate(
     # Show token usage and cost
     if generator.last_usage:
         usage = generator.last_usage
-        cost = usage.total_cost
-        cost_str = f" (${cost:.4f})" if cost is not None else ""
+        cost_str = f" (${usage.total_cost:.4f})"
         console.print(
             f"\n[dim]Tokens:[/dim] {usage.input_tokens:,} in + "
             f"{usage.output_tokens:,} out = {usage.total_tokens:,}{cost_str}"

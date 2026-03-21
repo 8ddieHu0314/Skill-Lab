@@ -13,9 +13,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from skill_lab.core.exceptions import GenerationError
+from skill_lab.core.llm import DEFAULT_MODEL, GenerationUsage
 from skill_lab.core.models import EvaluationReport
 from skill_lab.evaluators.static_evaluator import StaticEvaluator
-from skill_lab.triggers.generator import DEFAULT_MODEL, GenerationUsage
 
 _SYSTEM_PROMPT_PATH = Path(__file__).parent / "optimize_skill.md"
 

@@ -126,8 +126,7 @@ def optimize(
     # Show token usage and cost
     if result.usage:
         usage = result.usage
-        cost = usage.total_cost
-        cost_str = f" (${cost:.4f})" if cost is not None else ""
+        cost_str = f" (${usage.total_cost:.4f})"
         console.print(
             f"[dim]Tokens:[/dim] {usage.input_tokens:,} in + "
             f"{usage.output_tokens:,} out = {usage.total_tokens:,}{cost_str}"
