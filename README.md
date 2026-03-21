@@ -1,10 +1,10 @@
+# Skill Lab
+
 [![PyPI version](https://badge.fury.io/py/skill-lab.svg?v=0.5.0)](https://badge.fury.io/py/skill-lab)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-# Skill Lab
-
-**// Agent Skills Evaluation Framework**
+**Agent Skills Evaluation Framework**
 
 Your agent's skills are probably broken in at least one way — and you don't know it yet. **Skill Lab** catches skills that drain tokens, never fire, or leak data before they cause damage.
 
