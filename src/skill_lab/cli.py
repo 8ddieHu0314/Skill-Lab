@@ -302,6 +302,9 @@ import skill_lab.commands  # noqa: E402, F401, I001
 
 def main() -> None:
     """Entry point for the CLI."""
+    from dotenv import load_dotenv
+
+    load_dotenv(override=False)
     app()
 
 

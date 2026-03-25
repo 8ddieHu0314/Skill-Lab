@@ -4,6 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Python CLI tool that evaluates agent skills (SKILL.md files) via static analysis, trigger testing, and LLM-based test generation. Produces a 0-100 score across 33 checks (structure:11, naming:3, description:3, content:11, security:5) / 5 dimensions.
 
+## Attribution
+
+NEVER include Co-Authored-By lines, "Generated with Claude Code", or any AI co-authorship attribution in commit messages, PR descriptions, PR reviews, or any other output.
+
 ## Naming
 
 | Name | Usage |
@@ -60,6 +64,7 @@ ruff check src/ && ruff format src/
 - **LLM config**: `core/llm.py` defines the default model (`claude-haiku-4-5-20251001`), pricing table, `GenerationUsage` class, and the `LLMProvider` abstraction (Anthropic, OpenAI, Gemini). Model resolution: `--model` flag > `SKLAB_MODEL` env var > default. Provider is auto-detected from model ID prefix (`gpt-*`/`o3-*` → OpenAI, `gemini-*` → Gemini, else Anthropic). When adding new models, update `_PRICING` dict in `core/llm.py`.
 - **Optimizer**: `optimizer/optimizer.py` (SkillOptimizer) + `optimizer/optimize_skill.md` (system prompt). Uses the LLMProvider abstraction + same model resolution as `generate`.
 - **LLM SDKs**: `anthropic`, `openai`, and `google-generativeai` are all required dependencies. API key env vars: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`.
+- **`.env` support**: `python-dotenv` loads `.env` from CWD at CLI startup (`cli.main()`). Real env vars override `.env` values (`override=False`). The `pyproject.toml` entry point is `cli:main` (not `cli:app`) so dotenv loads before Typer dispatch.
 - **Test fixtures**: `tests/fixtures/skills/` — each subdirectory is a mock skill with `SKILL.md`. Shared pytest fixtures (`fixtures_dir`, `skills_dir`, `valid_skill_path`, `evaluator`) are in `tests/conftest.py`.
 - **Test helper**: `_get_check(check_id)` in `test_checks.py` retrieves schema-based checks from the registry; behavioral checks are imported directly as classes.
 - **Trigger test files**: `.sklab/tests/triggers.yaml`.

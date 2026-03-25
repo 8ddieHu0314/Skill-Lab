@@ -15,6 +15,7 @@ This document provides a comprehensive overview of Skill-Lab's technology stack 
 | **anthropic** | ≥0.39.0 | LLM provider for Anthropic models (default) |
 | **openai** | ≥1.0.0 | LLM provider for OpenAI models (`gpt-*`, `o3-*`) |
 | **google-generativeai** | ≥0.8.0 | LLM provider for Gemini models (`gemini-*`) |
+| **python-dotenv** | ≥1.0.0 | Loads `.env` file for API keys and config |
 
 ### Development Dependencies
 
