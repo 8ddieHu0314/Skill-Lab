@@ -88,9 +88,7 @@ class TestSkillOptimizer:
         assert 0 <= result.original_score <= 100
         assert 0 <= result.optimized_score <= 100
 
-    def test_optimize_tracks_usage(
-        self, optimizer: SkillOptimizer, valid_skill_path: Path
-    ) -> None:
+    def test_optimize_tracks_usage(self, optimizer: SkillOptimizer, valid_skill_path: Path) -> None:
         """Test that token usage is tracked after optimization."""
         result = optimizer.optimize(valid_skill_path)
 
@@ -99,9 +97,7 @@ class TestSkillOptimizer:
         assert result.usage.output_tokens == 300
         assert result.usage.total_tokens == 800
 
-    def test_optimize_missing_skill_md(
-        self, optimizer: SkillOptimizer, tmp_path: Path
-    ) -> None:
+    def test_optimize_missing_skill_md(self, optimizer: SkillOptimizer, tmp_path: Path) -> None:
         """Test error when SKILL.md doesn't exist."""
         empty_dir = tmp_path / "no-skill"
         empty_dir.mkdir()
@@ -201,9 +197,7 @@ class TestOptimizePromptBuilding:
             if not result.passed:
                 assert result.check_id in prompt
 
-    def test_prompt_includes_score(
-        self, optimizer: SkillOptimizer, valid_skill_path: Path
-    ) -> None:
+    def test_prompt_includes_score(self, optimizer: SkillOptimizer, valid_skill_path: Path) -> None:
         """Test that the prompt includes the current score."""
         report = optimizer._evaluate(valid_skill_path)
         content = (valid_skill_path / "SKILL.md").read_text()
@@ -241,9 +235,7 @@ class TestOptimizePromptBuilding:
     ) -> None:
         """Test that very large SKILL.md content is truncated."""
         report = optimizer._evaluate(valid_skill_path)
-        large_content = "---\nname: test\ndescription: test\n---\n" + "x" * (
-            MAX_BODY_CHARS + 1000
-        )
+        large_content = "---\nname: test\ndescription: test\n---\n" + "x" * (MAX_BODY_CHARS + 1000)
         prompt = optimizer._build_prompt(large_content, report)
 
         assert "[... content truncated ...]" in prompt
@@ -317,14 +309,10 @@ class TestOptimizeCommand:
 
         skill_dir = tmp_path / "my-skill"
         skill_dir.mkdir()
-        (skill_dir / "SKILL.md").write_text(
-            "---\nname: my-skill\ndescription: test\n---\n"
-        )
+        (skill_dir / "SKILL.md").write_text("---\nname: my-skill\ndescription: test\n---\n")
 
         runner = CliRunner()
-        result = runner.invoke(
-            app, ["optimize", str(skill_dir)], env={"ANTHROPIC_API_KEY": ""}
-        )
+        result = runner.invoke(app, ["optimize", str(skill_dir)], env={"ANTHROPIC_API_KEY": ""})
         assert result.exit_code == 1
         assert "ANTHROPIC_API_KEY" in result.output
 
@@ -336,9 +324,7 @@ class TestOptimizeCommand:
 
         skill_dir = tmp_path / "my-skill"
         skill_dir.mkdir()
-        (skill_dir / "SKILL.md").write_text(
-            "---\nname: my-skill\ndescription: test\n---\n"
-        )
+        (skill_dir / "SKILL.md").write_text("---\nname: my-skill\ndescription: test\n---\n")
 
         runner = CliRunner()
         result = runner.invoke(

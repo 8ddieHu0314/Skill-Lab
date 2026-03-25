@@ -17,6 +17,8 @@ from skill_lab.core.llm import (
     DEFAULT_MODEL,
     GenerationUsage,
     LLMProvider,
+    detect_provider_name,
+    get_api_key_env_var,
     resolve_provider,
 )
 from skill_lab.parsers.skill_parser import parse_skill
@@ -265,7 +267,3 @@ class TriggerGenerator:
                     f"Test case {i + 1} has invalid expected '{expected}', "
                     f"expected one of: {', '.join(sorted(VALID_EXPECTED))}"
                 )
-
-
-# Re-export for use in _call_api error messages
-from skill_lab.core.llm import detect_provider_name, get_api_key_env_var  # noqa: E402

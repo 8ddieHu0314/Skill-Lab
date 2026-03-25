@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 import yaml
@@ -12,7 +11,6 @@ import yaml
 from skill_lab.core.exceptions import GenerationError
 from skill_lab.core.llm import LLMResponse
 from skill_lab.triggers.generator import (
-    DEFAULT_MODEL,
     MAX_BODY_CHARS,
     TriggerGenerator,
 )
@@ -228,9 +226,7 @@ class TestTriggerGenerator:
         with pytest.raises(GenerationError, match="Failed to parse skill"):
             generator.generate(skill_dir)
 
-    def test_generate_tracks_usage(
-        self, generator: TriggerGenerator, fixtures_dir: Path
-    ) -> None:
+    def test_generate_tracks_usage(self, generator: TriggerGenerator, fixtures_dir: Path) -> None:
         """Test that token usage is tracked after generation."""
         skill_path = fixtures_dir / "skills" / "creating-reports"
         generator.generate(skill_path)

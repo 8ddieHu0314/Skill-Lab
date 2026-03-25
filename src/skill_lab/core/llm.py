@@ -131,6 +131,7 @@ class AnthropicProvider:
         message = self._client.messages.create(
             model=model,
             max_tokens=max_tokens,
+            temperature=0,
             system=system,
             messages=[{"role": "user", "content": prompt}],
         )
@@ -162,6 +163,7 @@ class OpenAIProvider:
         response = self._client.chat.completions.create(
             model=model,
             max_tokens=max_tokens,
+            temperature=0,
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user", "content": prompt},
@@ -185,6 +187,8 @@ class GeminiProvider:
         import google.generativeai as genai
 
         self._genai: Any = genai
+        # NOTE: genai.configure() sets the API key at module level (global state).
+        # Multiple GeminiProvider instances with different keys would conflict.
         resolved_key = api_key or os.environ.get("GEMINI_API_KEY")
         self._genai.configure(api_key=resolved_key)
 
@@ -206,7 +210,11 @@ class GeminiProvider:
         )
         response = gen_model.generate_content(prompt)
 
-        text: str = response.text or ""
+        try:
+            text: str = response.text or ""
+        except ValueError:
+            # Gemini raises ValueError when response is blocked by safety filters
+            text = ""
         usage_metadata = response.usage_metadata
         input_tokens: int = getattr(usage_metadata, "prompt_token_count", 0) or 0
         output_tokens: int = getattr(usage_metadata, "candidates_token_count", 0) or 0
