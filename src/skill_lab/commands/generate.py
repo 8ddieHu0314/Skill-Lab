@@ -14,6 +14,7 @@ from skill_lab.cli import (
     console,
 )
 from skill_lab.core.constants import TESTS_DIR
+from skill_lab.core.llm import DEFAULT_MODEL, detect_provider_name, get_api_key_env_var
 from skill_lab.core.telemetry import push_telemetry_extra
 from skill_lab.triggers.generator import TriggerGenerator
 
@@ -32,7 +33,10 @@ def generate(
         typer.Option(
             "--model",
             "-m",
-            help="Anthropic model ID (default: claude-haiku-4-5-20251001)",
+            help=(
+                "Model ID (default: claude-haiku-4-5-20251001). "
+                "Supports Anthropic, OpenAI (gpt-*), and Gemini (gemini-*) models."
+            ),
         ),
     ] = None,
     force: Annotated[
@@ -53,12 +57,17 @@ def generate(
     skill_path = _resolve_skill_path(skill_path)
     push_telemetry_extra(skill_name=skill_path.name)
 
-    # Check API key
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    # Resolve model: --model flag > SKLAB_MODEL env var > default
+    resolved_model = model or os.environ.get("SKLAB_MODEL") or DEFAULT_MODEL
+
+    # Detect provider and check API key
+    provider_name = detect_provider_name(resolved_model)
+    env_var = get_api_key_env_var(provider_name)
+    api_key = os.environ.get(env_var)
     if not api_key:
         console.print(
-            "[red]Error: ANTHROPIC_API_KEY environment variable is not set.[/red]\n"
-            "[dim]Set it with:[/dim] export ANTHROPIC_API_KEY=sk-..."
+            f"[red]Error: {env_var} environment variable is not set.[/red]\n"
+            f"[dim]Set it with:[/dim] export {env_var}=your-key-here"
         )
         raise typer.Exit(code=1)
 
@@ -71,15 +80,8 @@ def generate(
             raise typer.Exit(code=0)
         force = True
 
-    # Resolve model: --model flag > SKLAB_MODEL env var > default
-    resolved_model = model or os.environ.get("SKLAB_MODEL") or None
-
     with _cli_error_handler():
-        kwargs: dict[str, str] = {}
-        if resolved_model:
-            kwargs["model"] = resolved_model
-
-        generator = TriggerGenerator(api_key=api_key, **kwargs)
+        generator = TriggerGenerator(model=resolved_model, api_key=api_key)
 
         with console.status("[cyan]Generating trigger tests...[/cyan]", spinner="dots"):
             written_path = generator.generate_and_write(skill_path, force=force)
@@ -101,7 +103,7 @@ def generate(
     # Show token usage and cost
     if generator.last_usage:
         usage = generator.last_usage
-        cost_str = f" (${usage.total_cost:.4f})"
+        cost_str = f" (${usage.total_cost:.4f})" if usage.has_pricing else ""
         console.print(
             f"\n[dim]Tokens:[/dim] {usage.input_tokens:,} in + "
             f"{usage.output_tokens:,} out = {usage.total_tokens:,}{cost_str}"

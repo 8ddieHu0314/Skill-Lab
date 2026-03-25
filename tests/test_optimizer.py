@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from skill_lab.commands.optimize import _build_diff_text
 from skill_lab.core.exceptions import GenerationError
+from skill_lab.core.llm import LLMResponse
 from skill_lab.optimizer.optimizer import (
     MAX_BODY_CHARS,
     OptimizationResult,
@@ -45,33 +46,28 @@ report = generate_report(data, format="csv")
 """
 
 
-def _mock_anthropic_response(text: str) -> MagicMock:
-    """Create a mock Anthropic API response."""
-    block = MagicMock()
-    block.text = text
-    message = MagicMock()
-    message.content = [block]
-    message.stop_reason = "end_turn"
-    message.usage = MagicMock()
-    message.usage.input_tokens = 500
-    message.usage.output_tokens = 300
-    return message
+def _mock_llm_response(text: str) -> LLMResponse:
+    """Create a mock LLMResponse."""
+    return LLMResponse(
+        text=text,
+        input_tokens=500,
+        output_tokens=300,
+        stop_reason="end_turn",
+    )
 
 
 @pytest.fixture
-def mock_client() -> MagicMock:
-    """Create a mock Anthropic client."""
-    client = MagicMock()
-    client.messages.create.return_value = _mock_anthropic_response(OPTIMIZED_SKILL_MD)
-    return client
+def mock_provider() -> MagicMock:
+    """Create a mock LLMProvider."""
+    provider = MagicMock()
+    provider.create_message.return_value = _mock_llm_response(OPTIMIZED_SKILL_MD)
+    return provider
 
 
 @pytest.fixture
-def optimizer(mock_client: MagicMock) -> SkillOptimizer:
-    """Create a SkillOptimizer with a mocked client."""
-    pytest.importorskip("anthropic")
-    with patch("anthropic.Anthropic", return_value=mock_client):
-        opt = SkillOptimizer(api_key="test-key")
+def optimizer(mock_provider: MagicMock) -> SkillOptimizer:
+    """Create a SkillOptimizer with a mocked provider."""
+    opt = SkillOptimizer(provider=mock_provider)
     return opt
 
 
@@ -114,61 +110,58 @@ class TestSkillOptimizer:
             optimizer.optimize(empty_dir)
 
     def test_optimize_handles_api_error(
-        self, optimizer: SkillOptimizer, valid_skill_path: Path
+        self, optimizer: SkillOptimizer, mock_provider: MagicMock, valid_skill_path: Path
     ) -> None:
         """Test error handling when API call fails."""
-        optimizer._client.messages.create.side_effect = Exception("Connection error")
+        mock_provider.create_message.side_effect = Exception("Connection error")
 
         with pytest.raises(GenerationError, match="API call failed"):
             optimizer.optimize(valid_skill_path)
 
     def test_optimize_handles_empty_response(
-        self, optimizer: SkillOptimizer, valid_skill_path: Path
+        self, optimizer: SkillOptimizer, mock_provider: MagicMock, valid_skill_path: Path
     ) -> None:
         """Test error handling for empty API response."""
-        empty_msg = MagicMock()
-        empty_msg.content = []
-        empty_msg.stop_reason = "end_turn"
-        empty_msg.usage = MagicMock()
-        empty_msg.usage.input_tokens = 100
-        empty_msg.usage.output_tokens = 0
-        optimizer._client.messages.create.return_value = empty_msg
+        mock_provider.create_message.return_value = LLMResponse(
+            text="",
+            input_tokens=100,
+            output_tokens=0,
+            stop_reason="end_turn",
+        )
 
         with pytest.raises(GenerationError, match="empty response"):
             optimizer.optimize(valid_skill_path)
 
     def test_optimize_raises_on_max_tokens(
-        self, optimizer: SkillOptimizer, valid_skill_path: Path
+        self, optimizer: SkillOptimizer, mock_provider: MagicMock, valid_skill_path: Path
     ) -> None:
         """Test error raised when model output is truncated by max_tokens limit."""
-        truncated_msg = MagicMock()
-        truncated_msg.stop_reason = "max_tokens"
-        truncated_msg.usage = MagicMock()
-        truncated_msg.usage.input_tokens = 500
-        truncated_msg.usage.output_tokens = 8192
-        optimizer._client.messages.create.return_value = truncated_msg
+        mock_provider.create_message.return_value = LLMResponse(
+            text="---\nname: test\n---\ntruncated...",
+            input_tokens=500,
+            output_tokens=8192,
+            stop_reason="max_tokens",
+        )
 
         with pytest.raises(GenerationError, match="truncated"):
             optimizer.optimize(valid_skill_path)
 
     def test_optimize_strips_markdown_fences(
-        self, optimizer: SkillOptimizer, valid_skill_path: Path
+        self, optimizer: SkillOptimizer, mock_provider: MagicMock, valid_skill_path: Path
     ) -> None:
         """Test that markdown code fences are stripped from response."""
         fenced = f"```yaml\n{OPTIMIZED_SKILL_MD}\n```"
-        optimizer._client.messages.create.return_value = _mock_anthropic_response(
-            fenced
-        )
+        mock_provider.create_message.return_value = _mock_llm_response(fenced)
 
         result = optimizer.optimize(valid_skill_path)
         assert not result.optimized_content.startswith("```")
         assert result.optimized_content.startswith("---")
 
     def test_optimize_rejects_invalid_response(
-        self, optimizer: SkillOptimizer, valid_skill_path: Path
+        self, optimizer: SkillOptimizer, mock_provider: MagicMock, valid_skill_path: Path
     ) -> None:
         """Test error when response doesn't look like SKILL.md."""
-        optimizer._client.messages.create.return_value = _mock_anthropic_response(
+        mock_provider.create_message.return_value = _mock_llm_response(
             "This is not a valid SKILL.md file, just some text."
         )
 
@@ -334,6 +327,27 @@ class TestOptimizeCommand:
         )
         assert result.exit_code == 1
         assert "ANTHROPIC_API_KEY" in result.output
+
+    def test_openai_model_checks_openai_key(self, tmp_path: Path) -> None:
+        """Test that an OpenAI model checks OPENAI_API_KEY."""
+        from typer.testing import CliRunner
+
+        from skill_lab.cli import app
+
+        skill_dir = tmp_path / "my-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: my-skill\ndescription: test\n---\n"
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(
+            app,
+            ["optimize", str(skill_dir), "--model", "gpt-4o"],
+            env={"OPENAI_API_KEY": "", "ANTHROPIC_API_KEY": ""},
+        )
+        assert result.exit_code == 1
+        assert "OPENAI_API_KEY" in result.output
 
     def test_nonexistent_path(self) -> None:
         """Test error for nonexistent path."""

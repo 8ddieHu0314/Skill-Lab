@@ -17,6 +17,7 @@ from skill_lab.cli import (
     app,
     console,
 )
+from skill_lab.core.llm import DEFAULT_MODEL, detect_provider_name, get_api_key_env_var
 from skill_lab.core.telemetry import push_telemetry_extra
 from skill_lab.optimizer.optimizer import SkillOptimizer
 
@@ -75,7 +76,10 @@ def optimize(
         typer.Option(
             "--model",
             "-m",
-            help="Anthropic model ID (default: claude-haiku-4-5-20251001)",
+            help=(
+                "Model ID (default: claude-haiku-4-5-20251001). "
+                "Supports Anthropic, OpenAI (gpt-*), and Gemini (gemini-*) models."
+            ),
         ),
     ] = None,
     auto: Annotated[
@@ -91,29 +95,28 @@ def optimize(
     Evaluates the skill, sends failures to an LLM, and proposes
     improvements. Shows a diff and score delta before applying.
 
-    Requires ANTHROPIC_API_KEY environment variable.
+    Requires an API key for the selected provider (ANTHROPIC_API_KEY,
+    OPENAI_API_KEY, or GEMINI_API_KEY).
     """
     skill_path = _resolve_skill_path(skill_path)
     push_telemetry_extra(skill_name=skill_path.name)
 
-    # Check API key
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    # Resolve model: --model flag > SKLAB_MODEL env var > default
+    resolved_model = model or os.environ.get("SKLAB_MODEL") or DEFAULT_MODEL
+
+    # Detect provider and check API key
+    provider_name = detect_provider_name(resolved_model)
+    env_var = get_api_key_env_var(provider_name)
+    api_key = os.environ.get(env_var)
     if not api_key:
         console.print(
-            "[red]Error: ANTHROPIC_API_KEY environment variable is not set.[/red]\n"
-            "[dim]Set it with:[/dim] export ANTHROPIC_API_KEY=sk-..."
+            f"[red]Error: {env_var} environment variable is not set.[/red]\n"
+            f"[dim]Set it with:[/dim] export {env_var}=your-key-here"
         )
         raise typer.Exit(code=1)
 
-    # Resolve model: --model flag > SKLAB_MODEL env var > default
-    resolved_model = model or os.environ.get("SKLAB_MODEL") or None
-
     with _cli_error_handler():
-        kwargs: dict[str, str] = {}
-        if resolved_model:
-            kwargs["model"] = resolved_model
-
-        optimizer = SkillOptimizer(api_key=api_key, **kwargs)
+        optimizer = SkillOptimizer(model=resolved_model, api_key=api_key)
 
         with console.status("[cyan]Evaluating and optimizing...[/cyan]", spinner="dots"):
             result = optimizer.optimize(skill_path)
@@ -168,7 +171,7 @@ def optimize(
     # Show token usage and cost
     if result.usage:
         usage = result.usage
-        cost_str = f" (${usage.total_cost:.4f})"
+        cost_str = f" (${usage.total_cost:.4f})" if usage.has_pricing else ""
         console.print(
             f"[dim]Tokens:[/dim] {usage.input_tokens:,} in + "
             f"{usage.output_tokens:,} out = {usage.total_tokens:,}{cost_str}"

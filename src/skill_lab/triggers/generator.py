@@ -1,6 +1,6 @@
 """LLM-based trigger test case generator.
 
-Uses the Anthropic SDK to read a SKILL.md and generate trigger test cases
+Uses the LLM provider abstraction to read a SKILL.md and generate trigger test cases
 with ~13 tests across all 4 types (explicit, implicit, contextual, negative).
 """
 
@@ -13,7 +13,12 @@ import yaml
 
 from skill_lab.core.constants import TESTS_DIR
 from skill_lab.core.exceptions import GenerationError
-from skill_lab.core.llm import DEFAULT_MODEL, GenerationUsage
+from skill_lab.core.llm import (
+    DEFAULT_MODEL,
+    GenerationUsage,
+    LLMProvider,
+    resolve_provider,
+)
 from skill_lab.parsers.skill_parser import parse_skill
 
 _SKILL_PROMPT_PATH = Path(__file__).parent / "generate_triggers_skill.md"
@@ -32,23 +37,24 @@ VALID_EXPECTED = {"trigger", "no_trigger"}
 
 
 class TriggerGenerator:
-    """Generates trigger test cases for a skill using the Anthropic API."""
+    """Generates trigger test cases for a skill using an LLM."""
 
     def __init__(
         self,
         model: str = DEFAULT_MODEL,
         api_key: str | None = None,
+        provider: LLMProvider | None = None,
     ) -> None:
         """Initialize the generator.
 
         Args:
-            model: Anthropic model ID to use for generation.
-            api_key: Anthropic API key. If None, uses ANTHROPIC_API_KEY env var.
+            model: Model ID to use for generation.
+            api_key: API key. If None, uses the appropriate env var for the provider.
+            provider: Optional pre-built LLMProvider. If None, one is resolved from
+                the model ID.
         """
-        import anthropic  # lazy import — anthropic is optional
-
         self._model = model
-        self._client = anthropic.Anthropic(api_key=api_key)
+        self._provider = provider or resolve_provider(model, api_key=api_key)
         self.last_usage: GenerationUsage | None = None
 
     def generate(self, skill_path: Path) -> str:
@@ -132,7 +138,7 @@ class TriggerGenerator:
         )
 
     def _call_api(self, prompt: str) -> str:
-        """Call the Anthropic API to generate test cases.
+        """Call the LLM provider to generate test cases.
 
         Args:
             prompt: The user message to send.
@@ -144,29 +150,28 @@ class TriggerGenerator:
             GenerationError: If the API call fails.
         """
         try:
-            message = self._client.messages.create(
+            response = self._provider.create_message(
                 model=self._model,
                 max_tokens=2048,
                 system=SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": prompt}],
+                prompt=prompt,
             )
-            # Capture token usage
             self.last_usage = GenerationUsage(
-                input_tokens=message.usage.input_tokens,
-                output_tokens=message.usage.output_tokens,
+                input_tokens=response.input_tokens,
+                output_tokens=response.output_tokens,
                 model=self._model,
             )
-            # Extract text from content blocks
-            text_parts = [block.text for block in message.content if hasattr(block, "text")]
-            if not text_parts:
+            if not response.text:
                 raise GenerationError("API returned empty response")
-            return "\n".join(text_parts)
+            return response.text
         except GenerationError:
             raise
         except Exception as e:
+            provider_name = detect_provider_name(self._model)
+            env_var = get_api_key_env_var(provider_name)
             raise GenerationError(
                 f"API call failed: {e}",
-                suggestion="Check your ANTHROPIC_API_KEY and network connection.",
+                suggestion=f"Check your {env_var} and network connection.",
             ) from e
 
     def _parse_response(self, response_text: str, skill_name: str) -> dict[str, Any]:
@@ -260,3 +265,7 @@ class TriggerGenerator:
                     f"Test case {i + 1} has invalid expected '{expected}', "
                     f"expected one of: {', '.join(sorted(VALID_EXPECTED))}"
                 )
+
+
+# Re-export for use in _call_api error messages
+from skill_lab.core.llm import detect_provider_name, get_api_key_env_var  # noqa: E402
