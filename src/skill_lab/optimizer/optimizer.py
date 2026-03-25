@@ -203,6 +203,11 @@ class SkillOptimizer:
                 output_tokens=response.output_tokens,
                 model=self._model,
             )
+            if response.stop_reason == "safety":
+                raise GenerationError(
+                    "Response blocked by content safety filters",
+                    suggestion="Try rephrasing the skill content or using a different model.",
+                )
             if not response.text:
                 raise GenerationError("API returned empty response")
             return response.text

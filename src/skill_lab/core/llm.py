@@ -210,11 +210,13 @@ class GeminiProvider:
         )
         response = gen_model.generate_content(prompt)
 
+        safety_blocked = False
         try:
             text: str = response.text or ""
         except ValueError:
             # Gemini raises ValueError when response is blocked by safety filters
             text = ""
+            safety_blocked = True
         usage_metadata = response.usage_metadata
         input_tokens: int = getattr(usage_metadata, "prompt_token_count", 0) or 0
         output_tokens: int = getattr(usage_metadata, "candidates_token_count", 0) or 0
@@ -227,7 +229,13 @@ class GeminiProvider:
             text=text,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
-            stop_reason="max_tokens" if "MAX_TOKENS" in finish_reason else "end_turn",
+            stop_reason=(
+                "safety"
+                if safety_blocked
+                else "max_tokens"
+                if "MAX_TOKENS" in finish_reason
+                else "end_turn"
+            ),
         )
 
 

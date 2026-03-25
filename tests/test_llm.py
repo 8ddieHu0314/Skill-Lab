@@ -297,6 +297,7 @@ class TestGeminiProvider:
 
         assert resp.text == ""
         assert resp.input_tokens == 100
+        assert resp.stop_reason == "safety"
 
     def test_max_tokens_stop_reason(self) -> None:
         mock_candidate = MagicMock()
