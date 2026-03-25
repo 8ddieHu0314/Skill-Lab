@@ -12,7 +12,10 @@ This document provides a comprehensive overview of Skill-Lab's technology stack 
 | **Typer** | ≥0.9.0 | CLI framework built on Click with type hints |
 | **Rich** | ≥13.0.0 | Terminal formatting (tables, panels, colors) |
 | **PyYAML** | ≥6.0 | YAML frontmatter parsing |
-| **anthropic** | ≥0.39.0 | LLM-based test generation (`sklab generate`) |
+| **anthropic** | ≥0.39.0 | LLM provider for Anthropic models (default) |
+| **openai** | ≥1.0.0 | LLM provider for OpenAI models (`gpt-*`, `o3-*`) |
+| **google-generativeai** | ≥0.8.0 | LLM provider for Gemini models (`gemini-*`) |
+| **python-dotenv** | ≥1.0.0 | Loads `.env` file for API keys and config |
 
 ### Development Dependencies
 
@@ -437,11 +440,16 @@ sklab list-checks [-s] [--suggestions-only]
 # Trigger testing (defaults to current directory if path omitted)
 sklab trigger [./my-skill] [-t explicit|implicit|contextual|negative] [-f console|json] [-o file.json]
 
-# Generate trigger tests via LLM (defaults to current directory, requires ANTHROPIC_API_KEY)
+# Generate trigger tests via LLM (requires API key for selected provider)
 sklab generate [./my-skill] [-m MODEL] [--force]
 
-# LLM-powered SKILL.md optimization (requires ANTHROPIC_API_KEY)
+# LLM-powered SKILL.md optimization (requires API key for selected provider)
 sklab optimize [./my-skill] [-m MODEL] [--auto]
+
+# Multi-provider: model ID determines provider and required API key
+sklab generate -m claude-haiku-4-5-20251001  # → ANTHROPIC_API_KEY (default)
+sklab generate -m gpt-4o-mini                # → OPENAI_API_KEY
+sklab generate -m gemini-2.5-flash           # → GEMINI_API_KEY
 
 # Skill metadata inspector (v0.4.0)
 sklab info [./my-skill] [--json] [-f FIELD]

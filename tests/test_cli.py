@@ -1,6 +1,7 @@
 """Tests for CLI interface."""
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -150,9 +151,7 @@ class TestPromptCommand:
         assert data["available_skills"][0]["name"] == "creating-reports"
 
     def test_prompt_multiple_skills(self, valid_skill_path: Path, minimal_skill_path: Path):
-        result = runner.invoke(
-            app, ["prompt", str(valid_skill_path), str(minimal_skill_path)]
-        )
+        result = runner.invoke(app, ["prompt", str(valid_skill_path), str(minimal_skill_path)])
         assert result.exit_code == 0
         assert "creating-reports" in result.stdout
         assert "testing-features" in result.stdout
@@ -260,3 +259,41 @@ class TestBanner:
             assert "███" not in output
         finally:
             cli.console = original
+
+
+class TestDotenvLoading:
+    """Tests for .env file loading."""
+
+    def test_env_file_loads_api_key(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """API keys from .env file are available to commands."""
+        env_file = tmp_path / ".env"
+        env_file.write_text("ANTHROPIC_API_KEY=test-key-from-dotenv\n")
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+        from dotenv import load_dotenv
+
+        load_dotenv(dotenv_path=env_file, override=False)
+
+        assert os.environ.get("ANTHROPIC_API_KEY") == "test-key-from-dotenv"
+
+    def test_real_env_overrides_dotenv(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Real environment variables take precedence over .env file."""
+        env_file = tmp_path / ".env"
+        env_file.write_text("ANTHROPIC_API_KEY=from-dotenv\n")
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "from-real-env")
+
+        from dotenv import load_dotenv
+
+        load_dotenv(dotenv_path=env_file, override=False)
+
+        assert os.environ.get("ANTHROPIC_API_KEY") == "from-real-env"
+
+    def test_missing_env_file_is_silent(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Missing .env file does not cause errors."""
+        from dotenv import load_dotenv
+
+        load_dotenv(dotenv_path=tmp_path / ".env", override=False)  # should not raise

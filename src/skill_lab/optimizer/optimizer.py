@@ -1,6 +1,6 @@
 """LLM-powered SKILL.md optimizer.
 
-Uses the Anthropic SDK to read a SKILL.md, evaluate it with static checks,
+Uses the LLM provider abstraction to read a SKILL.md, evaluate it with static checks,
 and generate an improved version based on failing checks and fix hints.
 """
 
@@ -13,7 +13,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from skill_lab.core.exceptions import GenerationError
-from skill_lab.core.llm import DEFAULT_MODEL, GenerationUsage
+from skill_lab.core.llm import (
+    DEFAULT_MODEL,
+    GenerationUsage,
+    LLMProvider,
+    detect_provider_name,
+    get_api_key_env_var,
+    resolve_provider,
+)
 from skill_lab.core.models import EvaluationReport
 from skill_lab.evaluators.static_evaluator import StaticEvaluator
 
@@ -43,23 +50,24 @@ class OptimizationResult:
 
 
 class SkillOptimizer:
-    """Optimizes SKILL.md files using the Anthropic API."""
+    """Optimizes SKILL.md files using an LLM."""
 
     def __init__(
         self,
         model: str = DEFAULT_MODEL,
         api_key: str | None = None,
+        provider: LLMProvider | None = None,
     ) -> None:
         """Initialize the optimizer.
 
         Args:
-            model: Anthropic model ID to use for optimization.
-            api_key: Anthropic API key. If None, uses ANTHROPIC_API_KEY env var.
+            model: Model ID to use for optimization.
+            api_key: API key. If None, uses the appropriate env var for the provider.
+            provider: Optional pre-built LLMProvider. If None, one is resolved from
+                the model ID.
         """
-        import anthropic
-
         self._model = model
-        self._client = anthropic.Anthropic(api_key=api_key)
+        self._provider = provider or resolve_provider(model, api_key=api_key)
         self.last_usage: GenerationUsage | None = None
 
     def optimize(self, skill_path: Path) -> OptimizationResult:
@@ -166,7 +174,7 @@ class SkillOptimizer:
         )
 
     def _call_api(self, prompt: str) -> str:
-        """Call the Anthropic API to generate optimized SKILL.md.
+        """Call the LLM provider to generate optimized SKILL.md.
 
         Args:
             prompt: The user message to send.
@@ -178,35 +186,39 @@ class SkillOptimizer:
             GenerationError: If the API call fails.
         """
         try:
-            message = self._client.messages.create(
+            response = self._provider.create_message(
                 model=self._model,
                 max_tokens=8192,
                 system=SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": prompt}],
+                prompt=prompt,
             )
-            if message.stop_reason == "max_tokens":
+            if response.stop_reason == "max_tokens":
                 raise GenerationError(
                     "Model output was truncated (max_tokens limit reached). "
                     "The skill may be too large to optimize in one pass.",
                     suggestion="Try a model with a larger output window or shorten the skill.",
                 )
-            # Capture token usage
             self.last_usage = GenerationUsage(
-                input_tokens=message.usage.input_tokens,
-                output_tokens=message.usage.output_tokens,
+                input_tokens=response.input_tokens,
+                output_tokens=response.output_tokens,
                 model=self._model,
             )
-            # Extract text from content blocks
-            text_parts = [block.text for block in message.content if hasattr(block, "text")]
-            if not text_parts:
+            if response.stop_reason == "safety":
+                raise GenerationError(
+                    "Response blocked by content safety filters",
+                    suggestion="Try rephrasing the skill content or using a different model.",
+                )
+            if not response.text:
                 raise GenerationError("API returned empty response")
-            return "\n".join(text_parts)
+            return response.text
         except GenerationError:
             raise
         except Exception as e:
+            provider_name = detect_provider_name(self._model)
+            env_var = get_api_key_env_var(provider_name)
             raise GenerationError(
                 f"API call failed: {e}",
-                suggestion="Check your ANTHROPIC_API_KEY and network connection.",
+                suggestion=f"Check your {env_var} and network connection.",
             ) from e
 
     def _parse_response(self, response_text: str) -> str:

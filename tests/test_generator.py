@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 import yaml
 
 from skill_lab.core.exceptions import GenerationError
+from skill_lab.core.llm import LLMResponse
 from skill_lab.triggers.generator import (
-    DEFAULT_MODEL,
     MAX_BODY_CHARS,
     TriggerGenerator,
 )
@@ -77,29 +76,28 @@ test_cases:
 """
 
 
-def _mock_anthropic_response(text: str) -> MagicMock:
-    """Create a mock Anthropic API response."""
-    block = MagicMock()
-    block.text = text
-    message = MagicMock()
-    message.content = [block]
-    return message
+def _mock_llm_response(text: str) -> LLMResponse:
+    """Create a mock LLMResponse."""
+    return LLMResponse(
+        text=text,
+        input_tokens=500,
+        output_tokens=300,
+        stop_reason="end_turn",
+    )
 
 
 @pytest.fixture
-def mock_client() -> MagicMock:
-    """Create a mock Anthropic client."""
-    client = MagicMock()
-    client.messages.create.return_value = _mock_anthropic_response(VALID_YAML_RESPONSE)
-    return client
+def mock_provider() -> MagicMock:
+    """Create a mock LLMProvider."""
+    provider = MagicMock()
+    provider.create_message.return_value = _mock_llm_response(VALID_YAML_RESPONSE)
+    return provider
 
 
 @pytest.fixture
-def generator(mock_client: MagicMock) -> TriggerGenerator:
-    """Create a TriggerGenerator with a mocked client."""
-    pytest.importorskip("anthropic")
-    with patch("anthropic.Anthropic", return_value=mock_client):
-        gen = TriggerGenerator(api_key="test-key")
+def generator(mock_provider: MagicMock) -> TriggerGenerator:
+    """Create a TriggerGenerator with a mocked provider."""
+    gen = TriggerGenerator(provider=mock_provider)
     return gen
 
 
@@ -195,10 +193,10 @@ class TestTriggerGenerator:
         assert "existing content" not in content
 
     def test_generate_handles_malformed_yaml(
-        self, generator: TriggerGenerator, fixtures_dir: Path
+        self, generator: TriggerGenerator, mock_provider: MagicMock, fixtures_dir: Path
     ) -> None:
         """Test error handling for malformed YAML response."""
-        generator._client.messages.create.return_value = _mock_anthropic_response(
+        mock_provider.create_message.return_value = _mock_llm_response(
             "this: is: not: valid: yaml:\n  - [broken"
         )
         skill_path = fixtures_dir / "skills" / "creating-reports"
@@ -207,11 +205,11 @@ class TestTriggerGenerator:
             generator.generate(skill_path)
 
     def test_generate_strips_markdown_fences(
-        self, generator: TriggerGenerator, fixtures_dir: Path
+        self, generator: TriggerGenerator, mock_provider: MagicMock, fixtures_dir: Path
     ) -> None:
         """Test that markdown code fences are stripped from response."""
         fenced = f"```yaml\n{VALID_YAML_RESPONSE}\n```"
-        generator._client.messages.create.return_value = _mock_anthropic_response(fenced)
+        mock_provider.create_message.return_value = _mock_llm_response(fenced)
 
         skill_path = fixtures_dir / "skills" / "creating-reports"
         result = generator.generate(skill_path)
@@ -227,6 +225,15 @@ class TestTriggerGenerator:
 
         with pytest.raises(GenerationError, match="Failed to parse skill"):
             generator.generate(skill_dir)
+
+    def test_generate_tracks_usage(self, generator: TriggerGenerator, fixtures_dir: Path) -> None:
+        """Test that token usage is tracked after generation."""
+        skill_path = fixtures_dir / "skills" / "creating-reports"
+        generator.generate(skill_path)
+
+        assert generator.last_usage is not None
+        assert generator.last_usage.input_tokens == 500
+        assert generator.last_usage.output_tokens == 300
 
 
 class TestPromptBuilding:
@@ -261,10 +268,6 @@ class TestYamlValidation:
 
     def test_missing_test_cases_key(self, generator: TriggerGenerator) -> None:
         """Test validation catches missing test_cases."""
-        generator._client.messages.create.return_value = _mock_anthropic_response(
-            "skill: test\nother_key: value"
-        )
-
         with pytest.raises(GenerationError, match="missing 'test_cases' key"):
             generator._parse_response("skill: test\nother_key: value", "test")
 
@@ -302,7 +305,7 @@ class TestGenerateCommand:
     """Tests for the CLI generate command."""
 
     def test_missing_api_key(self, tmp_path: Path) -> None:
-        """Test error when ANTHROPIC_API_KEY is not set."""
+        """Test error when API key is not set."""
         from typer.testing import CliRunner
 
         from skill_lab.cli import app
@@ -315,6 +318,44 @@ class TestGenerateCommand:
         result = runner.invoke(app, ["generate", str(skill_dir)], env={"ANTHROPIC_API_KEY": ""})
         assert result.exit_code == 1
         assert "ANTHROPIC_API_KEY" in result.output
+
+    def test_openai_model_checks_openai_key(self, tmp_path: Path) -> None:
+        """Test that an OpenAI model checks OPENAI_API_KEY."""
+        from typer.testing import CliRunner
+
+        from skill_lab.cli import app
+
+        skill_dir = tmp_path / "my-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text("---\nname: my-skill\ndescription: test\n---\n")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            app,
+            ["generate", str(skill_dir), "--model", "gpt-4o-mini"],
+            env={"OPENAI_API_KEY": "", "ANTHROPIC_API_KEY": ""},
+        )
+        assert result.exit_code == 1
+        assert "OPENAI_API_KEY" in result.output
+
+    def test_gemini_model_checks_gemini_key(self, tmp_path: Path) -> None:
+        """Test that a Gemini model checks GEMINI_API_KEY."""
+        from typer.testing import CliRunner
+
+        from skill_lab.cli import app
+
+        skill_dir = tmp_path / "my-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text("---\nname: my-skill\ndescription: test\n---\n")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            app,
+            ["generate", str(skill_dir), "--model", "gemini-2.5-flash"],
+            env={"GEMINI_API_KEY": "", "ANTHROPIC_API_KEY": ""},
+        )
+        assert result.exit_code == 1
+        assert "GEMINI_API_KEY" in result.output
 
     def test_nonexistent_path(self) -> None:
         """Test error for nonexistent path."""
@@ -340,28 +381,3 @@ class TestGenerateCommand:
         result = runner.invoke(app, ["generate", str(empty_dir)])
         assert result.exit_code == 1
         assert "No SKILL.md" in result.output
-
-    def test_missing_anthropic_package(self, tmp_path: Path) -> None:
-        """Test error when anthropic package is not installed."""
-        from typer.testing import CliRunner
-
-        from skill_lab.cli import app
-
-        skill_dir = tmp_path / "my-skill"
-        skill_dir.mkdir()
-        (skill_dir / "SKILL.md").write_text("---\nname: my-skill\ndescription: test\n---\n")
-
-        runner = CliRunner()
-        with (
-            patch(
-                "skill_lab.cli.importlib_import",
-                side_effect=ImportError("No module named 'anthropic'"),
-            )
-            if False
-            else patch.dict("sys.modules", {"skill_lab.triggers.generator": None})
-        ):
-            # When generator module is None in sys.modules, importing will raise ImportError
-            pass
-
-        # This test verifies the error path exists; full integration would need
-        # to actually remove the anthropic package, which we skip in unit tests.
