@@ -18,6 +18,7 @@ from skill_lab.cli import (
 )
 from skill_lab.core.constants import TESTS_DIR, TRACES_DIR
 from skill_lab.core.models import TriggerReport, TriggerType
+from skill_lab.core.skill_config import load_config, save_config
 from skill_lab.core.telemetry import push_telemetry_extra
 from skill_lab.triggers.test_loader import load_trigger_tests
 from skill_lab.triggers.trigger_evaluator import TriggerEvaluator
@@ -226,6 +227,10 @@ def trigger(
             console.print(report_json)
     else:
         _print_trigger_report(report)
+
+    # Ensure config exists
+    config = load_config(skill_path)
+    save_config(skill_path, config)
 
     if not report.overall_pass:
         raise typer.Exit(code=1)

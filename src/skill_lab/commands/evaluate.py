@@ -19,6 +19,7 @@ from skill_lab.cli import (
 )
 from skill_lab.core.models import EvalDimension
 from skill_lab.core.registry import registry
+from skill_lab.core.skill_config import update_evaluate
 from skill_lab.core.telemetry import push_telemetry_extra
 from skill_lab.evaluators.static_evaluator import StaticEvaluator
 from skill_lab.reporters.console_reporter import SEVERITY_STYLES, ConsoleReporter
@@ -182,6 +183,14 @@ def evaluate(
     with _cli_error_handler():
         evaluator = StaticEvaluator(spec_only=spec_only)
         report = evaluator.evaluate(skill_path)
+
+    update_evaluate(
+        skill_path,
+        score=report.quality_score,
+        checks_passed=report.checks_passed,
+        checks_total=report.checks_run,
+        date=report.timestamp,
+    )
 
     # Attach skill name and score to the telemetry event recorded by the decorator
     push_telemetry_extra(

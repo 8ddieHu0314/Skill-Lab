@@ -11,6 +11,7 @@ SKLAB_CONFIG = SKLAB_HOME / "config.json"
 SKLAB_DB = SKLAB_HOME / "usage.db"
 TESTS_DIR = ".sklab/tests"
 TRACES_DIR = ".sklab/traces"
+CONFIG_FILE = ".sklab/config.yaml"
 
 
 def skill_script_patterns(skill_name: str) -> list[str]:
