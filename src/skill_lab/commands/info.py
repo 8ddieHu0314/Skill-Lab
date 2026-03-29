@@ -69,7 +69,7 @@ def info(
 
     # Compute on-demand token cost (references + assets + scripts text files)
     on_demand_tokens = 0
-    _TEXT_SUFFIXES = {".md", ".txt", ".rst", ".py", ".sh", ".js", ".ts", ".bash", ".rb"}
+    _TEXT_SUFFIXES = {".md", ".txt", ".rst", ".py", ".sh", ".js", ".ts", ".bash", ".rb", ".go"}
     for spec_dir in ("references", "assets", "scripts"):
         dir_path = skill_path / spec_dir
         if dir_path.is_dir():

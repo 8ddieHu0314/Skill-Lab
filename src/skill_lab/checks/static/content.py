@@ -488,7 +488,7 @@ class AssetPathsExistCheck(StaticCheck):
 _INTERNAL_LINK_RE = re.compile(r"\[(?:[^\]]*)\]\((?!(?:https?|ftp|mailto)://|#)((?:\./)?\S+?)\)")
 
 # Spec directories that contain skill support files
-_SPEC_DIRS = ("references", "assets", "scripts")
+_SPEC_DIRS = ("references", "assets", "scripts", "evals")
 
 
 @register_check
@@ -563,7 +563,7 @@ class OrphanedFilesCheck(StaticCheck):
         # First pass: find files directly referenced in body
         referenced: set[str] = set()
         for f in all_files:
-            rel = str(f.relative_to(skill.path))
+            rel = f.relative_to(skill.path).as_posix()
             # Check both full relative path and just the filename
             if rel in body or f.name in body:
                 referenced.add(rel)
@@ -582,7 +582,7 @@ class OrphanedFilesCheck(StaticCheck):
                     # Resolve relative to the referenced file's parent
                     linked_path = (ref_path.parent / PurePosixPath(clean)).resolve()
                     try:
-                        linked_rel = str(linked_path.relative_to(skill.path))
+                        linked_rel = linked_path.relative_to(skill.path).as_posix()
                         referenced.add(linked_rel)
                     except ValueError:
                         pass
@@ -590,7 +590,7 @@ class OrphanedFilesCheck(StaticCheck):
         # Find orphans
         orphans: list[str] = []
         for f in all_files:
-            rel = str(f.relative_to(skill.path))
+            rel = f.relative_to(skill.path).as_posix()
             if rel not in referenced:
                 orphans.append(rel)
 
