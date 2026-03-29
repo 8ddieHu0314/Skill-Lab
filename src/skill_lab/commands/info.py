@@ -1,5 +1,6 @@
 """Info, prompt, and eval-trace commands."""
 
+import contextlib
 import json as json_module
 import sys
 from pathlib import Path
@@ -66,6 +67,19 @@ def info(
     discovery_tokens = estimate_tokens(discovery_text)
     activation_tokens = estimate_tokens(skill_md_content)
 
+    # Compute on-demand token cost (references + assets + scripts text files)
+    on_demand_tokens = 0
+    _TEXT_SUFFIXES = {".md", ".txt", ".rst", ".py", ".sh", ".js", ".ts", ".bash", ".rb", ".go"}
+    for spec_dir in ("references", "assets", "scripts"):
+        dir_path = skill_path / spec_dir
+        if dir_path.is_dir():
+            for f in dir_path.rglob("*"):
+                if f.is_file() and f.suffix.lower() in _TEXT_SUFFIXES:
+                    with contextlib.suppress(OSError):
+                        on_demand_tokens += estimate_tokens(
+                            f.read_text(encoding="utf-8", errors="replace")
+                        )
+
     # Detect subfolders
     subfolders = []
     if skill.has_scripts:
@@ -89,6 +103,8 @@ def info(
         "tokens": {
             "discovery": discovery_tokens,
             "activation": activation_tokens,
+            "on_demand": on_demand_tokens,
+            "total": activation_tokens + on_demand_tokens,
         },
     }
 
@@ -124,8 +140,12 @@ def info(
     lines.append(f"[bold]Body:[/bold]        {body_lines} lines")
     lines.append("")
     lines.append("[bold]Tokens (estimated):[/bold]")
-    lines.append(f"  Discovery:   ~{discovery_tokens} tokens (name + description)")
-    lines.append(f"  Activation:  ~{activation_tokens} tokens (full SKILL.md)")
+    lines.append(f"  Discovery:    ~{discovery_tokens} tokens (name + description)")
+    lines.append(f"  Front-loaded: ~{activation_tokens} tokens (full SKILL.md)")
+    if on_demand_tokens > 0:
+        total = activation_tokens + on_demand_tokens
+        lines.append(f"  On-demand:    ~{on_demand_tokens} tokens (references + assets + scripts)")
+        lines.append(f"  Total:        ~{total} tokens")
 
     panel = Panel("\n".join(lines), title=f"[bold]{name}[/bold]", expand=False)
     console.print(panel)

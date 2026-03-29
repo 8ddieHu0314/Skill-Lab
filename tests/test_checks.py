@@ -15,11 +15,13 @@ from skill_lab.checks.static.security import (
 from skill_lab.checks.static.content import (
     AssetPathsExistCheck,
     BodyNotEmptyCheck,
+    BrokenInternalLinksCheck,
     CompatibilityPrereqsCheck,
     DescriptionActionableCheck,
     HasExamplesCheck,
     LineBudgetCheck,
     MetadataTokenBudgetCheck,
+    OrphanedFilesCheck,
     ScriptPathsExistCheck,
     ScriptsReferencedCheck,
     TokenBudgetCheck,
@@ -28,6 +30,8 @@ from skill_lab.checks.static.naming import (
     NameMatchesDirectoryCheck,
 )
 from skill_lab.checks.static.structure import (
+    FilesOutsideSpecDirsCheck,
+    ScriptsHelpSupportCheck,
     ScriptsNoInteractiveCheck,
     ScriptsSelfContainedCheck,
     ScriptsValidCheck,
@@ -1168,3 +1172,229 @@ class TestSecurityChecks:
         ]
         results = [check.run(skill) for check in checks]
         assert any(not r.passed for r in results), "Expected at least one security sub-check to fail"
+
+
+class TestBrokenInternalLinks:
+    """Tests for content.broken-internal-links check."""
+
+    def test_no_links_passes(self, tmp_path: Path) -> None:
+        skill = _make_tmp_skill(tmp_path, body="No links here, just text.")
+        result = BrokenInternalLinksCheck().run(skill)
+        assert result.passed
+
+    def test_all_links_resolve(self, tmp_path: Path) -> None:
+        refs = tmp_path / "references"
+        refs.mkdir()
+        (refs / "guide.md").write_text("# Guide")
+        skill = _make_tmp_skill(
+            tmp_path,
+            body="See [the guide](references/guide.md) for details.",
+        )
+        result = BrokenInternalLinksCheck().run(skill)
+        assert result.passed
+        assert "1 verified" in result.message
+
+    def test_broken_link_fails(self, tmp_path: Path) -> None:
+        skill = _make_tmp_skill(
+            tmp_path,
+            body="See [missing doc](references/nonexistent.md) for info.",
+        )
+        result = BrokenInternalLinksCheck().run(skill)
+        assert not result.passed
+        assert result.severity == Severity.MEDIUM
+        assert "nonexistent.md" in result.message
+
+    def test_ignores_urls(self, tmp_path: Path) -> None:
+        skill = _make_tmp_skill(
+            tmp_path,
+            body="Visit [docs](https://example.com/docs) for more.",
+        )
+        result = BrokenInternalLinksCheck().run(skill)
+        assert result.passed
+
+    def test_ignores_anchors(self, tmp_path: Path) -> None:
+        skill = _make_tmp_skill(
+            tmp_path,
+            body="See [section](#overview) below.",
+        )
+        result = BrokenInternalLinksCheck().run(skill)
+        assert result.passed
+
+    def test_mixed_valid_and_broken(self, tmp_path: Path) -> None:
+        refs = tmp_path / "references"
+        refs.mkdir()
+        (refs / "exists.md").write_text("content")
+        skill = _make_tmp_skill(
+            tmp_path,
+            body="See [a](references/exists.md) and [b](references/gone.md).",
+        )
+        result = BrokenInternalLinksCheck().run(skill)
+        assert not result.passed
+        assert "gone.md" in result.message
+
+
+class TestFilesOutsideSpecDirs:
+    """Tests for structure.files-outside-spec-dirs check."""
+
+    def test_clean_skill_passes(self, tmp_path: Path) -> None:
+        (tmp_path / "SKILL.md").write_text("---\nname: test\n---\nBody")
+        skill = _make_tmp_skill(tmp_path)
+        result = FilesOutsideSpecDirsCheck().run(skill)
+        assert result.passed
+
+    def test_with_spec_dirs_passes(self, tmp_path: Path) -> None:
+        (tmp_path / "SKILL.md").write_text("---\nname: test\n---\nBody")
+        (tmp_path / "references").mkdir()
+        (tmp_path / "scripts").mkdir()
+        (tmp_path / "assets").mkdir()
+        skill = _make_tmp_skill(tmp_path)
+        result = FilesOutsideSpecDirsCheck().run(skill)
+        assert result.passed
+
+    def test_license_allowed(self, tmp_path: Path) -> None:
+        (tmp_path / "SKILL.md").write_text("---\nname: test\n---\nBody")
+        (tmp_path / "LICENSE.txt").write_text("MIT")
+        skill = _make_tmp_skill(tmp_path)
+        result = FilesOutsideSpecDirsCheck().run(skill)
+        assert result.passed
+
+    def test_dotfiles_allowed(self, tmp_path: Path) -> None:
+        (tmp_path / "SKILL.md").write_text("---\nname: test\n---\nBody")
+        (tmp_path / ".sklab").mkdir()
+        (tmp_path / ".gitignore").write_text("*.pyc")
+        skill = _make_tmp_skill(tmp_path)
+        result = FilesOutsideSpecDirsCheck().run(skill)
+        assert result.passed
+
+    def test_extra_files_fail(self, tmp_path: Path) -> None:
+        (tmp_path / "SKILL.md").write_text("---\nname: test\n---\nBody")
+        (tmp_path / "README.md").write_text("readme")
+        (tmp_path / "package.json").write_text("{}")
+        skill = _make_tmp_skill(tmp_path)
+        result = FilesOutsideSpecDirsCheck().run(skill)
+        assert not result.passed
+        assert result.severity == Severity.LOW
+        assert "README.md" in result.message
+
+    def test_extra_dirs_fail(self, tmp_path: Path) -> None:
+        (tmp_path / "SKILL.md").write_text("---\nname: test\n---\nBody")
+        (tmp_path / "examples").mkdir()
+        skill = _make_tmp_skill(tmp_path)
+        result = FilesOutsideSpecDirsCheck().run(skill)
+        assert not result.passed
+        assert "examples" in result.message
+
+
+class TestOrphanedFiles:
+    """Tests for content.orphaned-files check."""
+
+    def test_no_spec_dirs_passes(self, tmp_path: Path) -> None:
+        skill = _make_tmp_skill(tmp_path, body="Just body, no spec dirs.")
+        result = OrphanedFilesCheck().run(skill)
+        assert result.passed
+
+    def test_all_referenced_passes(self, tmp_path: Path) -> None:
+        refs = tmp_path / "references"
+        refs.mkdir()
+        (refs / "guide.md").write_text("# Guide")
+        skill = _make_tmp_skill(
+            tmp_path,
+            body="See references/guide.md for the guide.",
+        )
+        result = OrphanedFilesCheck().run(skill)
+        assert result.passed
+
+    def test_unreferenced_file_fails(self, tmp_path: Path) -> None:
+        refs = tmp_path / "references"
+        refs.mkdir()
+        (refs / "orphan.md").write_text("# Orphan")
+        skill = _make_tmp_skill(tmp_path, body="No references at all in the body.")
+        result = OrphanedFilesCheck().run(skill)
+        assert not result.passed
+        assert result.severity == Severity.LOW
+        assert "orphan.md" in result.message
+
+    def test_transitive_reference_passes(self, tmp_path: Path) -> None:
+        refs = tmp_path / "references"
+        refs.mkdir()
+        (refs / "index.md").write_text("See [sub](sub.md) for details.")
+        (refs / "sub.md").write_text("# Sub document")
+        skill = _make_tmp_skill(
+            tmp_path,
+            body="See references/index.md for the index.",
+        )
+        result = OrphanedFilesCheck().run(skill)
+        assert result.passed
+
+    def test_filename_match_passes(self, tmp_path: Path) -> None:
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "run.py").write_text("print('hi')")
+        skill = _make_tmp_skill(
+            tmp_path,
+            body="Run the run.py script to get started.",
+        )
+        result = OrphanedFilesCheck().run(skill)
+        assert result.passed
+
+
+class TestScriptsHelpSupport:
+    """Tests for structure.scripts-help-support check."""
+
+    def test_no_scripts_passes(self, tmp_path: Path) -> None:
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsHelpSupportCheck().run(skill)
+        assert result.passed
+
+    def test_argparse_passes(self, tmp_path: Path) -> None:
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "run.py").write_text("import argparse\nparser = argparse.ArgumentParser()")
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsHelpSupportCheck().run(skill)
+        assert result.passed
+
+    def test_click_passes(self, tmp_path: Path) -> None:
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "run.py").write_text("import click\n@click.command()")
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsHelpSupportCheck().run(skill)
+        assert result.passed
+
+    def test_getopts_passes(self, tmp_path: Path) -> None:
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "run.sh").write_text("while getopts 'h' opt; do\ncase $opt in h) usage;; esac\ndone")
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsHelpSupportCheck().run(skill)
+        assert result.passed
+
+    def test_no_arg_parsing_fails(self, tmp_path: Path) -> None:
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "run.py").write_text("print('hello world')")
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsHelpSupportCheck().run(skill)
+        assert not result.passed
+        assert result.severity == Severity.LOW
+        assert "run.py" in result.message
+
+    def test_mixed_scripts(self, tmp_path: Path) -> None:
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "good.py").write_text("import argparse")
+        (scripts / "bad.py").write_text("print('no help')")
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsHelpSupportCheck().run(skill)
+        assert not result.passed
+        assert "bad.py" in result.message
+        assert "good.py" not in result.message
+
+    def test_js_commander_passes(self, tmp_path: Path) -> None:
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "run.js").write_text("const { program } = require('commander');")
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsHelpSupportCheck().run(skill)
+        assert result.passed

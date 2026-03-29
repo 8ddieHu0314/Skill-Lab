@@ -93,7 +93,7 @@ class TestInfoCommand:
         assert "creating-reports" in result.stdout
         assert "Tokens (estimated)" in result.stdout
         assert "Discovery" in result.stdout
-        assert "Activation" in result.stdout
+        assert "Front-loaded" in result.stdout
 
     def test_info_json(self, valid_skill_path: Path):
         result = runner.invoke(app, ["info", str(valid_skill_path), "--json"])
