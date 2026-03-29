@@ -412,3 +412,112 @@ class FilesOutsideSpecDirsCheck(StaticCheck):
             "All top-level items are in recognized spec directories",
             location=str(skill.path),
         )
+
+
+# Argument parsing patterns by language — indicates --help support
+_HELP_PATTERNS: dict[frozenset[str], list[re.Pattern[str]]] = {
+    # Python: argparse, click, typer, fire, sys.argv
+    frozenset({".py"}): [
+        re.compile(r"\bargparse\b"),
+        re.compile(r"\bclick\b"),
+        re.compile(r"\btyper\b"),
+        re.compile(r"\bfire\b"),
+        re.compile(r"\bsys\.argv\b"),
+        re.compile(r"--help"),
+    ],
+    # Shell: getopts, getopt, usage(), --help handling
+    frozenset({".sh", ".bash"}): [
+        re.compile(r"\bgetopts\b"),
+        re.compile(r"\bgetopt\b"),
+        re.compile(r"--help"),
+        re.compile(r"\busage\s*\(\)"),
+    ],
+    # JS/TS: commander, yargs, meow, minimist, process.argv
+    frozenset({".js", ".ts"}): [
+        re.compile(r"\bcommander\b"),
+        re.compile(r"\byargs\b"),
+        re.compile(r"\bmeow\b"),
+        re.compile(r"\bminimist\b"),
+        re.compile(r"\bprocess\.argv\b"),
+        re.compile(r"--help"),
+    ],
+    # Ruby: optparse, thor, ARGV
+    frozenset({".rb"}): [
+        re.compile(r"\boptparse\b"),
+        re.compile(r"\bthor\b"),
+        re.compile(r"\bARGV\b"),
+        re.compile(r"--help"),
+    ],
+    # Go: flag package, os.Args
+    frozenset({".go"}): [
+        re.compile(r'\b"flag"\b'),
+        re.compile(r"\bos\.Args\b"),
+        re.compile(r"--help"),
+    ],
+}
+
+
+@register_check
+class ScriptsHelpSupportCheck(StaticCheck):
+    """Check that scripts support --help for agent discoverability."""
+
+    check_id: ClassVar[str] = "structure.scripts-help-support"
+    check_name: ClassVar[str] = "Scripts Help Support"
+    description: ClassVar[str] = "Scripts support --help for agent interface discovery"
+    severity: ClassVar[Severity] = Severity.LOW
+    dimension: ClassVar[EvalDimension] = EvalDimension.STRUCTURE
+    fix: ClassVar[str] = "Add argument parsing (argparse, click, getopts, etc.) with --help support"
+
+    def run(self, skill: Skill) -> CheckResult:
+        scripts_path = skill.path / "scripts"
+
+        if not scripts_path.exists() or not scripts_path.is_dir():
+            return self._pass("No scripts folder present (optional)")
+
+        script_files = [
+            f
+            for f in scripts_path.iterdir()
+            if f.is_file() and f.suffix.lower() in VALID_SCRIPT_EXTENSIONS
+        ]
+
+        if not script_files:
+            return self._pass("No script files in scripts/")
+
+        missing_help: list[str] = []
+
+        for script in script_files:
+            ext = script.suffix.lower()
+
+            # Find matching patterns for this extension
+            patterns: list[re.Pattern[str]] = []
+            for ext_group, group_patterns in _HELP_PATTERNS.items():
+                if ext in ext_group:
+                    patterns = group_patterns
+                    break
+
+            if not patterns:
+                continue
+
+            try:
+                content = script.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+
+            if not any(p.search(content) for p in patterns):
+                missing_help.append(script.name)
+
+        if missing_help:
+            return self._fail(
+                f"Script(s) without --help support: {', '.join(missing_help)}",
+                details={
+                    "scripts_without_help": missing_help,
+                    "suggestion": "Add argument parsing so agents can run script --help "
+                    "to discover the interface",
+                },
+                location=str(scripts_path),
+            )
+
+        return self._pass(
+            f"All {len(script_files)} script(s) support --help",
+            location=str(scripts_path),
+        )

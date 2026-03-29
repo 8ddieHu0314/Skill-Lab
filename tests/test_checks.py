@@ -31,6 +31,7 @@ from skill_lab.checks.static.naming import (
 )
 from skill_lab.checks.static.structure import (
     FilesOutsideSpecDirsCheck,
+    ScriptsHelpSupportCheck,
     ScriptsNoInteractiveCheck,
     ScriptsSelfContainedCheck,
     ScriptsValidCheck,
@@ -1334,4 +1335,66 @@ class TestOrphanedFiles:
             body="Run the run.py script to get started.",
         )
         result = OrphanedFilesCheck().run(skill)
+        assert result.passed
+
+
+class TestScriptsHelpSupport:
+    """Tests for structure.scripts-help-support check."""
+
+    def test_no_scripts_passes(self, tmp_path: Path) -> None:
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsHelpSupportCheck().run(skill)
+        assert result.passed
+
+    def test_argparse_passes(self, tmp_path: Path) -> None:
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "run.py").write_text("import argparse\nparser = argparse.ArgumentParser()")
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsHelpSupportCheck().run(skill)
+        assert result.passed
+
+    def test_click_passes(self, tmp_path: Path) -> None:
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "run.py").write_text("import click\n@click.command()")
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsHelpSupportCheck().run(skill)
+        assert result.passed
+
+    def test_getopts_passes(self, tmp_path: Path) -> None:
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "run.sh").write_text("while getopts 'h' opt; do\ncase $opt in h) usage;; esac\ndone")
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsHelpSupportCheck().run(skill)
+        assert result.passed
+
+    def test_no_arg_parsing_fails(self, tmp_path: Path) -> None:
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "run.py").write_text("print('hello world')")
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsHelpSupportCheck().run(skill)
+        assert not result.passed
+        assert result.severity == Severity.LOW
+        assert "run.py" in result.message
+
+    def test_mixed_scripts(self, tmp_path: Path) -> None:
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "good.py").write_text("import argparse")
+        (scripts / "bad.py").write_text("print('no help')")
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsHelpSupportCheck().run(skill)
+        assert not result.passed
+        assert "bad.py" in result.message
+        assert "good.py" not in result.message
+
+    def test_js_commander_passes(self, tmp_path: Path) -> None:
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "run.js").write_text("const { program } = require('commander');")
+        skill = _make_tmp_skill(tmp_path)
+        result = ScriptsHelpSupportCheck().run(skill)
         assert result.passed
