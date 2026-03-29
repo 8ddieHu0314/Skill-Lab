@@ -8,7 +8,7 @@ from skill_lab.core.models import CheckResult, EvalDimension, Severity, Skill
 from skill_lab.core.registry import register_check
 
 # Valid file extensions for scripts folder
-VALID_SCRIPT_EXTENSIONS = {".py", ".sh", ".js", ".ts", ".bash", ".rb"}
+VALID_SCRIPT_EXTENSIONS = {".py", ".sh", ".js", ".ts", ".bash", ".rb", ".go"}
 
 # Valid file extensions for references folder
 VALID_REFERENCE_EXTENSIONS = {".md", ".txt", ".rst"}
@@ -368,6 +368,7 @@ _SPEC_ENTRIES: set[str] = {
     "references",
     "assets",
     "scripts",
+    "evals",
 }
 
 # Prefixes that are always allowed at the top level
