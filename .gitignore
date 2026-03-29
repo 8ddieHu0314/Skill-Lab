@@ -87,4 +87,3 @@ tasks/
 downloaded-skills/
 tests/fixtures/skills/downloaded/
 .sklab/
-!tests/fixtures/**/.sklab/
