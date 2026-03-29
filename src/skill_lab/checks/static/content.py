@@ -1,7 +1,7 @@
 """Content checks for SKILL.md body and quality."""
 
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import ClassVar
 
 from skill_lab.checks.base import StaticCheck
@@ -482,3 +482,126 @@ class AssetPathsExistCheck(StaticCheck):
 
     def run(self, skill: Skill) -> CheckResult:
         return _check_paths_exist(self, skill, _ASSET_PATH_RE, "asset")
+
+
+# Regex to match markdown links [text](path) — excludes URLs, anchors, and mailto
+_INTERNAL_LINK_RE = re.compile(r"\[(?:[^\]]*)\]\((?!(?:https?|ftp|mailto)://|#)((?:\./)?\S+?)\)")
+
+# Spec directories that contain skill support files
+_SPEC_DIRS = ("references", "assets", "scripts")
+
+
+@register_check
+class BrokenInternalLinksCheck(StaticCheck):
+    """Check that markdown links to local files resolve on disk."""
+
+    check_id: ClassVar[str] = "content.broken-internal-links"
+    check_name: ClassVar[str] = "Broken Internal Links"
+    description: ClassVar[str] = "Markdown links to local files resolve on disk"
+    severity: ClassVar[Severity] = Severity.MEDIUM
+    dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
+    fix: ClassVar[str] = "Fix broken file paths in your markdown links or create the missing files"
+
+    def run(self, skill: Skill) -> CheckResult:
+        refs = _INTERNAL_LINK_RE.findall(skill.body)
+
+        if not refs:
+            return self._pass(
+                "No internal file links in body",
+                location=self._skill_md_location(skill),
+            )
+
+        unique_refs: list[str] = list(dict.fromkeys(refs))
+        missing: list[str] = []
+
+        for ref in unique_refs:
+            # Strip any trailing parentheses or punctuation that leaked into the match
+            clean = ref.rstrip(")")
+            target = skill.path / PurePosixPath(clean)
+            if not target.exists():
+                missing.append(clean)
+
+        if missing:
+            return self._fail(
+                f"Broken internal link(s): {', '.join(missing)}",
+                details={"missing_paths": missing, "all_links": unique_refs},
+                location=self._skill_md_location(skill),
+            )
+
+        return self._pass(
+            f"All internal links resolve ({len(unique_refs)} verified)",
+            location=self._skill_md_location(skill),
+        )
+
+
+@register_check
+class OrphanedFilesCheck(StaticCheck):
+    """Check that files in spec directories are referenced from SKILL.md."""
+
+    check_id: ClassVar[str] = "content.orphaned-files"
+    check_name: ClassVar[str] = "Orphaned Files"
+    description: ClassVar[str] = "Files in spec directories are referenced from SKILL.md"
+    severity: ClassVar[Severity] = Severity.LOW
+    dimension: ClassVar[EvalDimension] = EvalDimension.CONTENT
+    fix: ClassVar[str] = "Reference orphaned files in your SKILL.md body or remove them"
+
+    def run(self, skill: Skill) -> CheckResult:
+        # Collect all files in spec directories
+        all_files: list[Path] = []
+        for spec_dir in _SPEC_DIRS:
+            dir_path = skill.path / spec_dir
+            if dir_path.is_dir():
+                all_files.extend(f for f in dir_path.rglob("*") if f.is_file())
+
+        if not all_files:
+            return self._pass(
+                "No files in spec directories to check",
+            )
+
+        body = skill.body
+
+        # First pass: find files directly referenced in body
+        referenced: set[str] = set()
+        for f in all_files:
+            rel = str(f.relative_to(skill.path))
+            # Check both full relative path and just the filename
+            if rel in body or f.name in body:
+                referenced.add(rel)
+
+        # Second pass: read directly-referenced .md files and extract their links
+        for ref_str in list(referenced):
+            ref_path = skill.path / ref_str
+            if ref_path.suffix.lower() == ".md":
+                try:
+                    ref_content = ref_path.read_text(encoding="utf-8", errors="replace")
+                except OSError:
+                    continue
+                # Find links in the referenced file
+                for link in _INTERNAL_LINK_RE.findall(ref_content):
+                    clean = link.rstrip(")")
+                    # Resolve relative to the referenced file's parent
+                    linked_path = (ref_path.parent / PurePosixPath(clean)).resolve()
+                    try:
+                        linked_rel = str(linked_path.relative_to(skill.path))
+                        referenced.add(linked_rel)
+                    except ValueError:
+                        pass
+
+        # Find orphans
+        orphans: list[str] = []
+        for f in all_files:
+            rel = str(f.relative_to(skill.path))
+            if rel not in referenced:
+                orphans.append(rel)
+
+        if orphans:
+            return self._fail(
+                f"{len(orphans)} orphaned file(s) in spec directories: "
+                f"{', '.join(sorted(orphans)[:5])}"
+                + (f" (and {len(orphans) - 5} more)" if len(orphans) > 5 else ""),
+                details={"orphaned_files": sorted(orphans), "total": len(orphans)},
+            )
+
+        return self._pass(
+            f"All {len(all_files)} file(s) in spec directories are referenced",
+        )

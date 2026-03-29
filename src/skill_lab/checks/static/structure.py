@@ -359,3 +359,55 @@ class ScriptsSelfContainedCheck(StaticCheck):
             "Scripts folder is self-contained (no dependency manifests)",
             location=str(scripts_path),
         )
+
+
+# Recognized top-level entries in a skill directory
+_SPEC_ENTRIES: set[str] = {
+    "SKILL.md",
+    "skill.md",
+    "references",
+    "assets",
+    "scripts",
+}
+
+# Prefixes that are always allowed at the top level
+_ALLOWED_PREFIXES: tuple[str, ...] = (
+    "LICENSE",
+    ".",
+)
+
+
+@register_check
+class FilesOutsideSpecDirsCheck(StaticCheck):
+    """Check that all top-level items are in recognized spec directories."""
+
+    check_id: ClassVar[str] = "structure.files-outside-spec-dirs"
+    check_name: ClassVar[str] = "Files Outside Spec Dirs"
+    description: ClassVar[str] = "All files are in recognized spec directories"
+    severity: ClassVar[Severity] = Severity.LOW
+    dimension: ClassVar[EvalDimension] = EvalDimension.STRUCTURE
+    fix: ClassVar[str] = "Move extra files into references/, assets/, or scripts/"
+
+    def run(self, skill: Skill) -> CheckResult:
+        non_spec: list[str] = []
+
+        for item in sorted(skill.path.iterdir()):
+            name = item.name
+            if name in _SPEC_ENTRIES:
+                continue
+            if any(name.startswith(prefix) for prefix in _ALLOWED_PREFIXES):
+                continue
+            non_spec.append(name)
+
+        if non_spec:
+            return self._fail(
+                f"Files/dirs outside spec directories: {', '.join(non_spec[:5])}"
+                + (f" (and {len(non_spec) - 5} more)" if len(non_spec) > 5 else ""),
+                details={"non_spec_items": non_spec, "total": len(non_spec)},
+                location=str(skill.path),
+            )
+
+        return self._pass(
+            "All top-level items are in recognized spec directories",
+            location=str(skill.path),
+        )
