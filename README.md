@@ -69,7 +69,7 @@ sklab
 | `score` | Score trend for all evaluated skills |
 | `tokens` | Token usage per skill for the current month |
 | **Browse** | |
-| `sklab list-checks` | Browse all 33 checks across 5 dimensions |
+| `sklab list-checks` | Browse all 37 checks across 5 dimensions |
 | `--spec-only` | Only spec-required checks |
 | `--suggestions-only` | Only quality suggestions |
 | **Trigger Testing** _(requires `ANTHROPIC_API_KEY`)_ | |
@@ -88,12 +88,13 @@ sklab
 
 ## What Gets Checked
 
-33 checks across 5 dimensions. Run `sklab list-checks` to browse all of them with severity labels.
+37 checks across 5 dimensions. Run `sklab list-checks` to browse all of them with severity labels.
 
-**Structure** (11)
+**Structure** (13)
 - SKILL.md Exists · Valid Frontmatter · Standard Frontmatter Fields
 - Allowed Tools Format · Compatibility Length · License Format · Metadata Format
-- Scripts Folder Valid · Scripts Self-Contained · Scripts No Interactive Input · References Folder Valid
+- Scripts Folder Valid · Scripts Self-Contained · Scripts No Interactive Input · Scripts Help Support
+- References Folder Valid · Files Outside Spec Dirs
 
 **Naming** (3)
 - Name Required · Name Format (kebab-case) · Name Matches Directory
@@ -101,10 +102,10 @@ sklab
 **Description** (3)
 - Description Required · Description Not Empty · Description Max Length
 
-**Content** (11)
+**Content** (13)
 - Body Not Empty · Has Examples · Description Actionable · Line Budget · Token Budget
 - Metadata Token Budget · Reference Depth · Asset Paths Exist · Script Paths Exist
-- Scripts Referenced · Compatibility Prerequisites
+- Scripts Referenced · Compatibility Prerequisites · Broken Internal Links · Orphaned Files
 
 **Security** (5)
 - Prompt Injection & Jailbreak · Evaluator Manipulation · Unicode Obfuscation · YAML Anomalies · Suspicious Size & Structure

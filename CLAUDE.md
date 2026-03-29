@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Python CLI tool that evaluates agent skills (SKILL.md files) via static analysis, trigger testing, and LLM-based test generation. Produces a 0-100 score across 33 checks (structure:11, naming:3, description:3, content:11, security:5) / 5 dimensions.
+Python CLI tool that evaluates agent skills (SKILL.md files) via static analysis, trigger testing, and LLM-based test generation. Produces a 0-100 score across 37 checks (structure:13, naming:3, description:3, content:13, security:5) / 5 dimensions.
 
 ## Attribution
 
@@ -68,7 +68,7 @@ ruff check src/ && ruff format src/
 - **Test fixtures**: `tests/fixtures/skills/` — each subdirectory is a mock skill with `SKILL.md`. Shared pytest fixtures (`fixtures_dir`, `skills_dir`, `valid_skill_path`, `evaluator`) are in `tests/conftest.py`.
 - **Test helper**: `_get_check(check_id)` in `test_checks.py` retrieves schema-based checks from the registry; behavioral checks are imported directly as classes.
 - **Trigger test files**: `.sklab/tests/triggers.yaml`.
-- **Check count**: When adding/removing checks, update the "33 checks" count in this file's opening line and run `/update-counts` to sync docs and tests.
+- **Check count**: When adding/removing checks, update the "37 checks" count in this file's opening line and run `/update-counts` to sync docs and tests.
 
 ### CLI Patterns
 
