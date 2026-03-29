@@ -17,7 +17,8 @@ from skill_lab.cli import (
     app,
     console,
 )
-from skill_lab.core.llm import DEFAULT_MODEL, detect_provider_name, get_api_key_env_var
+from skill_lab.core.llm import detect_provider_name, get_api_key_env_var
+from skill_lab.core.skill_config import resolve_model, update_model
 from skill_lab.core.telemetry import push_telemetry_extra
 from skill_lab.optimizer.optimizer import SkillOptimizer
 
@@ -101,8 +102,8 @@ def optimize(
     skill_path = _resolve_skill_path(skill_path)
     push_telemetry_extra(skill_name=skill_path.name)
 
-    # Resolve model: --model flag > SKLAB_MODEL env var > default
-    resolved_model = model or os.environ.get("SKLAB_MODEL") or DEFAULT_MODEL
+    # Resolve model: --model flag > config > SKLAB_MODEL env var > default
+    resolved_model = resolve_model(model, skill_path)
 
     # Detect provider and check API key
     provider_name = detect_provider_name(resolved_model)
@@ -197,3 +198,6 @@ def optimize(
     else:
         console.print("[dim]Changes discarded.[/dim]")
         push_telemetry_extra(applied=False)
+
+    # Persist resolved model to config
+    update_model(skill_path, resolved_model)

@@ -14,7 +14,8 @@ from skill_lab.cli import (
     console,
 )
 from skill_lab.core.constants import TESTS_DIR
-from skill_lab.core.llm import DEFAULT_MODEL, detect_provider_name, get_api_key_env_var
+from skill_lab.core.llm import detect_provider_name, get_api_key_env_var
+from skill_lab.core.skill_config import resolve_model, update_model
 from skill_lab.core.telemetry import push_telemetry_extra
 from skill_lab.triggers.generator import TriggerGenerator
 
@@ -57,8 +58,8 @@ def generate(
     skill_path = _resolve_skill_path(skill_path)
     push_telemetry_extra(skill_name=skill_path.name)
 
-    # Resolve model: --model flag > SKLAB_MODEL env var > default
-    resolved_model = model or os.environ.get("SKLAB_MODEL") or DEFAULT_MODEL
+    # Resolve model: --model flag > config > SKLAB_MODEL env var > default
+    resolved_model = resolve_model(model, skill_path)
 
     # Detect provider and check API key
     provider_name = detect_provider_name(resolved_model)
@@ -108,6 +109,9 @@ def generate(
             f"\n[dim]Tokens:[/dim] {usage.input_tokens:,} in + "
             f"{usage.output_tokens:,} out = {usage.total_tokens:,}{cost_str}"
         )
+
+    # Persist resolved model to config
+    update_model(skill_path, resolved_model)
 
     console.print(f"\n[dim]Written to:[/dim] {written_path}")
     console.print("[dim]Run[/dim] sklab trigger [dim]to execute them.[/dim]")
