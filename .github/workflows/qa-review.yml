@@ -7,8 +7,8 @@ on:
     types: [created]
 
 concurrency:
-  group: qa-review-${{ github.event.pull_request.number || github.event.issue.number }}
-  cancel-in-progress: true
+  group: qa-review-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   qa:
