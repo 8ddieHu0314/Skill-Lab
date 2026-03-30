@@ -197,6 +197,10 @@ class SkillJudge:
             raw_score = item.get("score")
             # Accept both int and float (some models return 3.0 instead of 3)
             if isinstance(raw_score, float):
+                if raw_score != int(raw_score):
+                    raise GenerationError(
+                        f"Criterion '{crit_id}' has non-integer score: {raw_score} (expected 0-4)",
+                    )
                 score = int(raw_score)
             elif isinstance(raw_score, int):
                 score = raw_score

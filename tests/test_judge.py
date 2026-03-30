@@ -25,15 +25,19 @@ def _make_response_json(
     """Build a valid judge response JSON string."""
     criteria = []
     for (crit_id, _, _), score in zip(CRITERIA_DEFS, scores):
-        criteria.append({
-            "id": crit_id,
-            "score": score,
-            "reasoning": f"Score {score} for {crit_id}.",
-        })
-    return json.dumps({
-        "criteria": criteria,
-        "suggestions": suggestions or ["Improve trigger coverage.", "Add gotchas section."],
-    })
+        criteria.append(
+            {
+                "id": crit_id,
+                "score": score,
+                "reasoning": f"Score {score} for {crit_id}.",
+            }
+        )
+    return json.dumps(
+        {
+            "criteria": criteria,
+            "suggestions": suggestions or ["Improve trigger coverage.", "Add gotchas section."],
+        }
+    )
 
 
 def _mock_provider(response_text: str) -> MagicMock:
@@ -92,7 +96,9 @@ class TestSkillJudge:
         valid = _make_response_json()
         provider = MagicMock()
         provider.create_message.side_effect = [
-            LLMResponse(text="not json", input_tokens=100, output_tokens=50, stop_reason="end_turn"),
+            LLMResponse(
+                text="not json", input_tokens=100, output_tokens=50, stop_reason="end_turn"
+            ),
             LLMResponse(text=valid, input_tokens=100, output_tokens=50, stop_reason="end_turn"),
         ]
         judge = SkillJudge(provider=provider)
@@ -246,7 +252,7 @@ class TestParseResponse:
     def test_missing_criterion_id_raises(self, valid_skill_path: Path) -> None:
         # Only 7 of 8 criteria
         criteria = []
-        for (crit_id, _, _) in CRITERIA_DEFS[:7]:
+        for crit_id, _, _ in CRITERIA_DEFS[:7]:
             criteria.append({"id": crit_id, "score": 3, "reasoning": "ok"})
         data = json.dumps({"criteria": criteria, "suggestions": []})
         provider = _mock_provider(data)
@@ -279,6 +285,19 @@ class TestParseResponse:
         result = judge.review(valid_skill_path)
 
         assert all(c.score == 3 for c in result.criteria)
+
+    def test_non_integer_float_score_raises(self, valid_skill_path: Path) -> None:
+        """Scores like 3.5 should be rejected, not silently truncated."""
+        criteria = []
+        for i, (crit_id, _, _) in enumerate(CRITERIA_DEFS):
+            score = 3.5 if i == 0 else 3
+            criteria.append({"id": crit_id, "score": score, "reasoning": "ok"})
+        data = json.dumps({"criteria": criteria, "suggestions": []})
+        provider = _mock_provider(data)
+        judge = SkillJudge(provider=provider)
+
+        with pytest.raises(GenerationError, match="non-integer score"):
+            judge.review(valid_skill_path)
 
     def test_suggestions_parsed(self, valid_skill_path: Path) -> None:
         response = _make_response_json(

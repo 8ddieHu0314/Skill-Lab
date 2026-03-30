@@ -24,7 +24,7 @@ from skill_lab.core.exceptions import GenerationError
 from skill_lab.core.llm import GenerationUsage, detect_provider_name, get_api_key_env_var
 from skill_lab.core.models import EvalDimension, EvaluationReport, JudgeResult
 from skill_lab.core.registry import registry
-from skill_lab.core.skill_config import resolve_model, update_evaluate
+from skill_lab.core.skill_config import resolve_model, update_evaluate, update_model, update_review
 from skill_lab.core.telemetry import push_telemetry_extra
 from skill_lab.evaluators.static_evaluator import StaticEvaluator
 from skill_lab.reporters.console_reporter import SEVERITY_STYLES, ConsoleReporter
@@ -278,23 +278,14 @@ def _try_llm_review(
         with console.status("[cyan]Running LLM quality review...[/cyan]", spinner="dots"):
             result = judge.review(skill_path)
 
-        # Persist review + model in a single load/save cycle
-        from dataclasses import replace as _replace
-
-        from skill_lab.core.skill_config import LastReview, load_config, save_config
-
-        config = load_config(skill_path)
-        updated = _replace(
-            config,
-            model=resolved_model,
-            last_review=LastReview(
-                judge_score=result.judge_score,
-                activation_score=result.activation_score,
-                instruction_score=result.instruction_score,
-                date=datetime.now(timezone.utc).isoformat(),
-            ),
+        update_review(
+            skill_path,
+            judge_score=result.judge_score,
+            activation_score=result.activation_score,
+            instruction_score=result.instruction_score,
+            date=datetime.now(timezone.utc).isoformat(),
         )
-        save_config(skill_path, updated)
+        update_model(skill_path, resolved_model)
 
         push_telemetry_extra(judge_score=result.judge_score)
 
