@@ -85,6 +85,9 @@ src/skill_lab/
 │       └── efficiency.py
 ├── exporters/                # Output format renderers (v0.4.0)
 │   └── prompt_exporter.py    # XML/Markdown/JSON prompt export
+├── judge/                    # LLM-as-judge quality assessment
+│   ├── judge.py              # SkillJudge class (8-criterion rubric evaluation)
+│   └── rubric.md             # System prompt with scoring rubric
 ├── optimizer/                # LLM-powered SKILL.md optimization
 │   ├── optimizer.py          # SkillOptimizer class + OptimizationResult
 │   └── optimize_skill.md     # System prompt for the LLM
@@ -420,8 +423,10 @@ sklab -h, --help                 # Show help
 # First-run onboarding: scan repo + show Getting Started guide (subsequent runs: guide only)
 sklab
 
-# Main evaluation command (defaults to current directory if path omitted)
-sklab evaluate [./my-skill] [-f console|json] [-o file.json] [-V] [-s]
+# Main evaluation command: static checks + LLM quality review
+sklab evaluate [./my-skill] [-f console|json] [-o file.json] [-V] [-s] [-m model]
+sklab evaluate --skip-review     # Static checks only (no LLM call)
+sklab evaluate --model gpt-4o   # Choose LLM model for review
 sklab evaluate --all             # Discover + evaluate all skills under cwd (recursive)
 sklab evaluate --repo            # Discover + evaluate all skills from git repo root
 
