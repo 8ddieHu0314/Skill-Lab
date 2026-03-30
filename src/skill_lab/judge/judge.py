@@ -95,7 +95,13 @@ class SkillJudge:
 
         prompt = self._build_prompt(skill_name, description, body)
         response_text = self._call_api(prompt)
-        return self._parse_response(response_text)
+
+        try:
+            return self._parse_response(response_text)
+        except GenerationError:
+            # Retry once on JSON parse failure
+            response_text = self._call_api(prompt)
+            return self._parse_response(response_text)
 
     def _build_prompt(self, skill_name: str, description: str, body: str) -> str:
         """Build the user prompt with skill content."""

@@ -87,6 +87,34 @@ class TestSkillJudge:
         assert "creating-reports" in call_kwargs["prompt"]
         assert call_kwargs["max_tokens"] == 2048
 
+    def test_review_retries_on_parse_failure(self, valid_skill_path: Path) -> None:
+        """First call returns bad JSON, retry returns valid JSON."""
+        valid = _make_response_json()
+        provider = MagicMock()
+        provider.create_message.side_effect = [
+            LLMResponse(text="not json", input_tokens=100, output_tokens=50, stop_reason="end_turn"),
+            LLMResponse(text=valid, input_tokens=100, output_tokens=50, stop_reason="end_turn"),
+        ]
+        judge = SkillJudge(provider=provider)
+
+        result = judge.review(valid_skill_path)
+
+        assert isinstance(result, JudgeResult)
+        assert provider.create_message.call_count == 2
+
+    def test_review_raises_after_two_parse_failures(self, valid_skill_path: Path) -> None:
+        """Both calls return bad JSON — should raise."""
+        provider = MagicMock()
+        provider.create_message.return_value = LLMResponse(
+            text="still not json", input_tokens=100, output_tokens=50, stop_reason="end_turn"
+        )
+        judge = SkillJudge(provider=provider)
+
+        with pytest.raises(GenerationError, match="Failed to parse"):
+            judge.review(valid_skill_path)
+
+        assert provider.create_message.call_count == 2
+
     def test_review_safety_block_raises(self, valid_skill_path: Path) -> None:
         provider = MagicMock()
         provider.create_message.return_value = LLMResponse(
