@@ -113,4 +113,4 @@ jobs:
             - Trigger: ${{ github.event_name }}
 
             Follow the instructions in the prompt file exactly.
-          claude_args: "--model claude-sonnet-4-20250514 --max-turns 30 --allowedTools Bash,Read,Glob,Grep"
+          claude_args: "--model claude-sonnet-4-20250514 --max-turns 50 --allowedTools Bash,Read,Glob,Grep"
