@@ -29,6 +29,7 @@ jobs:
     env:
       SKLAB_NO_ANALYTICS: "1"
       NO_COLOR: "1"
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
     steps:
       - name: Checkout
