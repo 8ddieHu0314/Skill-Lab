@@ -1,6 +1,5 @@
 """Evaluate, check, and list-checks commands."""
 
-import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,7 +21,7 @@ from skill_lab.cli import (
 )
 from skill_lab.core.exceptions import GenerationError
 from skill_lab.core.llm import GenerationUsage, detect_provider_name, get_api_key_env_var
-from skill_lab.core.models import EvalDimension, EvaluationReport, JudgeResult
+from skill_lab.core.models import EvalDimension, JudgeResult
 from skill_lab.core.registry import registry
 from skill_lab.core.skill_config import resolve_model, update_evaluate, update_model, update_review
 from skill_lab.core.telemetry import push_telemetry_extra
@@ -231,7 +230,7 @@ def evaluate(
 
     # Phase 2: LLM judge (if API key available and not skipped)
     judge_result: JudgeResult | None = None
-    judge_usage: GenerationUsage | None = None
+    judge_usage = None
     missing_env_var: str | None = None
 
     if not skip_review:
@@ -239,7 +238,16 @@ def evaluate(
 
     # Render output
     if format == OutputFormat.json:
-        _render_json(report, judge_result, judge_usage, output)
+        json_reporter = JsonReporter()
+        if output:
+            json_reporter.write_file(
+                report, output, judge_result=judge_result, judge_usage=judge_usage
+            )
+            console.print(f"Report written to: {output}")
+        else:
+            console.print(
+                json_reporter.format(report, judge_result=judge_result, judge_usage=judge_usage)
+            )
     else:
         console_reporter = ConsoleReporter(verbose=verbose)
         console_reporter.report(report)
@@ -305,38 +313,6 @@ def _print_api_key_hint(env_var: str) -> None:
         f"  or use [bold]--skip-review[/bold] to suppress this message.[/dim]\n"
     )
 
-
-def _render_json(
-    report: EvaluationReport,
-    judge_result: JudgeResult | None,
-    judge_usage: GenerationUsage | None,
-    output: Path | None,
-) -> None:
-    """Render combined static + judge results as JSON."""
-    from skill_lab.reporters.json_reporter import SCHEMA_VERSION
-
-    data: dict[str, object] = {"schema_version": SCHEMA_VERSION, **report.to_dict()}
-
-    if judge_result is not None:
-        review_data = judge_result.to_dict()
-        if judge_usage is not None:
-            review_data["usage"] = {
-                "input_tokens": judge_usage.input_tokens,
-                "output_tokens": judge_usage.output_tokens,
-                "total_tokens": judge_usage.total_tokens,
-                "cost": (round(judge_usage.total_cost, 6) if judge_usage.has_pricing else None),
-            }
-        data["judge_review"] = review_data
-    else:
-        data["judge_review"] = None
-
-    formatted = json.dumps(data, indent=2)
-    if output:
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(formatted + "\n", encoding="utf-8")
-        console.print(f"Report written to: {output}")
-    else:
-        console.print(formatted)
 
 
 def _run_bulk_check(roots: list[Path], spec_only: bool) -> None:

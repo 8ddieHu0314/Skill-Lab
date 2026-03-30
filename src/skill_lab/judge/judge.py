@@ -7,6 +7,7 @@ across two axes (Activation Quality and Instruction Quality).
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 from skill_lab.core.exceptions import GenerationError
@@ -20,6 +21,8 @@ from skill_lab.core.llm import (
 )
 from skill_lab.core.models import JudgeCriterion, JudgeResult, Skill
 from skill_lab.parsers.skill_parser import parse_skill
+
+logger = logging.getLogger(__name__)
 
 _RUBRIC_PATH = Path(__file__).parent / "rubric.md"
 
@@ -98,10 +101,22 @@ class SkillJudge:
 
         try:
             return self._parse_response(response_text)
-        except GenerationError:
+        except GenerationError as first_error:
             # Retry once on JSON parse failure
+            logger.debug("First parse attempt failed: %s — retrying", first_error.message)
+            first_usage = self.last_usage
             response_text = self._call_api(prompt)
+            self._accumulate_usage(first_usage)
             return self._parse_response(response_text)
+
+    def _accumulate_usage(self, previous: GenerationUsage | None) -> None:
+        """Add previous usage tokens to current last_usage."""
+        if previous is not None and self.last_usage is not None:
+            self.last_usage = GenerationUsage(
+                input_tokens=previous.input_tokens + self.last_usage.input_tokens,
+                output_tokens=previous.output_tokens + self.last_usage.output_tokens,
+                model=self._model,
+            )
 
     def _build_prompt(self, skill_name: str, description: str, body: str) -> str:
         """Build the user prompt with skill content."""
