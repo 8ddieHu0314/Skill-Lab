@@ -112,6 +112,11 @@ Run your proposed commands. Batch them into as few bash calls as possible. For e
 
 Separate commands with `echo "---"` for readability.
 
+**After running, read the output carefully.** Don't just check exit codes — check whether the feature under test actually executed. For example:
+- If you're testing LLM judge integration but the output says "LLM review failed" or "API key not set", the judge did NOT run — the test is inconclusive, not a PASS
+- If you're testing a new flag but the output doesn't show any change from the default behavior, the flag may not be working
+- A graceful fallback is good error handling, but it means the feature wasn't tested — note this honestly
+
 ---
 
 ## Step 4: Post the QA Report
@@ -143,8 +148,13 @@ gh pr comment {PR_NUMBER} --body "$(cat /tmp/qa-report.md)"
 
 | # | Command | Exit | Expected | Status | Notes |
 |---|---------|------|----------|--------|-------|
-| 1 | `{command}` | {actual} | {expected} | PASS/FAIL | {observation} |
+| 1 | `{command}` | {actual} | {expected} | PASS/FAIL/INCONCLUSIVE | {observation} |
 | ... | ... | ... | ... | ... | ... |
+
+Status meanings:
+- **PASS** — command produced expected exit code AND the feature under test actually executed successfully
+- **FAIL** — unexpected exit code, crash, or wrong output
+- **INCONCLUSIVE** — exit code matched but the feature under test did not actually run (e.g., LLM call failed, fell back to static-only)
 
 ### Command Output
 
@@ -176,9 +186,11 @@ gh pr comment {PR_NUMBER} --body "$(cat /tmp/qa-report.md)"
 
 ### Verdict Criteria
 
-- **PASS**: The PR's features work as intended, no crashes, no wrong output
+- **PASS**: The PR's features were exercised AND work as intended, no crashes, no wrong output
 - **FAIL**: The PR's features don't work, crash, or produce wrong output
-- **NEEDS ATTENTION**: Features work but have UX issues, unclear behavior, or edge cases needing human review
+- **NEEDS ATTENTION**: Features could not be fully tested (e.g., API errors prevented LLM features from running), OR features work but have UX issues or edge cases needing human review
+
+**IMPORTANT:** A test where the feature under test didn't actually execute is NOT a PASS — it is NEEDS ATTENTION at best. Exit code 0 with a fallback/skip message means the error handling works, not that the feature works. Be honest about what was and wasn't actually tested.
 
 ---
 
