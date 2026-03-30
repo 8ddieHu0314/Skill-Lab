@@ -24,6 +24,7 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
+      id-token: write
     env:
       SKLAB_NO_ANALYTICS: "1"
       NO_COLOR: "1"
@@ -102,7 +103,6 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          model: claude-sonnet-4-20250514
           prompt: |
             Read the file .github/qa/qa-prompt.md for your complete QA instructions.
 
@@ -113,4 +113,4 @@ jobs:
             - Trigger: ${{ github.event_name }}
 
             Follow the instructions in the prompt file exactly.
-          claude_args: "--max-turns 30 --allowedTools Bash,Read,Glob,Grep"
+          claude_args: "--model claude-sonnet-4-20250514 --max-turns 30 --allowedTools Bash,Read,Glob,Grep"
