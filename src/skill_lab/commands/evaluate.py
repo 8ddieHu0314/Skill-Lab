@@ -21,10 +21,10 @@ from skill_lab.cli import (
     console,
 )
 from skill_lab.core.exceptions import GenerationError
-from skill_lab.core.llm import detect_provider_name, get_api_key_env_var
+from skill_lab.core.llm import GenerationUsage, detect_provider_name, get_api_key_env_var
 from skill_lab.core.models import EvalDimension, EvaluationReport, JudgeResult
 from skill_lab.core.registry import registry
-from skill_lab.core.skill_config import resolve_model, update_evaluate, update_model, update_review
+from skill_lab.core.skill_config import resolve_model, update_evaluate
 from skill_lab.core.telemetry import push_telemetry_extra
 from skill_lab.evaluators.static_evaluator import StaticEvaluator
 from skill_lab.reporters.console_reporter import SEVERITY_STYLES, ConsoleReporter
@@ -231,10 +231,11 @@ def evaluate(
 
     # Phase 2: LLM judge (if API key available and not skipped)
     judge_result: JudgeResult | None = None
-    judge_usage: object | None = None
+    judge_usage: GenerationUsage | None = None
+    missing_env_var: str | None = None
 
     if not skip_review:
-        judge_result, judge_usage = _try_llm_review(skill_path, model)
+        judge_result, judge_usage, missing_env_var = _try_llm_review(skill_path, model)
 
     # Render output
     if format == OutputFormat.json:
@@ -244,8 +245,8 @@ def evaluate(
         console_reporter.report(report)
         if judge_result is not None:
             console_reporter.report_judge(judge_result, usage=judge_usage)
-        elif not skip_review:
-            _print_api_key_hint(model, skill_path)
+        elif missing_env_var:
+            _print_api_key_hint(missing_env_var)
 
     if not report.overall_pass:
         raise typer.Exit(code=1)
@@ -254,8 +255,14 @@ def evaluate(
 def _try_llm_review(
     skill_path: Path,
     model: str | None,
-) -> tuple[JudgeResult | None, object | None]:
-    """Attempt LLM judge review, returning (None, None) if unavailable."""
+) -> tuple[JudgeResult | None, GenerationUsage | None, str | None]:
+    """Attempt LLM judge review.
+
+    Returns:
+        (result, usage, missing_env_var) — missing_env_var is set when
+        the API key is absent so the caller can print a hint without
+        re-resolving the model.
+    """
     from skill_lab.judge.judge import SkillJudge
 
     resolved_model = resolve_model(model, skill_path)
@@ -264,38 +271,43 @@ def _try_llm_review(
     api_key = os.environ.get(env_var)
 
     if not api_key:
-        return None, None
+        return None, None, env_var
 
     try:
         judge = SkillJudge(model=resolved_model, api_key=api_key)
         with console.status("[cyan]Running LLM quality review...[/cyan]", spinner="dots"):
             result = judge.review(skill_path)
 
-        # Persist review to config
-        update_review(
-            skill_path,
-            judge_score=result.judge_score,
-            activation_score=result.activation_score,
-            instruction_score=result.instruction_score,
-            date=datetime.now(timezone.utc).isoformat(),
+        # Persist review + model in a single load/save cycle
+        from dataclasses import replace as _replace
+
+        from skill_lab.core.skill_config import LastReview, load_config, save_config
+
+        config = load_config(skill_path)
+        updated = _replace(
+            config,
+            model=resolved_model,
+            last_review=LastReview(
+                judge_score=result.judge_score,
+                activation_score=result.activation_score,
+                instruction_score=result.instruction_score,
+                date=datetime.now(timezone.utc).isoformat(),
+            ),
         )
-        update_model(skill_path, resolved_model)
+        save_config(skill_path, updated)
 
         push_telemetry_extra(judge_score=result.judge_score)
 
-        return result, judge.last_usage
+        return result, judge.last_usage, None
     except GenerationError as e:
         console.print(f"\n[yellow]LLM review failed:[/yellow] {e.message}")
         if e.suggestion:
             console.print(f"[dim]{e.suggestion}[/dim]")
-        return None, None
+        return None, None, None
 
 
-def _print_api_key_hint(model: str | None, skill_path: Path) -> None:
+def _print_api_key_hint(env_var: str) -> None:
     """Print a hint about setting an API key for LLM review."""
-    resolved_model = resolve_model(model, skill_path)
-    provider_name = detect_provider_name(resolved_model)
-    env_var = get_api_key_env_var(provider_name)
     console.print(
         f"\n[yellow]LLM quality review skipped[/yellow] — {env_var} not set.\n"
         f"  [dim]Set [bold]{env_var}[/bold] to enable 8-criterion LLM analysis,\n"
@@ -306,25 +318,22 @@ def _print_api_key_hint(model: str | None, skill_path: Path) -> None:
 def _render_json(
     report: EvaluationReport,
     judge_result: JudgeResult | None,
-    judge_usage: object | None,
+    judge_usage: GenerationUsage | None,
     output: Path | None,
 ) -> None:
     """Render combined static + judge results as JSON."""
-    json_reporter = JsonReporter()
-    data = json.loads(json_reporter.format(report))
+    from skill_lab.reporters.json_reporter import SCHEMA_VERSION
+
+    data: dict[str, object] = {"schema_version": SCHEMA_VERSION, **report.to_dict()}
 
     if judge_result is not None:
         review_data = judge_result.to_dict()
         if judge_usage is not None:
             review_data["usage"] = {
-                "input_tokens": getattr(judge_usage, "input_tokens", 0),
-                "output_tokens": getattr(judge_usage, "output_tokens", 0),
-                "total_tokens": getattr(judge_usage, "total_tokens", 0),
-                "cost": (
-                    round(getattr(judge_usage, "total_cost", 0.0), 6)
-                    if getattr(judge_usage, "has_pricing", False)
-                    else None
-                ),
+                "input_tokens": judge_usage.input_tokens,
+                "output_tokens": judge_usage.output_tokens,
+                "total_tokens": judge_usage.total_tokens,
+                "cost": (round(judge_usage.total_cost, 6) if judge_usage.has_pricing else None),
             }
         data["judge_review"] = review_data
     else:

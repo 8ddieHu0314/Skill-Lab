@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -172,16 +172,11 @@ def update_evaluate(
 ) -> SkillConfig:
     """Update the last-evaluate snapshot, preserving other fields."""
     config = load_config(skill_path)
-    updated = SkillConfig(
-        version=config.version,
-        model=config.model,
+    updated = replace(
+        config,
         last_evaluate=LastEvaluate(
-            score=score,
-            checks_passed=checks_passed,
-            checks_total=checks_total,
-            date=date,
+            score=score, checks_passed=checks_passed, checks_total=checks_total, date=date
         ),
-        last_review=config.last_review,
     )
     save_config(skill_path, updated)
     return updated
@@ -190,12 +185,7 @@ def update_evaluate(
 def update_model(skill_path: Path, model: str) -> SkillConfig:
     """Set the preferred LLM model, preserving other fields."""
     config = load_config(skill_path)
-    updated = SkillConfig(
-        version=config.version,
-        model=model,
-        last_evaluate=config.last_evaluate,
-        last_review=config.last_review,
-    )
+    updated = replace(config, model=model)
     save_config(skill_path, updated)
     return updated
 
@@ -210,10 +200,8 @@ def update_review(
 ) -> SkillConfig:
     """Update the last-review snapshot, preserving other fields."""
     config = load_config(skill_path)
-    updated = SkillConfig(
-        version=config.version,
-        model=config.model,
-        last_evaluate=config.last_evaluate,
+    updated = replace(
+        config,
         last_review=LastReview(
             judge_score=judge_score,
             activation_score=activation_score,

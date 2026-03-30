@@ -5,6 +5,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from skill_lab.core.llm import GenerationUsage
 from skill_lab.core.models import EvaluationReport, JudgeResult, Severity, TraceReport
 
 # Shared severity display mappings — keyed by Severity.value string
@@ -167,14 +168,9 @@ class ConsoleReporter:
     def report_judge(
         self,
         result: JudgeResult,
-        usage: object | None = None,
+        usage: GenerationUsage | None = None,
     ) -> None:
-        """Print LLM judge results to the console.
-
-        Args:
-            result: The judge result to print.
-            usage: Optional GenerationUsage for token/cost display.
-        """
+        """Print LLM judge results to the console."""
         self.console.print()
         self.console.print(
             "[bold]LLM Quality Review[/bold]",
@@ -224,17 +220,11 @@ class ConsoleReporter:
             for i, suggestion in enumerate(result.suggestions, 1):
                 self.console.print(f"  {i}. {suggestion}")
 
-        # Token usage (duck-typed to avoid importing GenerationUsage)
         if usage is not None:
-            input_tokens = getattr(usage, "input_tokens", 0)
-            output_tokens = getattr(usage, "output_tokens", 0)
-            total_tokens = getattr(usage, "total_tokens", 0)
-            total_cost = getattr(usage, "total_cost", 0.0)
-            has_pricing = getattr(usage, "has_pricing", False)
-            cost_str = f" (${total_cost:.4f})" if has_pricing else " (no pricing data)"
+            cost_str = f" (${usage.total_cost:.4f})" if usage.has_pricing else " (no pricing data)"
             self.console.print(
-                f"\n[dim]Tokens:[/dim] {input_tokens:,} in + "
-                f"{output_tokens:,} out = {total_tokens:,}{cost_str}"
+                f"\n[dim]Tokens:[/dim] {usage.input_tokens:,} in + "
+                f"{usage.output_tokens:,} out = {usage.total_tokens:,}{cost_str}"
             )
 
         self.console.print()

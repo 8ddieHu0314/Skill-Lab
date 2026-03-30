@@ -18,7 +18,7 @@ from skill_lab.core.llm import (
     get_api_key_env_var,
     resolve_provider,
 )
-from skill_lab.core.models import JudgeCriterion, JudgeResult
+from skill_lab.core.models import JudgeCriterion, JudgeResult, Skill
 from skill_lab.parsers.skill_parser import parse_skill
 
 _RUBRIC_PATH = Path(__file__).parent / "rubric.md"
@@ -73,11 +73,12 @@ class SkillJudge:
         self._provider = provider or resolve_provider(model, api_key=api_key)
         self.last_usage: GenerationUsage | None = None
 
-    def review(self, skill_path: Path) -> JudgeResult:
+    def review(self, skill_path: Path, skill: Skill | None = None) -> JudgeResult:
         """Run LLM judge evaluation on a skill.
 
         Args:
             skill_path: Path to the skill directory containing SKILL.md.
+            skill: Pre-parsed Skill object. If None, parses from skill_path.
 
         Returns:
             JudgeResult with per-criterion scores and overall scores.
@@ -85,7 +86,8 @@ class SkillJudge:
         Raises:
             GenerationError: If the LLM call or response parsing fails.
         """
-        skill = parse_skill(skill_path)
+        if skill is None:
+            skill = parse_skill(skill_path)
 
         skill_name = skill.metadata.name if skill.metadata else skill_path.name
         description = skill.metadata.description if skill.metadata else ""
@@ -145,7 +147,6 @@ class SkillJudge:
         """Parse JSON response into JudgeResult."""
         text = response_text.strip()
 
-        # Strip markdown fences if present
         if text.startswith("```"):
             lines = text.split("\n")
             lines = lines[1:]
@@ -174,13 +175,11 @@ class SkillJudge:
         if not isinstance(raw_criteria, list) or len(raw_criteria) == 0:
             raise GenerationError("Judge response missing or empty 'criteria' array")
 
-        # Build lookup from LLM response
         response_lookup: dict[str, dict[str, object]] = {}
         for item in raw_criteria:
             if isinstance(item, dict) and "id" in item:
                 response_lookup[str(item["id"])] = item
 
-        # Map against canonical criteria definitions
         criteria: list[JudgeCriterion] = []
         for crit_id, crit_name, crit_axis in CRITERIA_DEFS:
             item = response_lookup.get(crit_id)
@@ -214,7 +213,6 @@ class SkillJudge:
                 )
             )
 
-        # Calculate axis scores
         activation_raw = sum(c.score for c in criteria if c.axis == "activation")
         instruction_raw = sum(c.score for c in criteria if c.axis == "instruction")
 
