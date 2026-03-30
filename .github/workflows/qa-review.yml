@@ -51,7 +51,10 @@ jobs:
           echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
 
       - name: Checkout PR head
-        run: git checkout ${{ steps.context.outputs.head_sha }}
+        run: |
+          git checkout ${{ steps.context.outputs.head_sha }}
+          # Restore QA prompt from main (may not exist on PR branch)
+          git checkout origin/main -- .github/qa/ 2>/dev/null || true
 
       - name: Shell pre-filter
         id: prefilter
