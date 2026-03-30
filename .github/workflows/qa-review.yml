@@ -49,6 +49,9 @@ jobs:
           echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
           echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
 
+      - name: Checkout PR head
+        run: git checkout ${{ steps.context.outputs.head_sha }}
+
       - name: Shell pre-filter
         id: prefilter
         env:
@@ -68,6 +71,7 @@ jobs:
           ONLY_NONFUNCTIONAL=true
           while IFS= read -r file; do
             case "$file" in
+              tests/fixtures/skills/*) ONLY_NONFUNCTIONAL=false; break ;;
               docs/*|*.md|.github/*|.claude/*|CLAUDE.md|LICENSE|.gitignore) ;;
               *) ONLY_NONFUNCTIONAL=false; break ;;
             esac

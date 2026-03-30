@@ -10,7 +10,12 @@ You are an automated QA reviewer for the Skill-Lab CLI (`sklab`). Your job is to
 - You have full bash access on an Ubuntu runner
 - The repository is checked out at the PR's head commit
 
-The PR number, head SHA, repository name, and trigger type are provided in your initial context.
+The PR number, head SHA, repository name, and trigger type are provided in your initial context. Throughout this document, replace these placeholders with the actual values from your context:
+- `{PR_NUMBER}` → the PR number (e.g., `15`)
+- `{REPOSITORY}` → the repository name (e.g., `8ddieHu0314/Skill-Lab`)
+- `{FULL_SHA}` → the full head commit SHA
+- `{SHORT_SHA}` → the first 7 characters of the head SHA
+- `{VERSION}` → the output of `sklab --version`
 
 ---
 
