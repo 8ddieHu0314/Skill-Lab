@@ -31,12 +31,23 @@ class LastEvaluate:
 
 
 @dataclass(frozen=True)
+class LastReview:
+    """Snapshot of the most recent LLM judge review."""
+
+    judge_score: float
+    activation_score: float
+    instruction_score: float
+    date: str
+
+
+@dataclass(frozen=True)
 class SkillConfig:
     """Per-skill configuration stored in .sklab/config.yaml."""
 
     version: str | None = None
     model: str | None = None
     last_evaluate: LastEvaluate | None = None
+    last_review: LastReview | None = None
 
 
 def _config_path(skill_path: Path) -> Path:
@@ -54,6 +65,22 @@ def _parse_last_evaluate(raw: dict[str, Any]) -> LastEvaluate | None:
             checks_passed=int(le["checks-passed"]),
             checks_total=int(le["checks-total"]),
             date=str(le["date"]),
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _parse_last_review(raw: dict[str, Any]) -> LastReview | None:
+    """Parse the last-review section, returning None if invalid."""
+    lr = raw.get("last-review")
+    if not isinstance(lr, dict):
+        return None
+    try:
+        return LastReview(
+            judge_score=float(lr["judge-score"]),
+            activation_score=float(lr["activation-score"]),
+            instruction_score=float(lr["instruction-score"]),
+            date=str(lr["date"]),
         )
     except (KeyError, TypeError, ValueError):
         return None
@@ -93,6 +120,7 @@ def load_config(skill_path: Path) -> SkillConfig:
         version=version,
         model=_parse_model(raw),
         last_evaluate=_parse_last_evaluate(raw),
+        last_review=_parse_last_review(raw),
     )
 
 
@@ -116,6 +144,15 @@ def save_config(skill_path: Path, config: SkillConfig) -> None:
             "checks-passed": le.checks_passed,
             "checks-total": le.checks_total,
             "date": le.date,
+        }
+
+    if config.last_review is not None:
+        lr = config.last_review
+        data["last-review"] = {
+            "judge-score": round(lr.judge_score, 1),
+            "activation-score": round(lr.activation_score, 1),
+            "instruction-score": round(lr.instruction_score, 1),
+            "date": lr.date,
         }
 
     path = _config_path(skill_path)
@@ -144,6 +181,7 @@ def update_evaluate(
             checks_total=checks_total,
             date=date,
         ),
+        last_review=config.last_review,
     )
     save_config(skill_path, updated)
     return updated
@@ -156,6 +194,32 @@ def update_model(skill_path: Path, model: str) -> SkillConfig:
         version=config.version,
         model=model,
         last_evaluate=config.last_evaluate,
+        last_review=config.last_review,
+    )
+    save_config(skill_path, updated)
+    return updated
+
+
+def update_review(
+    skill_path: Path,
+    *,
+    judge_score: float,
+    activation_score: float,
+    instruction_score: float,
+    date: str,
+) -> SkillConfig:
+    """Update the last-review snapshot, preserving other fields."""
+    config = load_config(skill_path)
+    updated = SkillConfig(
+        version=config.version,
+        model=config.model,
+        last_evaluate=config.last_evaluate,
+        last_review=LastReview(
+            judge_score=judge_score,
+            activation_score=activation_score,
+            instruction_score=instruction_score,
+            date=date,
+        ),
     )
     save_config(skill_path, updated)
     return updated

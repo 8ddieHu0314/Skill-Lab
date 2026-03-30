@@ -218,9 +218,12 @@ def _print_getting_started() -> None:
     guide.add_row("  [dim]--repo[/dim]", "Validate every skill from the git repo root")
     guide.add_row("", "")
     guide.add_row(
-        "sklab evaluate [green]./my-skill[/green]", "Full quality evaluation (0–100 score)"
+        "sklab evaluate [green]./my-skill[/green]",
+        "Static checks + LLM quality review (0-100 scores)",
     )
-    guide.add_row("  [dim]--verbose / -V[/dim]", "Show all checks, not just failures")
+    guide.add_row("  [dim]--verbose / -V[/dim]", "Show all checks + LLM reasoning")
+    guide.add_row("  [dim]--skip-review[/dim]", "Skip LLM review (static checks only)")
+    guide.add_row("  [dim]--model / -m[/dim]", "Choose LLM model for review")
     guide.add_row("  [dim]--spec-only / -s[/dim]", "Only run the 10 spec-required checks")
     guide.add_row("  [dim]--all[/dim]", "Evaluate every skill in the current directory")
     guide.add_row("", "")
