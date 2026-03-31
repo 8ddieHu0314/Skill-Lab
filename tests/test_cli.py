@@ -311,9 +311,7 @@ class TestEvaluateOptimizePrompt:
 
     def test_no_prompt_above_threshold(self, valid_skill_path: Path) -> None:
         """Score >= 75 should not trigger the optimize prompt."""
-        result = runner.invoke(
-            app, ["evaluate", str(valid_skill_path), "--skip-review"]
-        )
+        result = runner.invoke(app, ["evaluate", str(valid_skill_path), "--skip-review"])
         # valid_skill_path typically scores >= 75
         assert "Optimize?" not in result.stdout
 
@@ -338,9 +336,7 @@ class TestEvalHistoryPersistence:
         skill_dir = tmp_path / "creating-reports"
         shutil.copytree(src, skill_dir)
 
-        result = runner.invoke(
-            app, ["evaluate", str(skill_dir), "--skip-review"]
-        )
+        result = runner.invoke(app, ["evaluate", str(skill_dir), "--skip-review"])
         assert result.exit_code == 0
         evals_dir = skill_dir / ".sklab" / "evals"
         assert evals_dir.is_dir()

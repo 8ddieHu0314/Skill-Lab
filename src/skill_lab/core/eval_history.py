@@ -106,11 +106,11 @@ def load_latest_eval(skill_path: Path) -> EvalRecord | None:
     if not evals_dir.is_dir():
         return None
 
-    files = sorted(evals_dir.glob("*.json"))
-    if not files:
+    latest = max(evals_dir.glob("*.json"), default=None)
+    if latest is None:
         return None
 
-    return load_eval(files[-1])
+    return load_eval(latest)
 
 
 def load_eval(path: Path) -> EvalRecord:

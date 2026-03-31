@@ -7,92 +7,13 @@ import pytest
 
 from skill_lab.core.eval_history import (
     EVAL_SCHEMA_VERSION,
-    MAX_EVAL_FILES,
-    EvalRecord,
     _prune_old_evals,
     _sanitize_timestamp,
     load_eval,
     load_latest_eval,
     save_eval,
 )
-from skill_lab.core.models import (
-    CheckResult,
-    EvalDimension,
-    EvaluationReport,
-    JudgeCriterion,
-    JudgeResult,
-    Severity,
-)
-
-
-def _make_report(
-    score: float = 72.3,
-    passed: int = 30,
-    total: int = 37,
-    timestamp: str = "2026-03-31T14:22:05+00:00",
-) -> EvaluationReport:
-    """Build a minimal EvaluationReport for testing."""
-    results = [
-        CheckResult(
-            check_id="structure.skill-md-exists",
-            check_name="SKILL.md Exists",
-            passed=True,
-            severity=Severity.HIGH,
-            dimension=EvalDimension.STRUCTURE,
-            message="SKILL.md found",
-        ),
-        CheckResult(
-            check_id="content.token-budget",
-            check_name="Token Budget",
-            passed=False,
-            severity=Severity.MEDIUM,
-            dimension=EvalDimension.CONTENT,
-            message="Body exceeds 5,000 token recommendation",
-            fix="Reduce body content to under ~5,000 tokens.",
-        ),
-    ]
-    return EvaluationReport(
-        skill_path="/tmp/test-skill",
-        skill_name="test-skill",
-        timestamp=timestamp,
-        duration_ms=42.5,
-        quality_score=score,
-        overall_pass=True,
-        checks_run=total,
-        checks_passed=passed,
-        checks_failed=total - passed,
-        results=results,
-        summary={"by_dimension": {}},
-    )
-
-
-def _make_judge(score: float = 68.8) -> JudgeResult:
-    """Build a minimal JudgeResult for testing."""
-    criteria = (
-        JudgeCriterion(
-            id="intent_clarity",
-            name="Intent Clarity",
-            axis="activation",
-            score=3,
-            reasoning="Clear description.",
-        ),
-        JudgeCriterion(
-            id="trigger_coverage",
-            name="Trigger Coverage",
-            axis="activation",
-            score=2,
-            reasoning="Missing implicit triggers.",
-        ),
-    )
-    return JudgeResult(
-        criteria=criteria,
-        activation_score=62.5,
-        instruction_score=75.0,
-        judge_score=score,
-        verdict="Needs work",
-        suggestions=("Add trigger phrases.", "Improve error handling."),
-    )
-
+from tests.conftest import make_judge, make_report
 
 # =============================================================================
 # save_eval
@@ -101,12 +22,12 @@ def _make_judge(score: float = 68.8) -> JudgeResult:
 
 class TestSaveEval:
     def test_creates_evals_directory(self, tmp_path: Path) -> None:
-        report = _make_report()
+        report = make_report()
         save_eval(tmp_path, report)
         assert (tmp_path / ".sklab" / "evals").is_dir()
 
     def test_writes_json_file(self, tmp_path: Path) -> None:
-        report = _make_report()
+        report = make_report()
         path = save_eval(tmp_path, report)
         assert path.exists()
         assert path.suffix == ".json"
@@ -114,18 +35,18 @@ class TestSaveEval:
         assert isinstance(data, dict)
 
     def test_filename_is_timestamp_based(self, tmp_path: Path) -> None:
-        report = _make_report(timestamp="2026-03-31T14:22:05+00:00")
+        report = make_report(timestamp="2026-03-31T14:22:05+00:00")
         path = save_eval(tmp_path, report)
         assert "2026-03-31T14-22-05" in path.name
 
     def test_schema_version_present(self, tmp_path: Path) -> None:
-        report = _make_report()
+        report = make_report()
         path = save_eval(tmp_path, report)
         data = json.loads(path.read_text(encoding="utf-8"))
         assert data["schema_version"] == EVAL_SCHEMA_VERSION
 
     def test_includes_full_check_results(self, tmp_path: Path) -> None:
-        report = _make_report()
+        report = make_report()
         path = save_eval(tmp_path, report)
         data = json.loads(path.read_text(encoding="utf-8"))
         assert len(data["results"]) == 2
@@ -133,14 +54,14 @@ class TestSaveEval:
         assert data["results"][1]["fix"] == "Reduce body content to under ~5,000 tokens."
 
     def test_judge_null_when_absent(self, tmp_path: Path) -> None:
-        report = _make_report()
+        report = make_report()
         path = save_eval(tmp_path, report)
         data = json.loads(path.read_text(encoding="utf-8"))
         assert data["judge"] is None
 
     def test_includes_judge_when_present(self, tmp_path: Path) -> None:
-        report = _make_report()
-        judge = _make_judge()
+        report = make_report()
+        judge = make_judge()
         path = save_eval(
             tmp_path,
             report,
@@ -213,8 +134,8 @@ class TestLoadLatestEval:
         assert load_latest_eval(tmp_path) is None
 
     def test_returns_latest_file(self, tmp_path: Path) -> None:
-        report_old = _make_report(score=60.0, timestamp="2026-03-01T10:00:00+00:00")
-        report_new = _make_report(score=80.0, timestamp="2026-03-02T10:00:00+00:00")
+        report_old = make_report(score=60.0, timestamp="2026-03-01T10:00:00+00:00")
+        report_new = make_report(score=80.0, timestamp="2026-03-02T10:00:00+00:00")
         save_eval(tmp_path, report_old)
         save_eval(tmp_path, report_new)
         record = load_latest_eval(tmp_path)
@@ -222,7 +143,7 @@ class TestLoadLatestEval:
         assert record.report.quality_score == 80.0
 
     def test_roundtrip_save_load_static_only(self, tmp_path: Path) -> None:
-        report = _make_report()
+        report = make_report()
         save_eval(tmp_path, report)
         record = load_latest_eval(tmp_path)
         assert record is not None
@@ -236,8 +157,8 @@ class TestLoadLatestEval:
         assert record.judge is None
 
     def test_roundtrip_save_load_with_judge(self, tmp_path: Path) -> None:
-        report = _make_report()
-        judge = _make_judge()
+        report = make_report()
+        judge = make_judge()
         usage = {"input_tokens": 1200, "output_tokens": 450, "total_tokens": 1650}
         save_eval(
             tmp_path,

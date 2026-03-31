@@ -33,6 +33,8 @@ from skill_lab.reporters.json_reporter import JsonReporter
 
 logger = logging.getLogger(__name__)
 
+OPTIMIZE_SCORE_THRESHOLD = 75
+
 
 def _run_bulk_evaluate(
     roots: list[Path],
@@ -268,7 +270,12 @@ def evaluate(
             _print_api_key_hint(missing_env_var)
 
     # Offer to optimize if score is low (interactive console only)
-    if format == OutputFormat.console and not all_skills and not repo and report.quality_score < 75:
+    if (
+        format == OutputFormat.console
+        and not all_skills
+        and not repo
+        and report.quality_score < OPTIMIZE_SCORE_THRESHOLD
+    ):
         _offer_optimize(skill_path, model)
 
     if not report.overall_pass:
@@ -338,20 +345,12 @@ def _save_eval_history(
 ) -> None:
     """Persist full evaluation to .sklab/evals/ (best-effort, never fails the command)."""
     try:
-        usage_dict: dict[str, object] | None = None
-        if judge_usage is not None:
-            usage_dict = {
-                "input_tokens": judge_usage.input_tokens,
-                "output_tokens": judge_usage.output_tokens,
-                "total_tokens": judge_usage.total_tokens,
-                "cost": (round(judge_usage.total_cost, 6) if judge_usage.has_pricing else None),
-            }
         save_eval(
             skill_path,
             report,
             judge_result=judge_result,
             judge_model=resolved_model if judge_result else None,
-            judge_usage=usage_dict,
+            judge_usage=judge_usage.to_dict() if judge_usage else None,
         )
     except Exception:
         logger.debug("Failed to save eval history", exc_info=True)
