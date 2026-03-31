@@ -62,7 +62,7 @@ def _run_bulk_evaluate(
 
         if format == OutputFormat.json:
             json_reporter = JsonReporter()
-            console.print(json_reporter.format(report))
+            console.print(json_reporter.format(report), soft_wrap=True)
         else:
             console_reporter = ConsoleReporter(verbose=verbose)
             console_reporter.report(report)
@@ -246,7 +246,8 @@ def evaluate(
             console.print(f"Report written to: {output}")
         else:
             console.print(
-                json_reporter.format(report, judge_result=judge_result, judge_usage=judge_usage)
+                json_reporter.format(report, judge_result=judge_result, judge_usage=judge_usage),
+                soft_wrap=True,
             )
     else:
         console_reporter = ConsoleReporter(verbose=verbose)

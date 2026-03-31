@@ -285,7 +285,7 @@ def eval_trace(
             output.write_text(report_json)
             console.print(f"Report written to: {output}")
         else:
-            console.print(report_json)
+            console.print(report_json, soft_wrap=True)
     else:
         # Use verbose=True to show all checks (trace checks are typically few)
         trace_reporter = ConsoleReporter(verbose=True)
