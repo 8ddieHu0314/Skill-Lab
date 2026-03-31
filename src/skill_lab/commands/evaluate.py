@@ -34,7 +34,7 @@ from skill_lab.reporters.json_reporter import JsonReporter
 
 logger = logging.getLogger(__name__)
 
-OPTIMIZE_SCORE_THRESHOLD = 75
+OPTIMIZE_SCORE_THRESHOLD = 90
 
 
 def _run_bulk_evaluate(
@@ -277,7 +277,7 @@ def evaluate(
         elif missing_env_var:
             _print_api_key_hint(missing_env_var)
 
-    # Chain into optimization: --optimize flag (unconditional) or interactive prompt (score < 75)
+    # Chain into optimization: --optimize flag (unconditional) or interactive prompt (score < 90)
     if optimize and not all_skills and not repo:
         _run_optimize(skill_path, model)
     elif (
@@ -378,7 +378,7 @@ def _offer_optimize(skill_path: Path, model: str | None) -> None:
     if not sys.stdin.isatty():
         return
     console.print()
-    if typer.confirm("Score below 75. Optimize?", default=False):
+    if typer.confirm("Score below 90. Optimize?", default=False):
         _run_optimize(skill_path, model)
 
 
