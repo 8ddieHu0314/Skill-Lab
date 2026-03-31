@@ -3,6 +3,8 @@
 import difflib
 import os
 import re
+import sys
+from dataclasses import replace
 from pathlib import Path
 from typing import Annotated
 
@@ -17,10 +19,11 @@ from skill_lab.cli import (
     app,
     console,
 )
+from skill_lab.core.eval_history import EvalRecord, load_latest_eval
 from skill_lab.core.llm import detect_provider_name, get_api_key_env_var
-from skill_lab.core.skill_config import resolve_model, update_model
+from skill_lab.core.skill_config import load_config, resolve_model, save_config, update_model
 from skill_lab.core.telemetry import push_telemetry_extra
-from skill_lab.optimizer.optimizer import SkillOptimizer
+from skill_lab.optimizer.optimizer import OptimizationResult, SkillOptimizer
 
 _HUNK_RE = re.compile(r"^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@.*$")
 
@@ -63,75 +66,62 @@ def _build_diff_text(raw_diff: str) -> Text:
     return text
 
 
-@app.command("optimize")
-@_with_telemetry("optimize")
-def optimize(
-    skill_path: Annotated[
-        Path | None,
-        typer.Argument(
-            help="Path to the skill directory (defaults to current directory)",
-        ),
-    ] = None,
-    model: Annotated[
-        str | None,
-        typer.Option(
-            "--model",
-            "-m",
-            help=(
-                "Model ID (default: claude-haiku-4-5-20251001). "
-                "Supports Anthropic, OpenAI (gpt-*), and Gemini (gemini-*) models."
-            ),
-        ),
-    ] = None,
-    auto: Annotated[
-        bool,
-        typer.Option(
-            "--auto",
-            help="Apply changes without confirmation prompt",
-        ),
-    ] = False,
-) -> None:
-    """Optimize a SKILL.md using LLM-powered analysis.
+def _increment_patch(version: str) -> str:
+    """Increment the patch component of a semver string.
 
-    Evaluates the skill, sends failures to an LLM, and proposes
-    improvements. Shows a diff and score delta before applying.
+    Falls back to appending '.1' if the last component is non-numeric
+    (e.g. pre-release suffixes like "1.0.0-beta").
 
-    Requires an API key for the selected provider (ANTHROPIC_API_KEY,
-    OPENAI_API_KEY, or GEMINI_API_KEY).
+    Examples:
+        "0.2.0" -> "0.2.1"
+        "1.0" -> "1.1"
+        "1.0.0-beta" -> "1.0.0-beta.1"
     """
-    skill_path = _resolve_skill_path(skill_path)
-    push_telemetry_extra(skill_name=skill_path.name)
+    parts = version.split(".")
+    try:
+        parts[-1] = str(int(parts[-1]) + 1)
+    except ValueError:
+        parts.append("1")
+    return ".".join(parts)
 
-    # Resolve model: --model flag > config > SKLAB_MODEL env var > default
-    resolved_model = resolve_model(model, skill_path)
 
-    # Detect provider and check API key
-    provider_name = detect_provider_name(resolved_model)
-    env_var = get_api_key_env_var(provider_name)
-    api_key = os.environ.get(env_var)
-    if not api_key:
-        console.print(
-            f"[red]Error: {env_var} environment variable is not set.[/red]\n"
-            f"[dim]Set it with:[/dim] export {env_var}=your-key-here"
-        )
-        raise typer.Exit(code=1)
+def _prompt_version_bump(skill_path: Path, *, auto: bool = False) -> None:
+    """Ask user if they want to bump the skill version after optimization.
 
-    with _cli_error_handler():
-        optimizer = SkillOptimizer(model=resolved_model, api_key=api_key)
+    Skips the prompt entirely in --auto mode or non-TTY environments.
+    """
+    if auto or not sys.stdin.isatty():
+        return
+    config = load_config(skill_path)
+    current = config.version or "0.0.0"
+    console.print(f"\n[dim]Current version: {current}[/dim]")
+    if typer.confirm("Bump skill version?", default=False):
+        default_next = _increment_patch(current)
+        new_version = typer.prompt("New version", default=default_next)
+        updated = replace(config, version=new_version)
+        save_config(skill_path, updated)
+        console.print(f"[green]Version updated to {new_version}[/green]")
 
-        with console.status("[cyan]Evaluating and optimizing...[/cyan]", spinner="dots"):
-            result = optimizer.optimize(skill_path)
 
+def _show_result_and_apply(
+    skill_path: Path,
+    result: OptimizationResult,
+    resolved_model: str,
+    eval_record: EvalRecord,
+    auto: bool,
+) -> None:
+    """Display optimization result, apply if confirmed, and prompt version bump."""
     # Check if content changed
     if result.original_content == result.optimized_content:
         console.print(f"\n[green]Already optimized![/green] Score: {result.original_score}/100")
-        raise typer.Exit(code=0)
+        return
 
     # Show evaluation summary
-    console.print(
-        f"\n[dim]Current score:[/dim] {result.original_score}/100 "
-        f"({result.original_failures} issues)"
-    )
+    score_line = f"\n[dim]Current score:[/dim] {result.original_score}/100"
+    if eval_record.judge is not None:
+        score_line += f" | [dim]Judge:[/dim] {eval_record.judge.judge_score}/100"
+    score_line += f" ({result.original_failures} issues)"
+    console.print(score_line)
 
     # Show diff
     diff_lines = list(
@@ -195,9 +185,104 @@ def optimize(
         skill_md.write_text(result.optimized_content, encoding="utf-8")
         console.print(f"\n[green]Changes applied to {skill_md}[/green]")
         push_telemetry_extra(applied=True)
+
+        # Persist resolved model and prompt version bump
+        update_model(skill_path, resolved_model)
+        _prompt_version_bump(skill_path, auto=auto)
     else:
         console.print("[dim]Changes discarded.[/dim]")
         push_telemetry_extra(applied=False)
 
-    # Persist resolved model to config
-    update_model(skill_path, resolved_model)
+
+def _run_optimize_from_eval(
+    skill_path: Path,
+    model: str | None,
+    auto: bool = False,
+) -> None:
+    """Run optimization using latest eval history.
+
+    Shared entry point called by both the optimize command and the evaluate chain.
+
+    Args:
+        skill_path: Resolved path to the skill directory.
+        model: Raw --model flag value (None = use resolution chain).
+        auto: If True, skip confirmation prompts.
+    """
+    eval_record = load_latest_eval(skill_path)
+    if eval_record is None:
+        console.print(
+            "[red]Error: No evaluation results found.[/red]\n"
+            "[dim]Run [bold]sklab evaluate[/bold] first to generate evaluation history.[/dim]"
+        )
+        raise typer.Exit(code=1)
+
+    resolved_model = resolve_model(model, skill_path)
+
+    # Detect provider and check API key
+    provider_name = detect_provider_name(resolved_model)
+    env_var = get_api_key_env_var(provider_name)
+    api_key = os.environ.get(env_var)
+    if not api_key:
+        console.print(
+            f"[red]Error: {env_var} environment variable is not set.[/red]\n"
+            f"[dim]Set it with:[/dim] export {env_var}=your-key-here"
+        )
+        raise typer.Exit(code=1)
+
+    # Show what eval we're using (strip timezone suffix for readability)
+    eval_date = eval_record.report.timestamp.replace("T", " ")[:19]
+    eval_info = f"[dim]Using evaluation from {eval_date} (static: {eval_record.report.quality_score:.0f}/100"
+    if eval_record.judge is not None:
+        eval_info += f", judge: {eval_record.judge.judge_score:.0f}/100"
+    eval_info += ")[/dim]"
+    console.print(eval_info)
+
+    with _cli_error_handler():
+        optimizer = SkillOptimizer(model=resolved_model, api_key=api_key)
+
+        with console.status("[cyan]Optimizing...[/cyan]", spinner="dots"):
+            result = optimizer.optimize_from_history(skill_path, eval_record)
+
+    _show_result_and_apply(skill_path, result, resolved_model, eval_record, auto)
+
+
+@app.command("optimize")
+@_with_telemetry("optimize")
+def optimize(
+    skill_path: Annotated[
+        Path | None,
+        typer.Argument(
+            help="Path to the skill directory (defaults to current directory)",
+        ),
+    ] = None,
+    model: Annotated[
+        str | None,
+        typer.Option(
+            "--model",
+            "-m",
+            help=(
+                "Model ID (default: claude-haiku-4-5-20251001). "
+                "Supports Anthropic, OpenAI (gpt-*), and Gemini (gemini-*) models."
+            ),
+        ),
+    ] = None,
+    auto: Annotated[
+        bool,
+        typer.Option(
+            "--auto",
+            help="Apply changes without confirmation prompt",
+        ),
+    ] = False,
+) -> None:
+    """Optimize a SKILL.md using LLM-powered analysis.
+
+    Reads the latest evaluation from .sklab/evals/ (run `sklab evaluate` first),
+    sends static failures and LLM judge feedback to an LLM, and proposes
+    improvements. Shows a diff and score delta before applying.
+
+    Requires an API key for the selected provider (ANTHROPIC_API_KEY,
+    OPENAI_API_KEY, or GEMINI_API_KEY).
+    """
+    skill_path = _resolve_skill_path(skill_path)
+    push_telemetry_extra(skill_name=skill_path.name)
+    _run_optimize_from_eval(skill_path, model, auto=auto)

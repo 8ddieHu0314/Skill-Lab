@@ -88,6 +88,15 @@ class GenerationUsage:
         """Whether pricing data is available for this model."""
         return self.model in _PRICING
 
+    def to_dict(self) -> dict[str, object]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "total_tokens": self.total_tokens,
+            "cost": round(self.total_cost, 6) if self.has_pricing else None,
+        }
+
 
 @dataclass(frozen=True)
 class LLMResponse:

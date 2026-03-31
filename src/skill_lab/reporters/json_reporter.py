@@ -47,14 +47,7 @@ class JsonReporter:
         if judge_result is not None:
             review_data = judge_result.to_dict()
             if judge_usage is not None:
-                review_data["usage"] = {
-                    "input_tokens": judge_usage.input_tokens,
-                    "output_tokens": judge_usage.output_tokens,
-                    "total_tokens": judge_usage.total_tokens,
-                    "cost": (
-                        round(judge_usage.total_cost, 6) if judge_usage.has_pricing else None
-                    ),
-                }
+                review_data["usage"] = judge_usage.to_dict()
             data["judge_review"] = review_data
         else:
             data["judge_review"] = None

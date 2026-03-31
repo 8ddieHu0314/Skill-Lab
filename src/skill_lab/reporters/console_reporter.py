@@ -2,6 +2,7 @@
 
 from rich.console import Console
 from rich.panel import Panel
+from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 
@@ -14,6 +15,10 @@ SEVERITY_STYLES: dict[str, str] = {
     "medium": "yellow",
     "low": "blue",
 }
+
+# Combined score weighting (static + judge)
+STATIC_WEIGHT: float = 0.6
+JUDGE_WEIGHT: float = 0.4
 
 
 def score_color(score: float) -> str:
@@ -51,6 +56,27 @@ def _verdict_color(verdict: str) -> str:
     return "red"
 
 
+def _combined_score(
+    static_score: float,
+    judge_score: float | None,
+) -> float:
+    """Compute weighted overall score from static and judge components."""
+    if judge_score is None:
+        return static_score
+    return static_score * STATIC_WEIGHT + judge_score * JUDGE_WEIGHT
+
+
+def _verdict(score: float) -> str:
+    """Return a verdict label for a 0-100 score."""
+    if score >= 90:
+        return "Excellent"
+    if score >= 75:
+        return "Good"
+    if score >= 50:
+        return "Needs work"
+    return "Poor"
+
+
 class ConsoleReporter:
     """Reporter that outputs evaluation results to the console."""
 
@@ -74,7 +100,8 @@ class ConsoleReporter:
         hidden = total_count - shown_count
         if hidden > 0:
             self.console.print(
-                f"[dim]({hidden} passing checks hidden, run [bold]sklab evaluate --verbose ./skill[/bold] to see all)[/dim]"
+                f"[dim]({hidden} passing checks hidden, run "
+                f"[bold]sklab evaluate --verbose ./skill[/bold] to see all)[/dim]"
             )
         elif shown_count == 0:
             self.console.print("[green]All checks passed![/green]")
@@ -82,41 +109,14 @@ class ConsoleReporter:
                 "[dim](run [bold]sklab evaluate --verbose ./skill[/bold] to see details)[/dim]"
             )
 
-    def report(self, report: EvaluationReport) -> None:
-        """Print an evaluation report to the console.
+    # ------------------------------------------------------------------
+    # Shared rendering helpers (used by report_evaluation and legacy methods)
+    # ------------------------------------------------------------------
 
-        Args:
-            report: The evaluation report to print.
-        """
-        # Header
-        skill_name = report.skill_name or "Unknown"
-        self.console.print()
-        self.console.print(
-            Panel(
-                f"[bold]Skill:[/bold] {skill_name}\n[bold]Path:[/bold] {report.skill_path}",
-                title="Skill Lab Evaluation",
-                border_style="blue",
-            )
-        )
-
-        # Score and status
-        sc = score_color(report.quality_score)
-        status = "[green]PASS[/green]" if report.overall_pass else "[red]FAIL[/red]"
-
-        self.console.print()
-        self.console.print(
-            f"[bold]Quality Score:[/bold] [{sc}]{report.quality_score:.1f}/100[/{sc}]"
-        )
-        self.console.print(f"[bold]Status:[/bold] {status}")
-        self.console.print(
-            f"[bold]Checks:[/bold] {report.checks_passed}/{report.checks_run} passed"
-        )
-        self.console.print(f"[bold]Duration:[/bold] {report.duration_ms:.1f}ms")
-
-        # Results table
+    def _render_static_body(self, report: EvaluationReport) -> None:
+        """Render the static analysis body: checks table + dimension summary."""
         self.console.print()
 
-        # Filter results based on verbosity
         results_to_show = (
             report.results if self.verbose else [r for r in report.results if not r.passed]
         )
@@ -129,14 +129,11 @@ class ConsoleReporter:
             table.add_column("Message")
 
             for result in results_to_show:
-                status_icon = (
-                    "[green]OK[/green]"
-                    if result.passed
-                    else f"[{self._severity_style(result.severity)}]X[/{self._severity_style(result.severity)}]"
-                )
+                sty = self._severity_style(result.severity)
+                status_icon = "[green]OK[/green]" if result.passed else f"[{sty}]X[/{sty}]"
                 severity_text = Text(
                     result.severity.value.upper(),
-                    style=self._severity_style(result.severity),
+                    style=sty,
                 )
                 display_message = result.message
                 if not result.passed and result.fix:
@@ -152,7 +149,7 @@ class ConsoleReporter:
 
         self._print_verbose_hint(len(report.results), len(results_to_show))
 
-        # Summary by dimension
+        # Dimension summary
         self.console.print()
         self.console.print("[bold]Summary by Dimension:[/bold]")
         for dim, counts in report.summary.get("by_dimension", {}).items():
@@ -164,19 +161,14 @@ class ConsoleReporter:
                 self.console.print(f"  {dim}: [{color}]{passed}/{total} passed[/{color}]")
 
         self.console.print()
+        self.console.print(f"[dim]Duration: {report.duration_ms:.1f}ms[/dim]")
 
-    def report_judge(
+    def _render_judge_body(
         self,
         result: JudgeResult,
         usage: GenerationUsage | None = None,
     ) -> None:
-        """Print LLM judge results to the console."""
-        self.console.print()
-        self.console.print(
-            "[bold]LLM Quality Review[/bold]",
-            style="on default",
-        )
-
+        """Render the LLM review body: axis tables + suggestions + tokens."""
         axes = [
             ("activation", "Activation Quality", result.activation_score),
             ("instruction", "Instruction Quality", result.instruction_score),
@@ -204,15 +196,6 @@ class ConsoleReporter:
 
             self.console.print(table)
 
-        # Combined score and verdict
-        jsc = score_color(result.judge_score)
-        vc = _verdict_color(result.verdict)
-        self.console.print()
-        self.console.print(
-            f"[bold]Judge Score:[/bold] [{jsc}]{result.judge_score:.1f}/100[/{jsc}]  "
-            f"[{vc}]{result.verdict}[/{vc}]"
-        )
-
         # Suggestions
         if result.suggestions:
             self.console.print()
@@ -224,10 +207,149 @@ class ConsoleReporter:
             cost_str = f" (${usage.total_cost:.4f})" if usage.has_pricing else " (no pricing data)"
             self.console.print(
                 f"\n[dim]Tokens:[/dim] {usage.input_tokens:,} in + "
-                f"{usage.output_tokens:,} out = {usage.total_tokens:,}{cost_str}"
+                f"{usage.output_tokens:,} out = "
+                f"{usage.total_tokens:,}{cost_str}"
             )
 
         self.console.print()
+
+    # ------------------------------------------------------------------
+    # Unified evaluation output (static + optional judge)
+    # ------------------------------------------------------------------
+
+    def report_evaluation(
+        self,
+        report: EvaluationReport,
+        judge_result: JudgeResult | None = None,
+        judge_usage: GenerationUsage | None = None,
+    ) -> None:
+        """Print a complete evaluation report (static + optional LLM review).
+
+        This is the primary entry point for `sklab evaluate` console output.
+        It visually groups the two assessment phases and shows a combined score.
+        """
+        is_hybrid = judge_result is not None
+        judge_score = judge_result.judge_score if judge_result else None
+        overall = _combined_score(report.quality_score, judge_score)
+
+        # --- Header ---
+        skill_name = report.skill_name or "Unknown"
+        mode = "Static Analysis + LLM Review" if is_hybrid else "Static Analysis"
+        self.console.print()
+        self.console.print(
+            Panel(
+                f"[bold]Skill:[/bold] {skill_name}\n"
+                f"[bold]Path:[/bold]  {report.skill_path}\n"
+                f"[bold]Mode:[/bold]  {mode}",
+                title="Skill Evaluation",
+                border_style="blue",
+            )
+        )
+
+        # --- Static Analysis section ---
+        self.console.print()
+        self.console.print(Rule("Static Analysis", style="dim"))
+        self._render_static_body(report)
+
+        # --- LLM Review section (conditional) ---
+        if judge_result is not None:
+            self.console.print()
+            self.console.print(Rule("LLM Review", style="dim"))
+            self._render_judge_body(judge_result, judge_usage)
+
+        # --- Overall Score (after both sections) ---
+        self.console.print()
+        self.console.print(Rule("Overall Score", style="bold"))
+        self.console.print()
+
+        v = _verdict(overall)
+        oc = score_color(overall)
+        vc = _verdict_color(v)
+        self.console.print(
+            f"  [bold]Overall:[/bold]  [{oc}]{overall:.1f}/100[/{oc}]  [{vc}]{v}[/{vc}]"
+        )
+
+        sc = score_color(report.quality_score)
+        status = "[green]PASS[/green]" if report.overall_pass else "[red]FAIL[/red]"
+        self.console.print(
+            f"  [dim]\u251c\u2500[/dim] Static Analysis:  "
+            f"[{sc}]{report.quality_score:.1f}/100[/{sc}]"
+            f"  ({report.checks_passed}/{report.checks_run} passed)"
+            f"  {status}"
+        )
+
+        if judge_result is not None:
+            jsc = score_color(judge_result.judge_score)
+            self.console.print(
+                f"  [dim]\u2514\u2500[/dim] LLM Review:       "
+                f"[{jsc}]{judge_result.judge_score:.1f}/100[/{jsc}]"
+                f"  Activation {judge_result.activation_score:.0f}%"
+                f" \u00b7 Instruction"
+                f" {judge_result.instruction_score:.0f}%"
+            )
+        else:
+            self.console.print("  [dim]\u2514\u2500 LLM Review:       not available[/dim]")
+
+        self.console.print()
+
+    # ------------------------------------------------------------------
+    # Legacy methods (backward compat for bulk evaluate, standalone calls)
+    # ------------------------------------------------------------------
+
+    def report(self, report: EvaluationReport) -> None:
+        """Print a static-only evaluation report to the console.
+
+        Used by bulk evaluate (--all, --repo) and other callers that
+        don't have judge results. For the full hybrid output, use
+        report_evaluation() instead.
+        """
+        skill_name = report.skill_name or "Unknown"
+        self.console.print()
+        self.console.print(
+            Panel(
+                f"[bold]Skill:[/bold] {skill_name}\n[bold]Path:[/bold] {report.skill_path}",
+                title="Skill Evaluation",
+                border_style="blue",
+            )
+        )
+
+        sc = score_color(report.quality_score)
+        status = "[green]PASS[/green]" if report.overall_pass else "[red]FAIL[/red]"
+
+        self.console.print()
+        self.console.print(
+            f"[bold]Static Score:[/bold] [{sc}]{report.quality_score:.1f}/100[/{sc}]"
+        )
+        self.console.print(f"[bold]Status:[/bold] {status}")
+        self.console.print(
+            f"[bold]Checks:[/bold] {report.checks_passed}/{report.checks_run} passed"
+        )
+        self.console.print(f"[bold]Duration:[/bold] {report.duration_ms:.1f}ms")
+
+        self._render_static_body(report)
+
+    def report_judge(
+        self,
+        result: JudgeResult,
+        usage: GenerationUsage | None = None,
+    ) -> None:
+        """Print LLM judge results to the console (backward compat)."""
+        self.console.print()
+        self.console.print(Rule("LLM Review", style="dim"))
+
+        jsc = score_color(result.judge_score)
+        vc = _verdict_color(result.verdict)
+        self.console.print()
+        self.console.print(
+            f"[bold]LLM Review Score:[/bold]"
+            f" [{jsc}]{result.judge_score:.1f}/100[/{jsc}]"
+            f"  [{vc}]{result.verdict}[/{vc}]"
+        )
+        self._render_judge_body(result, usage)
+
+    # ------------------------------------------------------------------
+    # Trace evaluation (unchanged)
+    # ------------------------------------------------------------------
 
     def report_trace(self, report: TraceReport) -> None:
         """Print a trace evaluation report to the console.

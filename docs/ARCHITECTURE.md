@@ -55,6 +55,7 @@ src/skill_lab/
 │   ├── tokens.py             # Token estimation utility (v0.4.0)
 │   ├── telemetry.py          # Usage analytics: opt-in prompt, SQLite, Supabase sync, version check
 │   ├── stats.py              # SQLite query functions for usage stats (sklab stats)
+│   ├── eval_history.py       # Eval history persistence (.sklab/evals/) — save, load, prune
 │   ├── setup.py              # Hook setup for Claude Code / Cursor (sklab setup)
 │   ├── utils.py              # Shared utilities (generic Registry[T])
 │   └── exceptions.py         # Custom exception hierarchy (SkillLabError, ParseError, etc.)
@@ -64,11 +65,11 @@ src/skill_lab/
 ├── checks/
 │   ├── base.py               # StaticCheck abstract base class
 │   └── static/               # Check implementations
-│       ├── structure.py      # 7 checks
+│       ├── structure.py      # 9 checks
 │       ├── schema.py         # 9 checks (declarative FieldRule)
 │       ├── naming.py         # 1 check
 │       ├── security.py       # 5 checks (injection, evaluator, unicode, yaml, size) + composite scan
-│       └── content.py        # 11 checks
+│       └── content.py        # 13 checks
 ├── evaluators/
 │   ├── static_evaluator.py   # Orchestrates static check execution
 │   └── trace_evaluator.py    # Orchestrates trace check execution
@@ -153,7 +154,7 @@ src/skill_lab/
                     │                    │                    │              │
             ┌───────────────┐    ┌───────────────┐    ┌───────────────┐ ┌──────────┐ ┌────────────┐
             │ structure.py  │    │  schema.py    │    │  naming.py    │ │content.py │ │security.py │
-            │ (7 checks)    │    │  (9 checks)   │    │ (1 check)    │ │(11 checks)│ │ (5 checks) │
+            │ (9 checks)    │    │  (9 checks)   │    │ (1 check)    │ │(13 checks)│ │ (5 checks) │
             └───────────────┘    └───────────────┘    └───────────────┘ └──────────┘ └────────────┘
 ```
 
@@ -427,6 +428,7 @@ sklab
 sklab evaluate [./my-skill] [-f console|json] [-o file.json] [-V] [-s] [-m model]
 sklab evaluate --skip-review     # Static checks only (no LLM call)
 sklab evaluate --model gpt-4o   # Choose LLM model for review
+sklab evaluate --optimize        # Chain into optimization after evaluation
 sklab evaluate --all             # Discover + evaluate all skills under cwd (recursive)
 sklab evaluate --repo            # Discover + evaluate all skills from git repo root
 
@@ -448,7 +450,7 @@ sklab trigger [./my-skill] [-t explicit|implicit|contextual|negative] [-f consol
 # Generate trigger tests via LLM (requires API key for selected provider)
 sklab generate [./my-skill] [-m MODEL] [--force]
 
-# LLM-powered SKILL.md optimization (requires API key for selected provider)
+# LLM-powered SKILL.md optimization (requires eval history from `sklab evaluate`)
 sklab optimize [./my-skill] [-m MODEL] [--auto]
 
 # Multi-provider: model ID determines provider and required API key
@@ -499,7 +501,9 @@ sklab setup
 **Evaluation Flags:**
 - `-V` / `--verbose`: Show all checks, not just failures
 - `-s` / `--spec-only`: Only run checks required by the Agent Skills spec (10 checks)
-- `--suggestions-only`: List only quality suggestion checks (18 checks)
+- `--suggestions-only`: List only quality suggestion checks (27 checks)
+- `--optimize`: Chain into LLM optimization after evaluation (skips interactive prompt)
+- `--skip-review`: Static checks only (no LLM judge call)
 
 **Trigger Testing:**
 - `-t` / `--type`: Filter by trigger type (explicit, implicit, contextual, negative)

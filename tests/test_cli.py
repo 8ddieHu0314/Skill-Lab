@@ -18,7 +18,7 @@ class TestEvaluateCommand:
     def test_evaluate_valid_skill(self, valid_skill_path: Path):
         result = runner.invoke(app, ["evaluate", str(valid_skill_path)])
         assert result.exit_code == 0
-        assert "Quality Score" in result.stdout
+        assert "Static Analysis" in result.stdout
 
     def test_evaluate_invalid_skill(self, invalid_skill_path: Path):
         result = runner.invoke(app, ["evaluate", str(invalid_skill_path)])
@@ -297,3 +297,82 @@ class TestDotenvLoading:
         from dotenv import load_dotenv
 
         load_dotenv(dotenv_path=tmp_path / ".env", override=False)  # should not raise
+
+
+class TestEvaluateOptimizePrompt:
+    """Tests that the optimize prompt does NOT appear when it shouldn't."""
+
+    def test_no_prompt_in_json_mode(self, valid_skill_path: Path) -> None:
+        """JSON output should never show the optimize prompt."""
+        result = runner.invoke(
+            app, ["evaluate", str(valid_skill_path), "--format", "json", "--skip-review"]
+        )
+        assert "Optimize?" not in result.stdout
+
+    def test_no_prompt_above_threshold(self, valid_skill_path: Path) -> None:
+        """Score >= 75 should not trigger the optimize prompt."""
+        result = runner.invoke(app, ["evaluate", str(valid_skill_path), "--skip-review"])
+        # valid_skill_path typically scores >= 75
+        assert "Optimize?" not in result.stdout
+
+    def test_no_prompt_in_bulk_mode(self, valid_skill_path: Path) -> None:
+        """Bulk --all mode should not show the optimize prompt."""
+        result = runner.invoke(
+            app,
+            ["evaluate", "--all", "--skip-review"],
+        )
+        assert "Optimize?" not in result.stdout
+
+
+class TestEvaluateOptimizeFlag:
+    """Tests for the --optimize flag on evaluate."""
+
+    def test_optimize_flag_rejected_with_all(self) -> None:
+        """--optimize with --all should not run optimization."""
+        result = runner.invoke(
+            app, ["evaluate", "--all", "--optimize", "--skip-review"]
+        )
+        # Should not contain optimize output (optimize is suppressed in bulk mode)
+        assert "Using evaluation from" not in result.stdout
+
+    def test_optimize_flag_rejected_with_repo(self) -> None:
+        """--optimize with --repo should not run optimization."""
+        result = runner.invoke(
+            app, ["evaluate", "--repo", "--optimize", "--skip-review"]
+        )
+        assert "Using evaluation from" not in result.stdout
+
+    def test_optimize_flag_no_api_key(self, tmp_path: Path) -> None:
+        """--optimize without an API key should show the key error."""
+        import shutil
+
+        src = Path(__file__).parent / "fixtures" / "skills" / "creating-reports"
+        skill_dir = tmp_path / "creating-reports"
+        shutil.copytree(src, skill_dir)
+
+        result = runner.invoke(
+            app,
+            ["evaluate", str(skill_dir), "--optimize", "--skip-review"],
+            env={"ANTHROPIC_API_KEY": ""},
+        )
+        assert "environment variable is not set" in result.output
+
+
+class TestEvalHistoryPersistence:
+    """Tests that evaluate writes .sklab/evals/ files."""
+
+    def test_evaluate_creates_eval_file(self, tmp_path: Path) -> None:
+        """After evaluate, .sklab/evals/ should contain a JSON file."""
+        import shutil
+
+        # Copy a fixture skill to tmp_path so we don't pollute shared fixtures
+        src = Path(__file__).parent / "fixtures" / "skills" / "creating-reports"
+        skill_dir = tmp_path / "creating-reports"
+        shutil.copytree(src, skill_dir)
+
+        result = runner.invoke(app, ["evaluate", str(skill_dir), "--skip-review"])
+        assert result.exit_code == 0
+        evals_dir = skill_dir / ".sklab" / "evals"
+        assert evals_dir.is_dir()
+        eval_files = list(evals_dir.glob("*.json"))
+        assert len(eval_files) >= 1

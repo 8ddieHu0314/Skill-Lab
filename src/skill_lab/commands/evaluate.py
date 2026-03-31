@@ -1,6 +1,8 @@
 """Evaluate, check, and list-checks commands."""
 
+import logging
 import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated
@@ -19,15 +21,20 @@ from skill_lab.cli import (
     app,
     console,
 )
+from skill_lab.core.eval_history import save_eval
 from skill_lab.core.exceptions import GenerationError
 from skill_lab.core.llm import GenerationUsage, detect_provider_name, get_api_key_env_var
-from skill_lab.core.models import EvalDimension, JudgeResult
+from skill_lab.core.models import EvalDimension, EvaluationReport, JudgeResult
 from skill_lab.core.registry import registry
 from skill_lab.core.skill_config import resolve_model, update_evaluate, update_model, update_review
 from skill_lab.core.telemetry import push_telemetry_extra
 from skill_lab.evaluators.static_evaluator import StaticEvaluator
 from skill_lab.reporters.console_reporter import SEVERITY_STYLES, ConsoleReporter
 from skill_lab.reporters.json_reporter import JsonReporter
+
+logger = logging.getLogger(__name__)
+
+OPTIMIZE_SCORE_THRESHOLD = 90
 
 
 def _run_bulk_evaluate(
@@ -173,6 +180,13 @@ def evaluate(
             ),
         ),
     ] = None,
+    optimize: Annotated[
+        bool,
+        typer.Option(
+            "--optimize",
+            help="Automatically run optimization after evaluation (skips the interactive prompt)",
+        ),
+    ] = False,
 ) -> None:
     """Evaluate a skill: static checks + LLM quality review.
 
@@ -232,9 +246,15 @@ def evaluate(
     judge_result: JudgeResult | None = None
     judge_usage = None
     missing_env_var: str | None = None
+    resolved_model: str | None = None
 
     if not skip_review:
-        judge_result, judge_usage, missing_env_var = _try_llm_review(skill_path, model)
+        judge_result, judge_usage, missing_env_var, resolved_model = _try_llm_review(
+            skill_path, model
+        )
+
+    # Persist full evaluation to history (.sklab/evals/)
+    _save_eval_history(skill_path, report, judge_result, resolved_model, judge_usage)
 
     # Render output
     if format == OutputFormat.json:
@@ -251,11 +271,22 @@ def evaluate(
             )
     else:
         console_reporter = ConsoleReporter(verbose=verbose)
-        console_reporter.report(report)
-        if judge_result is not None:
-            console_reporter.report_judge(judge_result, usage=judge_usage)
-        elif missing_env_var:
+        console_reporter.report_evaluation(
+            report, judge_result=judge_result, judge_usage=judge_usage,
+        )
+        if judge_result is None and missing_env_var:
             _print_api_key_hint(missing_env_var)
+
+    # Chain into optimization: --optimize flag (unconditional) or interactive prompt (score < 90)
+    if optimize and not all_skills and not repo:
+        _run_optimize(skill_path, model)
+    elif (
+        format == OutputFormat.console
+        and not all_skills
+        and not repo
+        and report.quality_score < OPTIMIZE_SCORE_THRESHOLD
+    ):
+        _offer_optimize(skill_path, model)
 
     if not report.overall_pass:
         raise typer.Exit(code=1)
@@ -264,12 +295,12 @@ def evaluate(
 def _try_llm_review(
     skill_path: Path,
     model: str | None,
-) -> tuple[JudgeResult | None, GenerationUsage | None, str | None]:
+) -> tuple[JudgeResult | None, GenerationUsage | None, str | None, str | None]:
     """Attempt LLM judge review.
 
     Returns:
-        (result, usage, missing_env_var) — missing_env_var is set when
-        the API key is absent so the caller can print a hint without
+        (result, usage, missing_env_var, resolved_model) — missing_env_var is
+        set when the API key is absent so the caller can print a hint without
         re-resolving the model.
     """
     from skill_lab.judge.judge import SkillJudge
@@ -280,7 +311,7 @@ def _try_llm_review(
     api_key = os.environ.get(env_var)
 
     if not api_key:
-        return None, None, env_var
+        return None, None, env_var, resolved_model
 
     try:
         judge = SkillJudge(model=resolved_model, api_key=api_key)
@@ -298,12 +329,12 @@ def _try_llm_review(
 
         push_telemetry_extra(judge_score=result.judge_score)
 
-        return result, judge.last_usage, None
+        return result, judge.last_usage, None, resolved_model
     except GenerationError as e:
         console.print(f"\n[yellow]LLM review failed:[/yellow] {e.message}")
         if e.suggestion:
             console.print(f"[dim]{e.suggestion}[/dim]")
-        return None, None, None
+        return None, None, None, resolved_model
 
 
 def _print_api_key_hint(env_var: str) -> None:
@@ -314,6 +345,41 @@ def _print_api_key_hint(env_var: str) -> None:
         f"  or use [bold]--skip-review[/bold] to suppress this message.[/dim]\n"
     )
 
+
+def _save_eval_history(
+    skill_path: Path,
+    report: EvaluationReport,
+    judge_result: JudgeResult | None,
+    resolved_model: str | None,
+    judge_usage: GenerationUsage | None,
+) -> None:
+    """Persist full evaluation to .sklab/evals/ (best-effort, never fails the command)."""
+    try:
+        save_eval(
+            skill_path,
+            report,
+            judge_result=judge_result,
+            judge_model=resolved_model if judge_result else None,
+            judge_usage=judge_usage.to_dict() if judge_usage else None,
+        )
+    except Exception:
+        logger.debug("Failed to save eval history", exc_info=True)
+
+
+def _run_optimize(skill_path: Path, model: str | None) -> None:
+    """Chain into optimization unconditionally (--optimize flag)."""
+    from skill_lab.commands.optimize import _run_optimize_from_eval
+
+    _run_optimize_from_eval(skill_path, model)
+
+
+def _offer_optimize(skill_path: Path, model: str | None) -> None:
+    """Prompt user to run optimize if score is below threshold."""
+    if not sys.stdin.isatty():
+        return
+    console.print()
+    if typer.confirm("Score below 90. Optimize?", default=False):
+        _run_optimize(skill_path, model)
 
 
 def _run_bulk_check(roots: list[Path], spec_only: bool) -> None:

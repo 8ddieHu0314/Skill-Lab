@@ -12,6 +12,7 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from skill_lab.core.eval_history import EvalRecord
 from skill_lab.core.exceptions import GenerationError
 from skill_lab.core.llm import (
     DEFAULT_MODEL,
@@ -21,7 +22,7 @@ from skill_lab.core.llm import (
     get_api_key_env_var,
     resolve_provider,
 )
-from skill_lab.core.models import EvaluationReport
+from skill_lab.core.models import CheckResult, EvaluationReport
 from skill_lab.evaluators.static_evaluator import StaticEvaluator
 
 _SYSTEM_PROMPT_PATH = Path(__file__).parent / "optimize_skill.md"
@@ -34,6 +35,25 @@ SYSTEM_PROMPT = (
 )
 
 MAX_BODY_CHARS = 12000
+
+
+def _format_failures(results: list[CheckResult]) -> str:
+    """Format failing check results into a prompt-ready text block."""
+    failures: list[str] = []
+    for result in results:
+        if not result.passed:
+            line = f"- [{result.check_id}] (severity: {result.severity.value}) {result.message}"
+            if result.fix:
+                line += f"\n  Fix: {result.fix}"
+            failures.append(line)
+    return "\n".join(failures) if failures else "No failing checks."
+
+
+def _truncate_content(content: str) -> str:
+    """Truncate skill content to MAX_BODY_CHARS with a marker if needed."""
+    if len(content) <= MAX_BODY_CHARS:
+        return content
+    return content[:MAX_BODY_CHARS] + "\n\n[... content truncated ...]"
 
 
 @dataclass(frozen=True)
@@ -82,39 +102,132 @@ class SkillOptimizer:
         Raises:
             GenerationError: If optimization fails.
         """
-        skill_md = skill_path / "SKILL.md"
-        if not skill_md.exists():
-            raise GenerationError(
-                "SKILL.md not found",
-                skill_path=str(skill_path),
-                suggestion="Ensure the skill directory contains a SKILL.md file.",
-            )
-
-        original_content = skill_md.read_text(encoding="utf-8")
+        original_content = self._read_skill_md(skill_path)
 
         # Evaluate current state
         before_report = self._evaluate(skill_path)
 
         # Build prompt and call LLM
         prompt = self._build_prompt(original_content, before_report)
-        response_text = self._call_api(prompt)
-        optimized_content = self._parse_response(response_text)
+        optimized_content = self._run_llm(prompt)
 
         # Re-evaluate optimized content
         after_report = self._re_evaluate(optimized_content, skill_path)
-
-        before_failures = before_report.checks_failed
-        after_failures = after_report.checks_failed
 
         return OptimizationResult(
             original_content=original_content,
             optimized_content=optimized_content,
             original_score=before_report.quality_score,
             optimized_score=after_report.quality_score,
-            original_failures=before_failures,
-            optimized_failures=after_failures,
+            original_failures=before_report.checks_failed,
+            optimized_failures=after_report.checks_failed,
             usage=self.last_usage,
         )
+
+    def optimize_from_history(
+        self,
+        skill_path: Path,
+        eval_record: EvalRecord,
+    ) -> OptimizationResult:
+        """Run optimization using a pre-existing evaluation record.
+
+        Unlike optimize(), this does NOT run its own internal evaluation —
+        it reads static failures and judge feedback from the provided history.
+
+        Args:
+            skill_path: Path to the skill directory (must contain SKILL.md).
+            eval_record: Previously persisted evaluation record.
+
+        Returns:
+            OptimizationResult with original and optimized content and scores.
+
+        Raises:
+            GenerationError: If optimization fails.
+        """
+        original_content = self._read_skill_md(skill_path)
+
+        # Build prompt from history (static + judge)
+        prompt = self._build_prompt_from_history(original_content, eval_record)
+        optimized_content = self._run_llm(prompt)
+
+        # Re-evaluate optimized content (fresh StaticEvaluator)
+        after_report = self._re_evaluate(optimized_content, skill_path)
+
+        return OptimizationResult(
+            original_content=original_content,
+            optimized_content=optimized_content,
+            original_score=eval_record.report.quality_score,
+            optimized_score=after_report.quality_score,
+            original_failures=eval_record.report.checks_failed,
+            optimized_failures=after_report.checks_failed,
+            usage=self.last_usage,
+        )
+
+    def _read_skill_md(self, skill_path: Path) -> str:
+        """Read SKILL.md content, raising GenerationError if missing."""
+        try:
+            return (skill_path / "SKILL.md").read_text(encoding="utf-8")
+        except FileNotFoundError:
+            raise GenerationError(
+                "SKILL.md not found",
+                skill_path=str(skill_path),
+                suggestion="Ensure the skill directory contains a SKILL.md file.",
+            ) from None
+
+    def _run_llm(self, prompt: str) -> str:
+        """Call LLM and parse response into valid SKILL.md content."""
+        response_text = self._call_api(prompt)
+        return self._parse_response(response_text)
+
+    def _build_prompt_from_history(
+        self,
+        skill_content: str,
+        eval_record: EvalRecord,
+    ) -> str:
+        """Build user message from eval history, including judge feedback.
+
+        Args:
+            skill_content: Full content of the SKILL.md file.
+            eval_record: Evaluation record with static results and optional judge.
+
+        Returns:
+            Formatted user message for the API call.
+        """
+        report = eval_record.report
+        failures_text = _format_failures(report.results)
+
+        # Judge feedback section
+        judge_text = ""
+        if eval_record.judge is not None:
+            judge = eval_record.judge
+            judge_lines = [
+                f"LLM Judge Score: {judge.judge_score}/100 ({judge.verdict})",
+                f"  Activation Quality: {judge.activation_score}/100",
+                f"  Instruction Quality: {judge.instruction_score}/100",
+                "",
+                "Criterion Scores:",
+            ]
+            for c in judge.criteria:
+                judge_lines.append(f"  - {c.name} ({c.axis}): {c.score}/4 — {c.reasoning}")
+            if judge.suggestions:
+                judge_lines.append("")
+                judge_lines.append("Judge Suggestions:")
+                for s in judge.suggestions:
+                    judge_lines.append(f"  - {s}")
+            judge_text = "\n".join(judge_lines)
+
+        content = _truncate_content(skill_content)
+
+        parts = [
+            "Optimize this SKILL.md file.\n",
+            f"Current score: {report.quality_score}/100 ({report.checks_failed} failing checks)\n",
+            f"--- Failing Checks ---\n{failures_text}\n",
+        ]
+        if judge_text:
+            parts.append(f"--- LLM Judge Feedback ---\n{judge_text}\n")
+        parts.append(f"--- Current SKILL.md ---\n{content}")
+
+        return "\n".join(parts)
 
     def _evaluate(
         self,
@@ -147,21 +260,8 @@ class SkillOptimizer:
         Returns:
             Formatted user message for the API call.
         """
-        # Collect failing checks
-        failures: list[str] = []
-        for result in report.results:
-            if not result.passed:
-                line = f"- [{result.check_id}] (severity: {result.severity.value}) {result.message}"
-                if result.fix:
-                    line += f"\n  Fix: {result.fix}"
-                failures.append(line)
-
-        failures_text = "\n".join(failures) if failures else "No failing checks."
-
-        # Truncate body if extremely large
-        content = skill_content[:MAX_BODY_CHARS]
-        if len(skill_content) > MAX_BODY_CHARS:
-            content += "\n\n[... content truncated ...]"
+        failures_text = _format_failures(report.results)
+        content = _truncate_content(skill_content)
 
         return (
             f"Optimize this SKILL.md file.\n\n"

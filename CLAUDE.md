@@ -55,19 +55,21 @@ ruff check src/ && ruff format src/
 
 ## Critical Architecture Notes
 
-- **Two check systems**: behavioral (`@register_check` classes in `structure.py`, `naming.py`, `content.py`) and schema-based (`FieldRule` in `schema.py` — append to add a check, no class needed). See ARCHITECTURE.md for full details.
+- **Two check systems**: behavioral (`@register_check` classes in `structure.py`, `naming.py`, `content.py`, `security.py`) and schema-based (`FieldRule` in `schema.py` — append to add a check, no class needed). Per-file counts: structure:9, schema:9, content:13, security:5, naming:1. Dimension counts differ (checks can map to any dimension). See ARCHITECTURE.md for full details.
 - **Adding a schema check**: append a `FieldRule` to `FRONTMATTER_SCHEMA` list in `schema.py` — no class needed. The `_make_schema_check()` factory auto-generates a registered class per rule.
 - **Side-effect registration**: `StaticEvaluator.__init__()` imports check modules (`content`, `naming`, `schema`, `security`, `structure`) to trigger `@register_check` decorators. All checks must be registered before `registry.get_all()` is called.
 - **Sync requirement**: `SPEC_FRONTMATTER_FIELDS` in `structure.py` must stay in sync with `FRONTMATTER_SCHEMA` in `schema.py`.
 - **Scoring**: Weighted across 5 dimensions (Structure, Naming, Description, Content, Execution) by severity (HIGH > MEDIUM > LOW). Execution is trace-based (`tracechecks/`) and scored separately. See `scoring.py` for exact weights.
 - **Security checks**: `security.py` has a single `SecurityScanCheck` class that registers 5 separate checks (injection, evaluator, unicode, yaml, size) via dynamic class creation — same pattern as schema checks.
 - **LLM config**: `core/llm.py` defines the default model (`claude-haiku-4-5-20251001`), pricing table, `GenerationUsage` class, and the `LLMProvider` abstraction (Anthropic, OpenAI, Gemini). Model resolution: `--model` flag > `SKLAB_MODEL` env var > default. Provider is auto-detected from model ID prefix (`gpt-*`/`o3-*` → OpenAI, `gemini-*` → Gemini, else Anthropic). When adding new models, update `_PRICING` dict in `core/llm.py`.
-- **Optimizer**: `optimizer/optimizer.py` (SkillOptimizer) + `optimizer/optimize_skill.md` (system prompt). Uses the LLMProvider abstraction + same model resolution as `generate`.
+- **Optimizer**: `optimizer/optimizer.py` (SkillOptimizer) + `optimizer/optimize_skill.md` (system prompt). Uses the LLMProvider abstraction + same model resolution as `generate`. `optimize_from_history()` reads eval history instead of running its own evaluation — sees both static failures AND judge feedback.
+- **Eval history**: `core/eval_history.py` persists full evaluation results (static + judge) to `.sklab/evals/{timestamp}.json`. Capped at 20 files with automatic pruning. Timestamps are UTC-normalized for consistent lexicographic ordering. The optimizer reads the latest eval file via `load_latest_eval()`.
 - **LLM-as-judge**: `judge/judge.py` (SkillJudge) + `judge/rubric.md` (system prompt with 8-criterion rubric). Integrated into `sklab evaluate` — runs automatically when API key is available. `--skip-review` to disable, `--model` to choose provider. Scores: Activation Quality (4 criteria) + Instruction Quality (4 criteria), each 0-4, normalized to 0-100%. Verdict bands: 90+ Excellent, 75-89 Good, 50-74 Needs work, <50 Poor. Results persisted to `.sklab/config.yaml` as `last-review`.
 - **LLM SDKs**: `anthropic`, `openai`, and `google-generativeai` are all required dependencies. API key env vars: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`.
 - **`.env` support**: `python-dotenv` loads `.env` from CWD at CLI startup (`cli.main()`). Real env vars override `.env` values (`override=False`). The `pyproject.toml` entry point is `cli:main` (not `cli:app`) so dotenv loads before Typer dispatch.
 - **Test fixtures**: `tests/fixtures/skills/` — each subdirectory is a mock skill with `SKILL.md`. Shared pytest fixtures (`fixtures_dir`, `skills_dir`, `valid_skill_path`, `evaluator`) are in `tests/conftest.py`.
 - **Test helper**: `_get_check(check_id)` in `test_checks.py` retrieves schema-based checks from the registry; behavioral checks are imported directly as classes.
+- **Eval history files**: `.sklab/evals/{timestamp}.json` (written by `sklab evaluate`, read by `sklab optimize`).
 - **Trigger test files**: `.sklab/tests/triggers.yaml`.
 - **Check count**: When adding/removing checks, update the "37 checks" count in this file's opening line and run `/update-counts` to sync docs and tests.
 

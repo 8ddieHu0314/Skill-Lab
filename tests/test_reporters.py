@@ -11,6 +11,8 @@ from skill_lab.core.models import (
     CheckResult,
     EvalDimension,
     EvaluationReport,
+    JudgeCriterion,
+    JudgeResult,
     Severity,
     TraceCheckResult,
     TraceReport,
@@ -18,6 +20,8 @@ from skill_lab.core.models import (
 from skill_lab.reporters.console_reporter import (
     SEVERITY_STYLES,
     ConsoleReporter,
+    _combined_score,
+    _verdict,
 )
 from skill_lab.reporters.json_reporter import SCHEMA_VERSION, JsonReporter
 
@@ -395,6 +399,187 @@ class TestConsoleReporterReport:
         reporter, buf = self._reporter(verbose=True)
         reporter.report(report)
         assert "passing checks hidden" not in buf.getvalue()
+
+
+# ─── Combined score & verdict helpers ─────────────────────────────────────────
+
+
+class TestCombinedScore:
+    def test_static_only(self) -> None:
+        assert _combined_score(80.0, None) == 80.0
+
+    def test_blended(self) -> None:
+        # 80 * 0.6 + 50 * 0.4 = 48 + 20 = 68
+        assert _combined_score(80.0, 50.0) == pytest.approx(68.0)
+
+    def test_perfect(self) -> None:
+        assert _combined_score(100.0, 100.0) == pytest.approx(100.0)
+
+
+class TestVerdict:
+    def test_excellent(self) -> None:
+        assert _verdict(95.0) == "Excellent"
+
+    def test_good(self) -> None:
+        assert _verdict(80.0) == "Good"
+
+    def test_needs_work(self) -> None:
+        assert _verdict(60.0) == "Needs work"
+
+    def test_poor(self) -> None:
+        assert _verdict(30.0) == "Poor"
+
+
+# ─── ConsoleReporter.report_evaluation() ─────────────────────────────────────
+
+
+def _make_judge_result(
+    judge_score: float = 68.8,
+    activation_score: float = 62.5,
+    instruction_score: float = 75.0,
+) -> JudgeResult:
+    criteria = (
+        JudgeCriterion(
+            id="intent_clarity",
+            name="Intent Clarity",
+            axis="activation",
+            score=3,
+            reasoning="Clear.",
+        ),
+        JudgeCriterion(
+            id="domain_expertise",
+            name="Domain Expertise",
+            axis="instruction",
+            score=3,
+            reasoning="Good expertise.",
+        ),
+    )
+    return JudgeResult(
+        criteria=criteria,
+        activation_score=activation_score,
+        instruction_score=instruction_score,
+        judge_score=judge_score,
+        verdict="Needs work",
+        suggestions=("Add triggers.", "Improve errors."),
+    )
+
+
+class TestReportEvaluation:
+    def _reporter(
+        self, verbose: bool = False,
+    ) -> tuple[ConsoleReporter, io.StringIO]:
+        r = ConsoleReporter(verbose=verbose)
+        return _capture(r)
+
+    # Header & mode
+    def test_header_shows_hybrid_mode(self) -> None:
+        reporter, buf = self._reporter()
+        reporter.report_evaluation(
+            _make_eval_report(), judge_result=_make_judge_result(),
+        )
+        assert "Static Analysis + LLM Review" in buf.getvalue()
+
+    def test_header_shows_static_mode(self) -> None:
+        reporter, buf = self._reporter()
+        reporter.report_evaluation(_make_eval_report())
+        out = buf.getvalue()
+        assert "Static Analysis" in out
+        assert "LLM Review" not in out.split("Overall Score")[0]
+
+    def test_title_is_skill_evaluation(self) -> None:
+        reporter, buf = self._reporter()
+        reporter.report_evaluation(_make_eval_report())
+        assert "Skill Evaluation" in buf.getvalue()
+
+    # Overall score tree
+    def test_overall_score_shown(self) -> None:
+        reporter, buf = self._reporter()
+        reporter.report_evaluation(
+            _make_eval_report(score=80.0),
+            judge_result=_make_judge_result(judge_score=50.0),
+        )
+        out = buf.getvalue()
+        # 80*0.6 + 50*0.4 = 68.0
+        assert "68.0/100" in out
+        assert "Overall" in out
+
+    def test_overall_equals_static_when_no_judge(self) -> None:
+        reporter, buf = self._reporter()
+        reporter.report_evaluation(_make_eval_report(score=91.2))
+        assert "91.2/100" in buf.getvalue()
+
+    def test_static_score_in_tree(self) -> None:
+        reporter, buf = self._reporter()
+        reporter.report_evaluation(
+            _make_eval_report(score=85.0),
+            judge_result=_make_judge_result(),
+        )
+        assert "85.0/100" in buf.getvalue()
+
+    def test_judge_score_in_tree(self) -> None:
+        reporter, buf = self._reporter()
+        reporter.report_evaluation(
+            _make_eval_report(),
+            judge_result=_make_judge_result(judge_score=72.5),
+        )
+        assert "72.5/100" in buf.getvalue()
+
+    def test_not_available_when_no_judge(self) -> None:
+        reporter, buf = self._reporter()
+        reporter.report_evaluation(_make_eval_report())
+        assert "not available" in buf.getvalue()
+
+    # Sections
+    def test_static_section_present(self) -> None:
+        reporter, buf = self._reporter()
+        reporter.report_evaluation(_make_eval_report())
+        # Rule title appears in output
+        assert "Static Analysis" in buf.getvalue()
+
+    def test_judge_section_present_when_hybrid(self) -> None:
+        reporter, buf = self._reporter()
+        reporter.report_evaluation(
+            _make_eval_report(), judge_result=_make_judge_result(),
+        )
+        assert "LLM Review" in buf.getvalue()
+
+    def test_judge_section_absent_when_static_only(self) -> None:
+        reporter, buf = self._reporter()
+        reporter.report_evaluation(_make_eval_report())
+        out = buf.getvalue()
+        # "LLM Review" appears once in the score tree ("not available"),
+        # but not as a section rule with axis tables
+        assert "Activation Quality" not in out
+        assert "Instruction Quality" not in out
+
+    def test_suggestions_shown(self) -> None:
+        reporter, buf = self._reporter()
+        reporter.report_evaluation(
+            _make_eval_report(), judge_result=_make_judge_result(),
+        )
+        assert "Add triggers." in buf.getvalue()
+        assert "Improve errors." in buf.getvalue()
+
+    def test_dimension_summary_shown(self) -> None:
+        reporter, buf = self._reporter()
+        reporter.report_evaluation(_make_eval_report())
+        assert "Summary by Dimension" in buf.getvalue()
+
+    def test_failed_checks_table_shown(self) -> None:
+        results = [
+            _make_check_result(passed=False, message="Something broke"),
+        ]
+        reporter, buf = self._reporter()
+        reporter.report_evaluation(
+            _make_eval_report(results=results),
+        )
+        assert "Something broke" in buf.getvalue()
+
+    # No old labels
+    def test_no_quality_score_label(self) -> None:
+        reporter, buf = self._reporter()
+        reporter.report_evaluation(_make_eval_report())
+        assert "Quality Score" not in buf.getvalue()
 
 
 # ─── ConsoleReporter.report_trace() ───────────────────────────────────────────

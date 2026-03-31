@@ -7,7 +7,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from skill_lab.commands.optimize import _build_diff_text
+from skill_lab.commands.optimize import _build_diff_text, _increment_patch
+from skill_lab.core.eval_history import save_eval
 from skill_lab.core.exceptions import GenerationError
 from skill_lab.core.llm import LLMResponse
 from skill_lab.optimizer.optimizer import (
@@ -15,6 +16,7 @@ from skill_lab.optimizer.optimizer import (
     OptimizationResult,
     SkillOptimizer,
 )
+from tests.conftest import make_eval_record, make_judge, make_report
 
 # Sample optimized SKILL.md that a model might return
 OPTIMIZED_SKILL_MD = """\
@@ -298,6 +300,11 @@ class TestBuildDiffText:
         assert "10 -baz" in result
 
 
+def _seed_eval_history(skill_dir: Path) -> None:
+    """Write a minimal eval history so optimize finds it."""
+    save_eval(skill_dir, make_report(score=65.0))
+
+
 class TestOptimizeCommand:
     """Tests for the CLI optimize command."""
 
@@ -310,6 +317,7 @@ class TestOptimizeCommand:
         skill_dir = tmp_path / "my-skill"
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text("---\nname: my-skill\ndescription: test\n---\n")
+        _seed_eval_history(skill_dir)
 
         runner = CliRunner()
         result = runner.invoke(app, ["optimize", str(skill_dir)], env={"ANTHROPIC_API_KEY": ""})
@@ -325,6 +333,7 @@ class TestOptimizeCommand:
         skill_dir = tmp_path / "my-skill"
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text("---\nname: my-skill\ndescription: test\n---\n")
+        _seed_eval_history(skill_dir)
 
         runner = CliRunner()
         result = runner.invoke(
@@ -359,3 +368,117 @@ class TestOptimizeCommand:
         result = runner.invoke(app, ["optimize", str(empty_dir)])
         assert result.exit_code == 1
         assert "No SKILL.md" in result.output
+
+    def test_no_eval_history_exits_with_error(self, tmp_path: Path) -> None:
+        """Test error when no eval history exists."""
+        from typer.testing import CliRunner
+
+        from skill_lab.cli import app
+
+        skill_dir = tmp_path / "my-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text("---\nname: my-skill\ndescription: test\n---\n")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            app,
+            ["optimize", str(skill_dir)],
+            env={"ANTHROPIC_API_KEY": "test-key"},
+        )
+        assert result.exit_code == 1
+        assert "No evaluation results found" in result.output
+
+
+# =============================================================================
+# optimize_from_history tests
+# =============================================================================
+
+
+class TestOptimizeFromHistory:
+    """Tests for optimize_from_history()."""
+
+    def test_returns_result(self, optimizer: SkillOptimizer, valid_skill_path: Path) -> None:
+        record = make_eval_record()
+        result = optimizer.optimize_from_history(valid_skill_path, record)
+        assert isinstance(result, OptimizationResult)
+        assert result.original_content != ""
+        assert result.optimized_content.startswith("---")
+
+    def test_original_score_from_history(
+        self, optimizer: SkillOptimizer, valid_skill_path: Path
+    ) -> None:
+        record = make_eval_record(score=42.5)
+        result = optimizer.optimize_from_history(valid_skill_path, record)
+        assert result.original_score == 42.5
+
+    def test_re_evaluate_runs_fresh(
+        self, optimizer: SkillOptimizer, valid_skill_path: Path
+    ) -> None:
+        record = make_eval_record()
+        result = optimizer.optimize_from_history(valid_skill_path, record)
+        # optimized_score comes from fresh StaticEvaluator, not from history
+        assert isinstance(result.optimized_score, float)
+        assert 0 <= result.optimized_score <= 100
+
+    def test_missing_skill_md(self, optimizer: SkillOptimizer, tmp_path: Path) -> None:
+        empty_dir = tmp_path / "no-skill"
+        empty_dir.mkdir()
+        record = make_eval_record()
+        with pytest.raises(GenerationError, match="SKILL.md not found"):
+            optimizer.optimize_from_history(empty_dir, record)
+
+
+class TestBuildPromptFromHistory:
+    """Tests for _build_prompt_from_history()."""
+
+    def test_includes_failing_checks(
+        self, optimizer: SkillOptimizer, valid_skill_path: Path
+    ) -> None:
+        record = make_eval_record()
+        content = (valid_skill_path / "SKILL.md").read_text()
+        prompt = optimizer._build_prompt_from_history(content, record)
+        assert "content.token-budget" in prompt
+        assert "Fix:" in prompt
+
+    def test_includes_judge_feedback(
+        self, optimizer: SkillOptimizer, valid_skill_path: Path
+    ) -> None:
+        judge = make_judge(score=43.8)
+        record = make_eval_record(judge=judge)
+        content = (valid_skill_path / "SKILL.md").read_text()
+        prompt = optimizer._build_prompt_from_history(content, record)
+        assert "--- LLM Judge Feedback ---" in prompt
+        assert "Intent Clarity" in prompt
+        assert "Clear description." in prompt
+        assert "Add trigger phrases." in prompt
+
+    def test_omits_judge_when_null(self, optimizer: SkillOptimizer, valid_skill_path: Path) -> None:
+        record = make_eval_record(judge=None)
+        content = (valid_skill_path / "SKILL.md").read_text()
+        prompt = optimizer._build_prompt_from_history(content, record)
+        assert "LLM Judge Feedback" not in prompt
+
+    def test_includes_score_and_content(
+        self, optimizer: SkillOptimizer, valid_skill_path: Path
+    ) -> None:
+        record = make_eval_record(score=65.0)
+        content = (valid_skill_path / "SKILL.md").read_text()
+        prompt = optimizer._build_prompt_from_history(content, record)
+        assert "65.0/100" in prompt
+        assert "--- Current SKILL.md ---" in prompt
+
+
+class TestIncrementPatch:
+    """Tests for _increment_patch()."""
+
+    def test_standard_semver(self) -> None:
+        assert _increment_patch("0.2.0") == "0.2.1"
+
+    def test_two_part_version(self) -> None:
+        assert _increment_patch("1.0") == "1.1"
+
+    def test_already_patched(self) -> None:
+        assert _increment_patch("1.2.3") == "1.2.4"
+
+    def test_prerelease_suffix(self) -> None:
+        assert _increment_patch("1.0.0-beta") == "1.0.0-beta.1"
