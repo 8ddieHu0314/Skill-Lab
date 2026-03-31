@@ -11,13 +11,12 @@ from skill_lab.commands.optimize import _build_diff_text, _increment_patch
 from skill_lab.core.eval_history import save_eval
 from skill_lab.core.exceptions import GenerationError
 from skill_lab.core.llm import LLMResponse
-from skill_lab.core.models import JudgeCriterion, JudgeResult
 from skill_lab.optimizer.optimizer import (
     MAX_BODY_CHARS,
     OptimizationResult,
     SkillOptimizer,
 )
-from tests.conftest import make_eval_record, make_report
+from tests.conftest import make_eval_record, make_judge, make_report
 
 # Sample optimized SKILL.md that a model might return
 OPTIMIZED_SKILL_MD = """\
@@ -395,34 +394,6 @@ class TestOptimizeCommand:
 # =============================================================================
 
 
-def _make_judge_result() -> JudgeResult:
-    """Build a minimal JudgeResult for testing."""
-    criteria = (
-        JudgeCriterion(
-            id="intent_clarity",
-            name="Intent Clarity",
-            axis="activation",
-            score=2,
-            reasoning="Description is vague.",
-        ),
-        JudgeCriterion(
-            id="trigger_coverage",
-            name="Trigger Coverage",
-            axis="activation",
-            score=1,
-            reasoning="Missing implicit triggers.",
-        ),
-    )
-    return JudgeResult(
-        criteria=criteria,
-        activation_score=37.5,
-        instruction_score=50.0,
-        judge_score=43.8,
-        verdict="Poor",
-        suggestions=("Broaden trigger phrases.", "Add error handling."),
-    )
-
-
 class TestOptimizeFromHistory:
     """Tests for optimize_from_history()."""
 
@@ -472,14 +443,14 @@ class TestBuildPromptFromHistory:
     def test_includes_judge_feedback(
         self, optimizer: SkillOptimizer, valid_skill_path: Path
     ) -> None:
-        judge = _make_judge_result()
+        judge = make_judge(score=43.8)
         record = make_eval_record(judge=judge)
         content = (valid_skill_path / "SKILL.md").read_text()
         prompt = optimizer._build_prompt_from_history(content, record)
         assert "--- LLM Judge Feedback ---" in prompt
         assert "Intent Clarity" in prompt
-        assert "Description is vague." in prompt
-        assert "Broaden trigger phrases." in prompt
+        assert "Clear description." in prompt
+        assert "Add trigger phrases." in prompt
 
     def test_omits_judge_when_null(self, optimizer: SkillOptimizer, valid_skill_path: Path) -> None:
         record = make_eval_record(judge=None)
@@ -508,3 +479,6 @@ class TestIncrementPatch:
 
     def test_already_patched(self) -> None:
         assert _increment_patch("1.2.3") == "1.2.4"
+
+    def test_prerelease_suffix(self) -> None:
+        assert _increment_patch("1.0.0-beta") == "1.0.0-beta.1"

@@ -2,6 +2,7 @@
 
 import logging
 import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated
@@ -358,6 +359,8 @@ def _save_eval_history(
 
 def _offer_optimize(skill_path: Path, model: str | None) -> None:
     """Prompt user to run optimize if score is below threshold."""
+    if not sys.stdin.isatty():
+        return
     console.print()
     if typer.confirm("Score below 75. Optimize?", default=False):
         from skill_lab.commands.optimize import _run_optimize_from_eval

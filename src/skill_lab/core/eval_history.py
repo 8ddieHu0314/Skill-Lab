@@ -101,12 +101,13 @@ def load_latest_eval(skill_path: Path) -> EvalRecord | None:
     """Load the most recent eval from .sklab/evals/.
 
     Returns None if no eval files exist or the directory is missing.
+    Uses file modification time (not filename) to determine the latest file.
     """
     evals_dir = skill_path / EVALS_DIR
     if not evals_dir.is_dir():
         return None
 
-    latest = max(evals_dir.glob("*.json"), default=None)
+    latest = max(evals_dir.glob("*.json"), key=lambda f: f.stat().st_mtime, default=None)
     if latest is None:
         return None
 

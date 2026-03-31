@@ -3,6 +3,7 @@
 import difflib
 import os
 import re
+import sys
 from dataclasses import replace
 from pathlib import Path
 from typing import Annotated
@@ -68,17 +69,29 @@ def _build_diff_text(raw_diff: str) -> Text:
 def _increment_patch(version: str) -> str:
     """Increment the patch component of a semver string.
 
+    Falls back to appending '.1' if the last component is non-numeric
+    (e.g. pre-release suffixes like "1.0.0-beta").
+
     Examples:
         "0.2.0" -> "0.2.1"
         "1.0" -> "1.1"
+        "1.0.0-beta" -> "1.0.0-beta.1"
     """
     parts = version.split(".")
-    parts[-1] = str(int(parts[-1]) + 1)
+    try:
+        parts[-1] = str(int(parts[-1]) + 1)
+    except ValueError:
+        parts.append("1")
     return ".".join(parts)
 
 
-def _prompt_version_bump(skill_path: Path) -> None:
-    """Ask user if they want to bump the skill version after optimization."""
+def _prompt_version_bump(skill_path: Path, *, auto: bool = False) -> None:
+    """Ask user if they want to bump the skill version after optimization.
+
+    Skips the prompt entirely in --auto mode or non-TTY environments.
+    """
+    if auto or not sys.stdin.isatty():
+        return
     config = load_config(skill_path)
     current = config.version or "0.0.0"
     console.print(f"\n[dim]Current version: {current}[/dim]")
@@ -175,7 +188,7 @@ def _show_result_and_apply(
 
         # Persist resolved model and prompt version bump
         update_model(skill_path, resolved_model)
-        _prompt_version_bump(skill_path)
+        _prompt_version_bump(skill_path, auto=auto)
     else:
         console.print("[dim]Changes discarded.[/dim]")
         push_telemetry_extra(applied=False)
@@ -216,8 +229,8 @@ def _run_optimize_from_eval(
         )
         raise typer.Exit(code=1)
 
-    # Show what eval we're using
-    eval_date = eval_record.report.timestamp[:19]
+    # Show what eval we're using (strip timezone suffix for readability)
+    eval_date = eval_record.report.timestamp.replace("T", " ")[:19]
     eval_info = f"[dim]Using evaluation from {eval_date} (static: {eval_record.report.quality_score:.0f}/100"
     if eval_record.judge is not None:
         eval_info += f", judge: {eval_record.judge.judge_score:.0f}/100"
