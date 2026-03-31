@@ -18,7 +18,7 @@ class TestEvaluateCommand:
     def test_evaluate_valid_skill(self, valid_skill_path: Path):
         result = runner.invoke(app, ["evaluate", str(valid_skill_path)])
         assert result.exit_code == 0
-        assert "Quality Score" in result.stdout
+        assert "Static Analysis" in result.stdout
 
     def test_evaluate_invalid_skill(self, invalid_skill_path: Path):
         result = runner.invoke(app, ["evaluate", str(invalid_skill_path)])

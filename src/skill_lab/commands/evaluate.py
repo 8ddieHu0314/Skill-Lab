@@ -271,10 +271,10 @@ def evaluate(
             )
     else:
         console_reporter = ConsoleReporter(verbose=verbose)
-        console_reporter.report(report)
-        if judge_result is not None:
-            console_reporter.report_judge(judge_result, usage=judge_usage)
-        elif missing_env_var:
+        console_reporter.report_evaluation(
+            report, judge_result=judge_result, judge_usage=judge_usage,
+        )
+        if judge_result is None and missing_env_var:
             _print_api_key_hint(missing_env_var)
 
     # Chain into optimization: --optimize flag (unconditional) or interactive prompt (score < 90)
