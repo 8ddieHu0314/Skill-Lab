@@ -180,6 +180,13 @@ def evaluate(
             ),
         ),
     ] = None,
+    optimize: Annotated[
+        bool,
+        typer.Option(
+            "--optimize",
+            help="Automatically run optimization after evaluation (skips the interactive prompt)",
+        ),
+    ] = False,
 ) -> None:
     """Evaluate a skill: static checks + LLM quality review.
 
@@ -270,8 +277,10 @@ def evaluate(
         elif missing_env_var:
             _print_api_key_hint(missing_env_var)
 
-    # Offer to optimize if score is low (interactive console only)
-    if (
+    # Chain into optimization: --optimize flag (unconditional) or interactive prompt (score < 75)
+    if optimize and not all_skills and not repo:
+        _run_optimize(skill_path, model)
+    elif (
         format == OutputFormat.console
         and not all_skills
         and not repo
@@ -357,15 +366,20 @@ def _save_eval_history(
         logger.debug("Failed to save eval history", exc_info=True)
 
 
+def _run_optimize(skill_path: Path, model: str | None) -> None:
+    """Chain into optimization unconditionally (--optimize flag)."""
+    from skill_lab.commands.optimize import _run_optimize_from_eval
+
+    _run_optimize_from_eval(skill_path, model)
+
+
 def _offer_optimize(skill_path: Path, model: str | None) -> None:
     """Prompt user to run optimize if score is below threshold."""
     if not sys.stdin.isatty():
         return
     console.print()
     if typer.confirm("Score below 75. Optimize?", default=False):
-        from skill_lab.commands.optimize import _run_optimize_from_eval
-
-        _run_optimize_from_eval(skill_path, model)
+        _run_optimize(skill_path, model)
 
 
 def _run_bulk_check(roots: list[Path], spec_only: bool) -> None:

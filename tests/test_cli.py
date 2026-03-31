@@ -324,6 +324,40 @@ class TestEvaluateOptimizePrompt:
         assert "Optimize?" not in result.stdout
 
 
+class TestEvaluateOptimizeFlag:
+    """Tests for the --optimize flag on evaluate."""
+
+    def test_optimize_flag_rejected_with_all(self) -> None:
+        """--optimize with --all should not run optimization."""
+        result = runner.invoke(
+            app, ["evaluate", "--all", "--optimize", "--skip-review"]
+        )
+        # Should not contain optimize output (optimize is suppressed in bulk mode)
+        assert "Using evaluation from" not in result.stdout
+
+    def test_optimize_flag_rejected_with_repo(self) -> None:
+        """--optimize with --repo should not run optimization."""
+        result = runner.invoke(
+            app, ["evaluate", "--repo", "--optimize", "--skip-review"]
+        )
+        assert "Using evaluation from" not in result.stdout
+
+    def test_optimize_flag_no_api_key(self, tmp_path: Path) -> None:
+        """--optimize without an API key should show the key error."""
+        import shutil
+
+        src = Path(__file__).parent / "fixtures" / "skills" / "creating-reports"
+        skill_dir = tmp_path / "creating-reports"
+        shutil.copytree(src, skill_dir)
+
+        result = runner.invoke(
+            app,
+            ["evaluate", str(skill_dir), "--optimize", "--skip-review"],
+            env={"ANTHROPIC_API_KEY": ""},
+        )
+        assert "environment variable is not set" in result.output
+
+
 class TestEvalHistoryPersistence:
     """Tests that evaluate writes .sklab/evals/ files."""
 
