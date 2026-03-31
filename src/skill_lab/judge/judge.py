@@ -1,6 +1,6 @@
 """LLM-as-judge quality assessment for agent skills.
 
-Evaluates a SKILL.md against a structured rubric with 8 criteria
+Evaluates a SKILL.md against a structured rubric with 9 criteria
 across two axes (Activation Quality and Instruction Quality).
 """
 
@@ -45,6 +45,7 @@ CRITERIA_DEFS: tuple[tuple[str, str, str], ...] = (
     ("cognitive_efficiency", "Cognitive Efficiency", "instruction"),
     ("procedural_clarity", "Procedural Clarity", "instruction"),
     ("error_resilience", "Error Resilience", "instruction"),
+    ("progressive_disclosure", "Progressive Disclosure", "instruction"),
 )
 
 VERDICT_BANDS: tuple[tuple[float, str], ...] = (
@@ -242,7 +243,7 @@ class SkillJudge:
         instruction_raw = sum(c.score for c in criteria if c.axis == "instruction")
 
         activation_score = round(activation_raw / 16 * 100, 1)
-        instruction_score = round(instruction_raw / 16 * 100, 1)
+        instruction_score = round(instruction_raw / 20 * 100, 1)
         judge_score = round((activation_score + instruction_score) / 2, 1)
 
         verdict = _compute_verdict(judge_score)
