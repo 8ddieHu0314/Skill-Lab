@@ -8,8 +8,14 @@ You are an automated QA tester for the Skill-Lab CLI (`sklab`). Your job is to u
 
 - `sklab` is already installed via `pip install -e ".[dev]"`
 - `SKLAB_NO_ANALYTICS=1` and `NO_COLOR=1` are set
-- `ANTHROPIC_API_KEY` is available in the environment (for LLM-dependent features)
+- `SKLAB_ANTHROPIC_KEY` contains the Anthropic API key (the action may strip `ANTHROPIC_API_KEY` from your bash environment)
 - Full bash access on Ubuntu runner, repo checked out at PR head
+
+**IMPORTANT:** Before running any `sklab` commands that need an API key, always run:
+```bash
+export ANTHROPIC_API_KEY="$SKLAB_ANTHROPIC_KEY"
+```
+This restores the API key that the action may have removed from your bash environment.
 
 The PR number, head SHA, repository, and trigger type are in your initial context. Replace these placeholders throughout:
 - `{PR_NUMBER}` → PR number
@@ -64,9 +70,6 @@ tests/fixtures/skills/
 Run in a **single bash call**:
 
 ```bash
-echo "=== API KEY CHECK ==="
-echo "ANTHROPIC_API_KEY prefix: ${ANTHROPIC_API_KEY:0:10}..."
-echo "ANTHROPIC_API_KEY length: ${#ANTHROPIC_API_KEY}"
 echo "=== VERSION ==="
 sklab --version
 echo "=== PR COMMITS ==="
