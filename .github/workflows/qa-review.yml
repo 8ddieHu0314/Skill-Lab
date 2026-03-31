@@ -103,6 +103,24 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
+      - name: Verify API key
+        if: steps.prefilter.outputs.should_continue == 'true'
+        run: |
+          python -c "
+          import os
+          key = os.environ.get('ANTHROPIC_API_KEY', '')
+          print(f'Key present: {bool(key)}')
+          print(f'Key length: {len(key)}')
+          print(f'Key prefix: {key[:10]}...' if key else 'Key: empty')
+          from anthropic import Anthropic
+          try:
+              c = Anthropic()
+              r = c.messages.create(model='claude-haiku-4-5-20251001', max_tokens=5, messages=[{'role':'user','content':'hi'}])
+              print(f'API call succeeded: {r.content[0].text}')
+          except Exception as e:
+              print(f'API call failed: {type(e).__name__}: {e}')
+          "
+
       - name: Run QA via Claude
         if: steps.prefilter.outputs.should_continue == 'true'
         uses: anthropics/claude-code-action@v1
