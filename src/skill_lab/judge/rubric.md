@@ -73,13 +73,13 @@ Does the body contain real, specific knowledge the agent wouldn't have on its ow
 
 ### 6. cognitive_efficiency
 
-Does the body spend its token budget wisely — adding what the agent lacks, omitting what it already knows?
+Does the body spend its token budget wisely — providing a coherent, moderately-detailed unit of knowledge the agent actually needs?
 
-- **4**: Every section earns its token cost — no explanations of basics, heavy content properly externalized to references, clear load conditions for on-demand files
-- **3**: Mostly efficient — focuses on what the agent wouldn't know, with minor redundancy
-- **2**: Some redundant explanations alongside useful content
-- **1**: Wastes significant space explaining concepts the agent already knows (what REST is, how HTTP works, what a database migration does)
-- **0**: Body is mostly noise or padding
+- **4**: Single focused purpose; every section earns its tokens — no basics the agent already knows, no exhaustive documentation where concise steps + a working example would suffice; skill is neither so narrow it should be merged nor so broad it loses focus
+- **3**: Mostly efficient and well-scoped — focuses on what the agent wouldn't know, with minor redundancy or slight over-breadth
+- **2**: Some redundant explanations or unfocused scope — mixes useful domain content with generic filler, or tries to cover too many concerns in one skill
+- **1**: Wastes significant space on basics the agent already knows, or is so sprawling it reads like a knowledge dump rather than a targeted skill
+- **0**: Body is mostly noise, padding, or attempts to cover everything loosely with no coherent focus
 
 ### 7. procedural_clarity
 
@@ -101,6 +101,16 @@ Does the body anticipate failure modes and guide recovery?
 - **1**: Generic error advice ("handle errors appropriately")
 - **0**: No error handling guidance
 
+### 9. progressive_disclosure
+
+Does the skill keep its SKILL.md focused on core instructions, externalizing heavy reference material to separate files with clear load conditions?
+
+- **4**: SKILL.md is lean core instructions (under ~500 lines); dense reference material lives in `references/` or similar with explicit conditional load triggers ("Read references/X.md when Y"), OR the skill is compact enough that no externalization is needed
+- **3**: Mostly lean — some secondary content could be externalized but the body stays under a reasonable length without major bloat
+- **2**: Noticeable bloat from inlined reference material (API tables, long examples, exhaustive lists) that would be better in separate files with load conditions
+- **1**: Monolithic — everything crammed into one file well beyond 500 lines with no structural separation; the agent must process large amounts of rarely-needed content on every invocation
+- **0**: Massively oversized SKILL.md with no attempt at content organization or progressive loading
+
 ## Output Format
 
 Output ONLY valid JSON. No markdown fences, no explanations, no commentary before or after.
@@ -115,7 +125,8 @@ Output ONLY valid JSON. No markdown fences, no explanations, no commentary befor
     {"id": "domain_expertise", "score": <0-4>, "reasoning": "<1-2 sentences>"},
     {"id": "cognitive_efficiency", "score": <0-4>, "reasoning": "<1-2 sentences>"},
     {"id": "procedural_clarity", "score": <0-4>, "reasoning": "<1-2 sentences>"},
-    {"id": "error_resilience", "score": <0-4>, "reasoning": "<1-2 sentences>"}
+    {"id": "error_resilience", "score": <0-4>, "reasoning": "<1-2 sentences>"},
+    {"id": "progressive_disclosure", "score": <0-4>, "reasoning": "<1-2 sentences>"}
   ],
   "suggestions": [
     "<specific, actionable improvement 1>",
@@ -125,7 +136,7 @@ Output ONLY valid JSON. No markdown fences, no explanations, no commentary befor
 ```
 
 Rules:
-- All 8 criteria MUST be present in the `criteria` array, in the order shown
+- All 9 criteria MUST be present in the `criteria` array, in the order shown
 - Scores MUST be integers 0-4
 - Reasoning MUST reference specific content (or lack thereof) from the skill
 - Suggestions should be 2-3 concrete, actionable improvements (not generic advice)

@@ -1,4 +1,4 @@
-"""Info, prompt, and eval-trace commands."""
+"""Info and prompt commands."""
 
 import contextlib
 import json as json_module
@@ -10,7 +10,6 @@ import typer
 from rich.panel import Panel
 
 from skill_lab.cli import (
-    OutputFormat,
     _resolve_skill_path,
     _with_telemetry,
     app,
@@ -18,9 +17,7 @@ from skill_lab.cli import (
 )
 from skill_lab.core.telemetry import push_telemetry_extra
 from skill_lab.core.tokens import estimate_tokens
-from skill_lab.evaluators.trace_evaluator import TraceEvaluator
 from skill_lab.parsers.skill_parser import parse_skill
-from skill_lab.reporters.console_reporter import ConsoleReporter
 
 
 @app.command("info")
@@ -214,82 +211,3 @@ def prompt(
             f"# {len(skills_data)} skill(s), ~{token_est} discovery tokens",
             file=sys.stderr,
         )
-
-
-@app.command("eval-trace", hidden=True)
-@_with_telemetry("eval-trace")
-def eval_trace(
-    skill_path: Annotated[
-        Path,
-        typer.Argument(
-            help="Path to the skill directory",
-            exists=True,
-            file_okay=False,
-            dir_okay=True,
-            resolve_path=True,
-        ),
-    ],
-    trace: Annotated[
-        Path,
-        typer.Option(
-            "--trace",
-            "-t",
-            help="Path to the JSONL trace file",
-            exists=True,
-            file_okay=True,
-            dir_okay=False,
-            resolve_path=True,
-        ),
-    ],
-    output: Annotated[
-        Path | None,
-        typer.Option(
-            "--output",
-            "-o",
-            help="Output file path for JSON report",
-        ),
-    ] = None,
-    format: Annotated[
-        OutputFormat,
-        typer.Option(
-            "--format",
-            "-f",
-            help="Output format",
-        ),
-    ] = OutputFormat.console,
-) -> None:
-    """Evaluate a trace against YAML-defined trace checks.
-
-    Runs checks defined in tests/trace_checks.yaml against the provided
-    execution trace file. Supports check types:
-    - command_presence: Verify specific commands were run
-    - file_creation: Check if files were created
-    - event_sequence: Verify commands in correct order
-    - loop_detection: Detect excessive command repetition
-    - efficiency: Check command count limits
-    """
-    try:
-        evaluator = TraceEvaluator()
-        report = evaluator.evaluate(skill_path, trace)
-    except FileNotFoundError as e:
-        console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(code=1) from None
-    except ValueError as e:
-        console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(code=1) from None
-
-    # Output results
-    if format == OutputFormat.json:
-        report_json = json_module.dumps(report.to_dict(), indent=2)
-        if output:
-            output.write_text(report_json)
-            console.print(f"Report written to: {output}")
-        else:
-            console.print(report_json, soft_wrap=True)
-    else:
-        # Use verbose=True to show all checks (trace checks are typically few)
-        trace_reporter = ConsoleReporter(verbose=True)
-        trace_reporter.report_trace(report)
-
-    if not report.overall_pass:
-        raise typer.Exit(code=1)

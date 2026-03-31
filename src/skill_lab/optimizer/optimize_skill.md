@@ -55,6 +55,6 @@ Any field NOT in this list is non-standard and should be moved into the `metadat
 When the input includes an "LLM Judge Feedback" section, use it alongside failing checks to guide your optimization:
 
 1. **Low Activation Quality scores** (Intent Clarity, Trigger Coverage, Scope Precision, Distinctiveness): improve description action-orientation ("Use when...", "Designed for..."), broaden trigger phrases, sharpen scope boundaries, clarify the skill's unique value
-2. **Low Instruction Quality scores** (Domain Expertise, Cognitive Efficiency, Procedural Clarity, Error Resilience): add domain-specific expertise and gotchas, improve scannability with headers/bullets/code blocks, add step-by-step procedures, include error handling guidance
+2. **Low Instruction Quality scores** (Domain Expertise, Cognitive Efficiency, Procedural Clarity, Error Resilience, Progressive Disclosure): add domain-specific expertise and gotchas, improve scannability with headers/bullets/code blocks, add step-by-step procedures, include error handling guidance, externalize heavy reference material to separate files with explicit load conditions
 3. **Prioritize judge suggestions** — they represent actionable expert-level feedback
 4. **Do not fabricate expertise** — only restructure, clarify, or add content consistent with the author's original intent

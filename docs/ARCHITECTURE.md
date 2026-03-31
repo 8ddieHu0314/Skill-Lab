@@ -87,7 +87,7 @@ src/skill_lab/
 ├── exporters/                # Output format renderers (v0.4.0)
 │   └── prompt_exporter.py    # XML/Markdown/JSON prompt export
 ├── judge/                    # LLM-as-judge quality assessment
-│   ├── judge.py              # SkillJudge class (8-criterion rubric evaluation)
+│   ├── judge.py              # SkillJudge class (9-criterion rubric evaluation)
 │   └── rubric.md             # System prompt with scoring rubric
 ├── optimizer/                # LLM-powered SKILL.md optimization
 │   ├── optimizer.py          # SkillOptimizer class + OptimizationResult

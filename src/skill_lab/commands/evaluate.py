@@ -192,7 +192,7 @@ def evaluate(
 
     Run from inside a skill directory, or pass the path as an argument.
     Runs 37 static checks, then sends the skill to an LLM judge that
-    scores it on 8 criteria across Activation and Instruction axes.
+    scores it on 9 criteria across Activation and Instruction axes.
 
     LLM review requires an API key (ANTHROPIC_API_KEY, OPENAI_API_KEY,
     or GEMINI_API_KEY). Use --skip-review for static-only evaluation.
@@ -272,7 +272,9 @@ def evaluate(
     else:
         console_reporter = ConsoleReporter(verbose=verbose)
         console_reporter.report_evaluation(
-            report, judge_result=judge_result, judge_usage=judge_usage,
+            report,
+            judge_result=judge_result,
+            judge_usage=judge_usage,
         )
         if judge_result is None and missing_env_var:
             _print_api_key_hint(missing_env_var)
@@ -341,7 +343,7 @@ def _print_api_key_hint(env_var: str) -> None:
     """Print a hint about setting an API key for LLM review."""
     console.print(
         f"\n[yellow]LLM quality review skipped[/yellow] — {env_var} not set.\n"
-        f"  [dim]Set [bold]{env_var}[/bold] to enable 8-criterion LLM analysis,\n"
+        f"  [dim]Set [bold]{env_var}[/bold] to enable 9-criterion LLM analysis,\n"
         f"  or use [bold]--skip-review[/bold] to suppress this message.[/dim]\n"
     )
 
