@@ -7,9 +7,18 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from skill_lab.commands.optimize import _build_diff_text
+from skill_lab.commands.optimize import _build_diff_text, _increment_patch
+from skill_lab.core.eval_history import EvalRecord, save_eval
 from skill_lab.core.exceptions import GenerationError
 from skill_lab.core.llm import LLMResponse
+from skill_lab.core.models import (
+    CheckResult,
+    EvalDimension,
+    EvaluationReport,
+    JudgeCriterion,
+    JudgeResult,
+    Severity,
+)
 from skill_lab.optimizer.optimizer import (
     MAX_BODY_CHARS,
     OptimizationResult,
@@ -298,6 +307,34 @@ class TestBuildDiffText:
         assert "10 -baz" in result
 
 
+def _seed_eval_history(skill_dir: Path) -> None:
+    """Write a minimal eval history so optimize finds it."""
+    report = EvaluationReport(
+        skill_path=str(skill_dir),
+        skill_name=skill_dir.name,
+        timestamp="2026-03-31T10:00:00+00:00",
+        duration_ms=10.0,
+        quality_score=65.0,
+        overall_pass=True,
+        checks_run=37,
+        checks_passed=30,
+        checks_failed=7,
+        results=[
+            CheckResult(
+                check_id="content.token-budget",
+                check_name="Token Budget",
+                passed=False,
+                severity=Severity.MEDIUM,
+                dimension=EvalDimension.CONTENT,
+                message="Body exceeds token budget",
+                fix="Reduce body content.",
+            ),
+        ],
+        summary={},
+    )
+    save_eval(skill_dir, report)
+
+
 class TestOptimizeCommand:
     """Tests for the CLI optimize command."""
 
@@ -310,6 +347,7 @@ class TestOptimizeCommand:
         skill_dir = tmp_path / "my-skill"
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text("---\nname: my-skill\ndescription: test\n---\n")
+        _seed_eval_history(skill_dir)
 
         runner = CliRunner()
         result = runner.invoke(app, ["optimize", str(skill_dir)], env={"ANTHROPIC_API_KEY": ""})
@@ -325,6 +363,7 @@ class TestOptimizeCommand:
         skill_dir = tmp_path / "my-skill"
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text("---\nname: my-skill\ndescription: test\n---\n")
+        _seed_eval_history(skill_dir)
 
         runner = CliRunner()
         result = runner.invoke(
@@ -359,3 +398,194 @@ class TestOptimizeCommand:
         result = runner.invoke(app, ["optimize", str(empty_dir)])
         assert result.exit_code == 1
         assert "No SKILL.md" in result.output
+
+    def test_no_eval_history_exits_with_error(self, tmp_path: Path) -> None:
+        """Test error when no eval history exists."""
+        from typer.testing import CliRunner
+
+        from skill_lab.cli import app
+
+        skill_dir = tmp_path / "my-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text("---\nname: my-skill\ndescription: test\n---\n")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            app,
+            ["optimize", str(skill_dir)],
+            env={"ANTHROPIC_API_KEY": "test-key"},
+        )
+        assert result.exit_code == 1
+        assert "No evaluation results found" in result.output
+
+
+# =============================================================================
+# optimize_from_history tests
+# =============================================================================
+
+
+def _make_eval_record(
+    score: float = 65.0,
+    judge: JudgeResult | None = None,
+) -> EvalRecord:
+    """Build a minimal EvalRecord for testing."""
+    results = [
+        CheckResult(
+            check_id="structure.skill-md-exists",
+            check_name="SKILL.md Exists",
+            passed=True,
+            severity=Severity.HIGH,
+            dimension=EvalDimension.STRUCTURE,
+            message="SKILL.md found",
+        ),
+        CheckResult(
+            check_id="content.token-budget",
+            check_name="Token Budget",
+            passed=False,
+            severity=Severity.MEDIUM,
+            dimension=EvalDimension.CONTENT,
+            message="Body exceeds token budget",
+            fix="Reduce body content.",
+        ),
+    ]
+    report = EvaluationReport(
+        skill_path="/tmp/test-skill",
+        skill_name="test-skill",
+        timestamp="2026-03-31T10:00:00+00:00",
+        duration_ms=10.0,
+        quality_score=score,
+        overall_pass=True,
+        checks_run=37,
+        checks_passed=30,
+        checks_failed=7,
+        results=results,
+        summary={},
+    )
+    return EvalRecord(
+        schema_version="2.0",
+        report=report,
+        judge=judge,
+        judge_model="claude-haiku-4-5-20251001" if judge else None,
+        judge_usage=None,
+    )
+
+
+def _make_judge_result() -> JudgeResult:
+    """Build a minimal JudgeResult for testing."""
+    criteria = (
+        JudgeCriterion(
+            id="intent_clarity",
+            name="Intent Clarity",
+            axis="activation",
+            score=2,
+            reasoning="Description is vague.",
+        ),
+        JudgeCriterion(
+            id="trigger_coverage",
+            name="Trigger Coverage",
+            axis="activation",
+            score=1,
+            reasoning="Missing implicit triggers.",
+        ),
+    )
+    return JudgeResult(
+        criteria=criteria,
+        activation_score=37.5,
+        instruction_score=50.0,
+        judge_score=43.8,
+        verdict="Poor",
+        suggestions=("Broaden trigger phrases.", "Add error handling."),
+    )
+
+
+class TestOptimizeFromHistory:
+    """Tests for optimize_from_history()."""
+
+    def test_returns_result(
+        self, optimizer: SkillOptimizer, valid_skill_path: Path
+    ) -> None:
+        record = _make_eval_record()
+        result = optimizer.optimize_from_history(valid_skill_path, record)
+        assert isinstance(result, OptimizationResult)
+        assert result.original_content != ""
+        assert result.optimized_content.startswith("---")
+
+    def test_original_score_from_history(
+        self, optimizer: SkillOptimizer, valid_skill_path: Path
+    ) -> None:
+        record = _make_eval_record(score=42.5)
+        result = optimizer.optimize_from_history(valid_skill_path, record)
+        assert result.original_score == 42.5
+
+    def test_re_evaluate_runs_fresh(
+        self, optimizer: SkillOptimizer, valid_skill_path: Path
+    ) -> None:
+        record = _make_eval_record()
+        result = optimizer.optimize_from_history(valid_skill_path, record)
+        # optimized_score comes from fresh StaticEvaluator, not from history
+        assert isinstance(result.optimized_score, float)
+        assert 0 <= result.optimized_score <= 100
+
+    def test_missing_skill_md(
+        self, optimizer: SkillOptimizer, tmp_path: Path
+    ) -> None:
+        empty_dir = tmp_path / "no-skill"
+        empty_dir.mkdir()
+        record = _make_eval_record()
+        with pytest.raises(GenerationError, match="SKILL.md not found"):
+            optimizer.optimize_from_history(empty_dir, record)
+
+
+class TestBuildPromptFromHistory:
+    """Tests for _build_prompt_from_history()."""
+
+    def test_includes_failing_checks(
+        self, optimizer: SkillOptimizer, valid_skill_path: Path
+    ) -> None:
+        record = _make_eval_record()
+        content = (valid_skill_path / "SKILL.md").read_text()
+        prompt = optimizer._build_prompt_from_history(content, record)
+        assert "content.token-budget" in prompt
+        assert "Fix: Reduce body content." in prompt
+
+    def test_includes_judge_feedback(
+        self, optimizer: SkillOptimizer, valid_skill_path: Path
+    ) -> None:
+        judge = _make_judge_result()
+        record = _make_eval_record(judge=judge)
+        content = (valid_skill_path / "SKILL.md").read_text()
+        prompt = optimizer._build_prompt_from_history(content, record)
+        assert "--- LLM Judge Feedback ---" in prompt
+        assert "Intent Clarity" in prompt
+        assert "Description is vague." in prompt
+        assert "Broaden trigger phrases." in prompt
+
+    def test_omits_judge_when_null(
+        self, optimizer: SkillOptimizer, valid_skill_path: Path
+    ) -> None:
+        record = _make_eval_record(judge=None)
+        content = (valid_skill_path / "SKILL.md").read_text()
+        prompt = optimizer._build_prompt_from_history(content, record)
+        assert "LLM Judge Feedback" not in prompt
+
+    def test_includes_score_and_content(
+        self, optimizer: SkillOptimizer, valid_skill_path: Path
+    ) -> None:
+        record = _make_eval_record(score=65.0)
+        content = (valid_skill_path / "SKILL.md").read_text()
+        prompt = optimizer._build_prompt_from_history(content, record)
+        assert "65.0/100" in prompt
+        assert "--- Current SKILL.md ---" in prompt
+
+
+class TestIncrementPatch:
+    """Tests for _increment_patch()."""
+
+    def test_standard_semver(self) -> None:
+        assert _increment_patch("0.2.0") == "0.2.1"
+
+    def test_two_part_version(self) -> None:
+        assert _increment_patch("1.0") == "1.1"
+
+    def test_already_patched(self) -> None:
+        assert _increment_patch("1.2.3") == "1.2.4"

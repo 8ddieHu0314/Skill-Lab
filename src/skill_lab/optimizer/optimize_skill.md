@@ -49,3 +49,12 @@ Any field NOT in this list is non-standard and should be moved into the `metadat
 5. **Fix all failing checks** where possible by modifying the SKILL.md
 6. **Improve quality** on passing checks where the improvement is clear and low-risk
 7. **Keep the same overall structure** — if the author uses headers, keep headers; if they use bullet lists, keep bullet lists
+
+## LLM Judge Feedback
+
+When the input includes an "LLM Judge Feedback" section, use it alongside failing checks to guide your optimization:
+
+1. **Low Activation Quality scores** (Intent Clarity, Trigger Coverage, Scope Precision, Distinctiveness): improve description action-orientation ("Use when...", "Designed for..."), broaden trigger phrases, sharpen scope boundaries, clarify the skill's unique value
+2. **Low Instruction Quality scores** (Domain Expertise, Cognitive Efficiency, Procedural Clarity, Error Resilience): add domain-specific expertise and gotchas, improve scannability with headers/bullets/code blocks, add step-by-step procedures, include error handling guidance
+3. **Prioritize judge suggestions** — they represent actionable expert-level feedback
+4. **Do not fabricate expertise** — only restructure, clarify, or add content consistent with the author's original intent
