@@ -55,6 +55,7 @@ src/skill_lab/
 │   ├── tokens.py             # Token estimation utility (v0.4.0)
 │   ├── telemetry.py          # Usage analytics: opt-in prompt, SQLite, Supabase sync, version check
 │   ├── stats.py              # SQLite query functions for usage stats (sklab stats)
+│   ├── eval_history.py       # Eval history persistence (.sklab/evals/) — save, load, prune
 │   ├── setup.py              # Hook setup for Claude Code / Cursor (sklab setup)
 │   ├── utils.py              # Shared utilities (generic Registry[T])
 │   └── exceptions.py         # Custom exception hierarchy (SkillLabError, ParseError, etc.)
@@ -427,6 +428,7 @@ sklab
 sklab evaluate [./my-skill] [-f console|json] [-o file.json] [-V] [-s] [-m model]
 sklab evaluate --skip-review     # Static checks only (no LLM call)
 sklab evaluate --model gpt-4o   # Choose LLM model for review
+sklab evaluate --optimize        # Chain into optimization after evaluation
 sklab evaluate --all             # Discover + evaluate all skills under cwd (recursive)
 sklab evaluate --repo            # Discover + evaluate all skills from git repo root
 
@@ -448,7 +450,7 @@ sklab trigger [./my-skill] [-t explicit|implicit|contextual|negative] [-f consol
 # Generate trigger tests via LLM (requires API key for selected provider)
 sklab generate [./my-skill] [-m MODEL] [--force]
 
-# LLM-powered SKILL.md optimization (requires API key for selected provider)
+# LLM-powered SKILL.md optimization (requires eval history from `sklab evaluate`)
 sklab optimize [./my-skill] [-m MODEL] [--auto]
 
 # Multi-provider: model ID determines provider and required API key
@@ -500,6 +502,8 @@ sklab setup
 - `-V` / `--verbose`: Show all checks, not just failures
 - `-s` / `--spec-only`: Only run checks required by the Agent Skills spec (10 checks)
 - `--suggestions-only`: List only quality suggestion checks (27 checks)
+- `--optimize`: Chain into LLM optimization after evaluation (skips interactive prompt)
+- `--skip-review`: Static checks only (no LLM judge call)
 
 **Trigger Testing:**
 - `-t` / `--type`: Filter by trigger type (explicit, implicit, contextual, negative)
