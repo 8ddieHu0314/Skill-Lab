@@ -51,9 +51,7 @@ class JsonReporter:
                     "input_tokens": judge_usage.input_tokens,
                     "output_tokens": judge_usage.output_tokens,
                     "total_tokens": judge_usage.total_tokens,
-                    "cost": (
-                        round(judge_usage.total_cost, 6) if judge_usage.has_pricing else None
-                    ),
+                    "cost": (round(judge_usage.total_cost, 6) if judge_usage.has_pricing else None),
                 }
             data["judge_review"] = review_data
         else:

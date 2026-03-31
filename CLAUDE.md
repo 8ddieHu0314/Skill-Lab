@@ -55,7 +55,7 @@ ruff check src/ && ruff format src/
 
 ## Critical Architecture Notes
 
-- **Two check systems**: behavioral (`@register_check` classes in `structure.py`, `naming.py`, `content.py`) and schema-based (`FieldRule` in `schema.py` — append to add a check, no class needed). See ARCHITECTURE.md for full details.
+- **Two check systems**: behavioral (`@register_check` classes in `structure.py`, `naming.py`, `content.py`, `security.py`) and schema-based (`FieldRule` in `schema.py` — append to add a check, no class needed). Per-file counts: structure:9, schema:9, content:13, security:5, naming:1. Dimension counts differ (checks can map to any dimension). See ARCHITECTURE.md for full details.
 - **Adding a schema check**: append a `FieldRule` to `FRONTMATTER_SCHEMA` list in `schema.py` — no class needed. The `_make_schema_check()` factory auto-generates a registered class per rule.
 - **Side-effect registration**: `StaticEvaluator.__init__()` imports check modules (`content`, `naming`, `schema`, `security`, `structure`) to trigger `@register_check` decorators. All checks must be registered before `registry.get_all()` is called.
 - **Sync requirement**: `SPEC_FRONTMATTER_FIELDS` in `structure.py` must stay in sync with `FRONTMATTER_SCHEMA` in `schema.py`.

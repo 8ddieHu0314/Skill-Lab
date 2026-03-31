@@ -64,11 +64,11 @@ src/skill_lab/
 ├── checks/
 │   ├── base.py               # StaticCheck abstract base class
 │   └── static/               # Check implementations
-│       ├── structure.py      # 7 checks
+│       ├── structure.py      # 9 checks
 │       ├── schema.py         # 9 checks (declarative FieldRule)
 │       ├── naming.py         # 1 check
 │       ├── security.py       # 5 checks (injection, evaluator, unicode, yaml, size) + composite scan
-│       └── content.py        # 11 checks
+│       └── content.py        # 13 checks
 ├── evaluators/
 │   ├── static_evaluator.py   # Orchestrates static check execution
 │   └── trace_evaluator.py    # Orchestrates trace check execution
@@ -153,7 +153,7 @@ src/skill_lab/
                     │                    │                    │              │
             ┌───────────────┐    ┌───────────────┐    ┌───────────────┐ ┌──────────┐ ┌────────────┐
             │ structure.py  │    │  schema.py    │    │  naming.py    │ │content.py │ │security.py │
-            │ (7 checks)    │    │  (9 checks)   │    │ (1 check)    │ │(11 checks)│ │ (5 checks) │
+            │ (9 checks)    │    │  (9 checks)   │    │ (1 check)    │ │(13 checks)│ │ (5 checks) │
             └───────────────┘    └───────────────┘    └───────────────┘ └──────────┘ └────────────┘
 ```
 
@@ -499,7 +499,7 @@ sklab setup
 **Evaluation Flags:**
 - `-V` / `--verbose`: Show all checks, not just failures
 - `-s` / `--spec-only`: Only run checks required by the Agent Skills spec (10 checks)
-- `--suggestions-only`: List only quality suggestion checks (18 checks)
+- `--suggestions-only`: List only quality suggestion checks (27 checks)
 
 **Trigger Testing:**
 - `-t` / `--type`: Filter by trigger type (explicit, implicit, contextual, negative)
