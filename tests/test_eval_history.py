@@ -142,6 +142,18 @@ class TestLoadLatestEval:
         assert record is not None
         assert record.report.quality_score == 80.0
 
+    def test_returns_latest_across_timezones(self, tmp_path: Path) -> None:
+        """Chronologically later eval is returned even when its local time looks earlier."""
+        # 23:50 NZST (+12) = 11:50 UTC (earlier)
+        report_old = make_report(score=60.0, timestamp="2026-03-31T23:50:00+12:00")
+        # 08:00 EST (-05) = 13:00 UTC (later)
+        report_new = make_report(score=80.0, timestamp="2026-03-31T08:00:00-05:00")
+        save_eval(tmp_path, report_old)
+        save_eval(tmp_path, report_new)
+        record = load_latest_eval(tmp_path)
+        assert record is not None
+        assert record.report.quality_score == 80.0
+
     def test_roundtrip_save_load_static_only(self, tmp_path: Path) -> None:
         report = make_report()
         save_eval(tmp_path, report)
@@ -206,8 +218,18 @@ class TestLoadEval:
 
 
 class TestSanitizeTimestamp:
-    def test_replaces_colons(self) -> None:
+    def test_utc_timestamp_unchanged(self) -> None:
         assert _sanitize_timestamp("2026-03-31T14:22:05+00:00") == "2026-03-31T14-22-05+00-00"
 
-    def test_no_change_without_colons(self) -> None:
+    def test_non_utc_offset_normalized(self) -> None:
+        # +05:30 offset: 23:50 IST = 18:20 UTC
+        result = _sanitize_timestamp("2026-03-31T23:50:00+05:30")
+        assert result == "2026-03-31T18-20-00+00-00"
+
+    def test_negative_offset_normalized(self) -> None:
+        # -08:00 offset: 08:00 PST = 16:00 UTC
+        result = _sanitize_timestamp("2026-03-31T08:00:00-08:00")
+        assert result == "2026-03-31T16-00-00+00-00"
+
+    def test_non_iso_passthrough(self) -> None:
         assert _sanitize_timestamp("2026-03-31") == "2026-03-31"

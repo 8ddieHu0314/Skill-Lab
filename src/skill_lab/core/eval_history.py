@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -101,17 +102,19 @@ def load_latest_eval(skill_path: Path) -> EvalRecord | None:
     """Load the most recent eval from .sklab/evals/.
 
     Returns None if no eval files exist or the directory is missing.
-    Uses file modification time (not filename) to determine the latest file.
+    Uses filename sort (lexicographic) — consistent with pruning, which also
+    sorts by filename. Filenames are UTC-normalized timestamps so lexicographic
+    order equals chronological order.
     """
     evals_dir = skill_path / EVALS_DIR
     if not evals_dir.is_dir():
         return None
 
-    latest = max(evals_dir.glob("*.json"), key=lambda f: f.stat().st_mtime, default=None)
-    if latest is None:
+    files = sorted(evals_dir.glob("*.json"))
+    if not files:
         return None
 
-    return load_eval(latest)
+    return load_eval(files[-1])
 
 
 def load_eval(path: Path) -> EvalRecord:
@@ -145,7 +148,20 @@ def _prune_old_evals(evals_dir: Path, max_files: int = MAX_EVAL_FILES) -> None:
 
 
 def _sanitize_timestamp(ts: str) -> str:
-    """Replace colons with hyphens for cross-platform filename safety."""
+    """Normalize timestamp to UTC and replace colons for filename safety.
+
+    Converts any timezone-aware datetime to UTC so filenames sort
+    chronologically, keeping pruning (lexicographic) and loading consistent.
+    Only normalizes if the string contains a time component ("T").
+    """
+    if "T" in ts:
+        try:
+            dt = datetime.fromisoformat(ts)
+            if dt.tzinfo is not None:
+                utc_dt = dt.astimezone(timezone.utc)
+                ts = utc_dt.isoformat()
+        except (ValueError, OverflowError):
+            pass  # fall through to simple sanitization
     return ts.replace(":", "-")
 
 
