@@ -64,6 +64,9 @@ tests/fixtures/skills/
 Run in a **single bash call**:
 
 ```bash
+echo "=== API KEY CHECK ==="
+echo "ANTHROPIC_API_KEY prefix: ${ANTHROPIC_API_KEY:0:10}..."
+echo "ANTHROPIC_API_KEY length: ${#ANTHROPIC_API_KEY}"
 echo "=== VERSION ==="
 sklab --version
 echo "=== PR COMMITS ==="
