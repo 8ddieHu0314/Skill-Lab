@@ -350,3 +350,52 @@ class TraceReport:
             "results": [r.to_dict() for r in self.results],
             "summary": self.summary,
         }
+
+
+# =============================================================================
+# Phase 4: LLM-as-Judge Models
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class JudgeCriterion:
+    """Single criterion score from LLM judge."""
+
+    id: str  # e.g., "intent_clarity"
+    name: str  # e.g., "Intent Clarity"
+    axis: str  # "activation" or "instruction"
+    score: int  # 0-4
+    reasoning: str  # LLM's explanation
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "id": self.id,
+            "name": self.name,
+            "axis": self.axis,
+            "score": self.score,
+            "reasoning": self.reasoning,
+        }
+
+
+@dataclass(frozen=True)
+class JudgeResult:
+    """Complete LLM judge evaluation result."""
+
+    criteria: tuple[JudgeCriterion, ...]
+    activation_score: float  # 0-100
+    instruction_score: float  # 0-100
+    judge_score: float  # 0-100 (average of two axes)
+    verdict: str  # "Excellent" / "Good" / "Needs work" / "Poor"
+    suggestions: tuple[str, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "criteria": [c.to_dict() for c in self.criteria],
+            "activation_score": self.activation_score,
+            "instruction_score": self.instruction_score,
+            "judge_score": self.judge_score,
+            "verdict": self.verdict,
+            "suggestions": list(self.suggestions),
+        }

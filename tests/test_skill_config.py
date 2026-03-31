@@ -9,12 +9,14 @@ import yaml
 
 from skill_lab.core.skill_config import (
     LastEvaluate,
+    LastReview,
     SkillConfig,
     load_config,
     resolve_model,
     save_config,
     update_evaluate,
     update_model,
+    update_review,
 )
 
 
@@ -240,3 +242,89 @@ class TestResolveModel:
         monkeypatch.setenv("SKLAB_MODEL", "env-model")
         result = resolve_model(None, skill_dir)
         assert result == "config-model"
+
+
+class TestUpdateReview:
+    def test_creates_config_if_missing(self, skill_dir: Path) -> None:
+        result = update_review(
+            skill_dir,
+            judge_score=81.3,
+            activation_score=75.0,
+            instruction_score=87.5,
+            date="2026-03-30T12:00:00Z",
+        )
+        assert result.last_review is not None
+        assert result.last_review.judge_score == 81.3
+        assert result.last_review.activation_score == 75.0
+        assert result.last_review.instruction_score == 87.5
+        assert (skill_dir / ".sklab" / "config.yaml").exists()
+
+    def test_preserves_existing_fields(self, skill_dir: Path) -> None:
+        save_config(skill_dir, SkillConfig(version="0.1.0", model="gpt-4o"))
+        update_review(
+            skill_dir,
+            judge_score=90.0,
+            activation_score=87.5,
+            instruction_score=92.5,
+            date="2026-03-30T12:00:00Z",
+        )
+        config = load_config(skill_dir)
+        assert config.version == "0.1.0"
+        assert config.model == "gpt-4o"
+        assert config.last_review is not None
+        assert config.last_review.judge_score == 90.0
+
+    def test_review_preserves_evaluate(self, skill_dir: Path) -> None:
+        update_evaluate(
+            skill_dir,
+            score=80.0,
+            checks_passed=29,
+            checks_total=33,
+            date="2026-03-30",
+        )
+        update_review(
+            skill_dir,
+            judge_score=75.0,
+            activation_score=70.0,
+            instruction_score=80.0,
+            date="2026-03-30",
+        )
+        config = load_config(skill_dir)
+        assert config.last_evaluate is not None
+        assert config.last_evaluate.score == 80.0
+        assert config.last_review is not None
+        assert config.last_review.judge_score == 75.0
+
+    def test_evaluate_preserves_review(self, skill_dir: Path) -> None:
+        update_review(
+            skill_dir,
+            judge_score=75.0,
+            activation_score=70.0,
+            instruction_score=80.0,
+            date="2026-03-30",
+        )
+        update_evaluate(
+            skill_dir,
+            score=80.0,
+            checks_passed=29,
+            checks_total=33,
+            date="2026-03-30",
+        )
+        config = load_config(skill_dir)
+        assert config.last_review is not None
+        assert config.last_review.judge_score == 75.0
+        assert config.last_evaluate is not None
+        assert config.last_evaluate.score == 80.0
+
+    def test_roundtrip_yaml(self, skill_dir: Path) -> None:
+        update_review(
+            skill_dir,
+            judge_score=81.3,
+            activation_score=75.0,
+            instruction_score=87.5,
+            date="2026-03-30T12:00:00Z",
+        )
+        raw = yaml.safe_load((skill_dir / ".sklab" / "config.yaml").read_text())
+        assert raw["last-review"]["judge-score"] == 81.3
+        assert raw["last-review"]["activation-score"] == 75.0
+        assert raw["last-review"]["instruction-score"] == 87.5

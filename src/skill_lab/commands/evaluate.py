@@ -1,5 +1,7 @@
 """Evaluate, check, and list-checks commands."""
 
+import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated
 
@@ -17,9 +19,11 @@ from skill_lab.cli import (
     app,
     console,
 )
-from skill_lab.core.models import EvalDimension
+from skill_lab.core.exceptions import GenerationError
+from skill_lab.core.llm import GenerationUsage, detect_provider_name, get_api_key_env_var
+from skill_lab.core.models import EvalDimension, JudgeResult
 from skill_lab.core.registry import registry
-from skill_lab.core.skill_config import update_evaluate
+from skill_lab.core.skill_config import resolve_model, update_evaluate, update_model, update_review
 from skill_lab.core.telemetry import push_telemetry_extra
 from skill_lab.evaluators.static_evaluator import StaticEvaluator
 from skill_lab.reporters.console_reporter import SEVERITY_STYLES, ConsoleReporter
@@ -58,7 +62,7 @@ def _run_bulk_evaluate(
 
         if format == OutputFormat.json:
             json_reporter = JsonReporter()
-            console.print(json_reporter.format(report))
+            console.print(json_reporter.format(report), soft_wrap=True)
         else:
             console_reporter = ConsoleReporter(verbose=verbose)
             console_reporter.report(report)
@@ -151,10 +155,33 @@ def evaluate(
             help="Discover and evaluate all skills from the git repo root (recursive)",
         ),
     ] = False,
+    skip_review: Annotated[
+        bool,
+        typer.Option(
+            "--skip-review",
+            help="Skip LLM quality review (static checks only)",
+        ),
+    ] = False,
+    model: Annotated[
+        str | None,
+        typer.Option(
+            "--model",
+            "-m",
+            help=(
+                "Model for LLM quality review (default: claude-haiku-4-5-20251001). "
+                "Supports Anthropic, OpenAI (gpt-*), and Gemini (gemini-*) models."
+            ),
+        ),
+    ] = None,
 ) -> None:
-    """Evaluate a skill and generate a quality report.
+    """Evaluate a skill: static checks + LLM quality review.
 
     Run from inside a skill directory, or pass the path as an argument.
+    Runs 37 static checks, then sends the skill to an LLM judge that
+    scores it on 8 criteria across Activation and Instruction axes.
+
+    LLM review requires an API key (ANTHROPIC_API_KEY, OPENAI_API_KEY,
+    or GEMINI_API_KEY). Use --skip-review for static-only evaluation.
     """
     # --all and --repo are mutually exclusive with a positional path
     if (all_skills or repo) and skill_path is not None:
@@ -180,6 +207,7 @@ def evaluate(
 
     skill_path = _resolve_skill_path(skill_path)
 
+    # Phase 1: Static evaluation (always runs)
     with _cli_error_handler():
         evaluator = StaticEvaluator(spec_only=spec_only)
         report = evaluator.evaluate(skill_path)
@@ -192,7 +220,6 @@ def evaluate(
         date=report.timestamp,
     )
 
-    # Attach skill name and score to the telemetry event recorded by the decorator
     push_telemetry_extra(
         skill_name=skill_path.name,
         score=report.quality_score,
@@ -201,19 +228,92 @@ def evaluate(
     if output and format == OutputFormat.console:
         format = OutputFormat.json
 
+    # Phase 2: LLM judge (if API key available and not skipped)
+    judge_result: JudgeResult | None = None
+    judge_usage = None
+    missing_env_var: str | None = None
+
+    if not skip_review:
+        judge_result, judge_usage, missing_env_var = _try_llm_review(skill_path, model)
+
+    # Render output
     if format == OutputFormat.json:
         json_reporter = JsonReporter()
         if output:
-            json_reporter.write_file(report, output)
+            json_reporter.write_file(
+                report, output, judge_result=judge_result, judge_usage=judge_usage
+            )
             console.print(f"Report written to: {output}")
         else:
-            console.print(json_reporter.format(report))
+            console.print(
+                json_reporter.format(report, judge_result=judge_result, judge_usage=judge_usage),
+                soft_wrap=True,
+            )
     else:
         console_reporter = ConsoleReporter(verbose=verbose)
         console_reporter.report(report)
+        if judge_result is not None:
+            console_reporter.report_judge(judge_result, usage=judge_usage)
+        elif missing_env_var:
+            _print_api_key_hint(missing_env_var)
 
     if not report.overall_pass:
         raise typer.Exit(code=1)
+
+
+def _try_llm_review(
+    skill_path: Path,
+    model: str | None,
+) -> tuple[JudgeResult | None, GenerationUsage | None, str | None]:
+    """Attempt LLM judge review.
+
+    Returns:
+        (result, usage, missing_env_var) — missing_env_var is set when
+        the API key is absent so the caller can print a hint without
+        re-resolving the model.
+    """
+    from skill_lab.judge.judge import SkillJudge
+
+    resolved_model = resolve_model(model, skill_path)
+    provider_name = detect_provider_name(resolved_model)
+    env_var = get_api_key_env_var(provider_name)
+    api_key = os.environ.get(env_var)
+
+    if not api_key:
+        return None, None, env_var
+
+    try:
+        judge = SkillJudge(model=resolved_model, api_key=api_key)
+        with console.status("[cyan]Running LLM quality review...[/cyan]", spinner="dots"):
+            result = judge.review(skill_path)
+
+        update_review(
+            skill_path,
+            judge_score=result.judge_score,
+            activation_score=result.activation_score,
+            instruction_score=result.instruction_score,
+            date=datetime.now(timezone.utc).isoformat(),
+        )
+        update_model(skill_path, resolved_model)
+
+        push_telemetry_extra(judge_score=result.judge_score)
+
+        return result, judge.last_usage, None
+    except GenerationError as e:
+        console.print(f"\n[yellow]LLM review failed:[/yellow] {e.message}")
+        if e.suggestion:
+            console.print(f"[dim]{e.suggestion}[/dim]")
+        return None, None, None
+
+
+def _print_api_key_hint(env_var: str) -> None:
+    """Print a hint about setting an API key for LLM review."""
+    console.print(
+        f"\n[yellow]LLM quality review skipped[/yellow] — {env_var} not set.\n"
+        f"  [dim]Set [bold]{env_var}[/bold] to enable 8-criterion LLM analysis,\n"
+        f"  or use [bold]--skip-review[/bold] to suppress this message.[/dim]\n"
+    )
+
 
 
 def _run_bulk_check(roots: list[Path], spec_only: bool) -> None:

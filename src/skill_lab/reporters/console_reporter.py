@@ -5,7 +5,8 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from skill_lab.core.models import EvaluationReport, Severity, TraceReport
+from skill_lab.core.llm import GenerationUsage
+from skill_lab.core.models import EvaluationReport, JudgeResult, Severity, TraceReport
 
 # Shared severity display mappings — keyed by Severity.value string
 SEVERITY_STYLES: dict[str, str] = {
@@ -20,6 +21,32 @@ def score_color(score: float) -> str:
     if score >= 80:
         return "green"
     if score >= 60:
+        return "yellow"
+    return "red"
+
+
+def _score_bar(score: int) -> str:
+    """Render a 0-4 score as a colored visual bar."""
+    filled = score
+    empty = 4 - score
+    if score >= 3:
+        color = "green"
+    elif score >= 2:
+        color = "yellow"
+    else:
+        color = "red"
+    filled_bar = "\u2588" * filled
+    empty_bar = "\u2591" * empty
+    return f"[{color}]{filled_bar}{empty_bar}[/{color}] {score}/4"
+
+
+def _verdict_color(verdict: str) -> str:
+    """Return a rich color for a verdict label."""
+    if verdict == "Excellent":
+        return "bold green"
+    if verdict == "Good":
+        return "green"
+    if verdict == "Needs work":
         return "yellow"
     return "red"
 
@@ -135,6 +162,70 @@ class ConsoleReporter:
             if total > 0:
                 color = "green" if failed == 0 else "yellow" if failed < passed else "red"
                 self.console.print(f"  {dim}: [{color}]{passed}/{total} passed[/{color}]")
+
+        self.console.print()
+
+    def report_judge(
+        self,
+        result: JudgeResult,
+        usage: GenerationUsage | None = None,
+    ) -> None:
+        """Print LLM judge results to the console."""
+        self.console.print()
+        self.console.print(
+            "[bold]LLM Quality Review[/bold]",
+            style="on default",
+        )
+
+        axes = [
+            ("activation", "Activation Quality", result.activation_score),
+            ("instruction", "Instruction Quality", result.instruction_score),
+        ]
+
+        for axis_id, axis_label, axis_score in axes:
+            axis_criteria = [c for c in result.criteria if c.axis == axis_id]
+
+            self.console.print()
+            table = Table(
+                title=f"{axis_label} ({axis_score:.0f}%)",
+                show_header=True,
+            )
+            table.add_column("Criterion", min_width=20)
+            table.add_column("Score", justify="center", width=12)
+            if self.verbose:
+                table.add_column("Reasoning")
+
+            for c in axis_criteria:
+                bar = _score_bar(c.score)
+                row: list[str] = [c.name, bar]
+                if self.verbose:
+                    row.append(f"[dim]{c.reasoning}[/dim]")
+                table.add_row(*row)
+
+            self.console.print(table)
+
+        # Combined score and verdict
+        jsc = score_color(result.judge_score)
+        vc = _verdict_color(result.verdict)
+        self.console.print()
+        self.console.print(
+            f"[bold]Judge Score:[/bold] [{jsc}]{result.judge_score:.1f}/100[/{jsc}]  "
+            f"[{vc}]{result.verdict}[/{vc}]"
+        )
+
+        # Suggestions
+        if result.suggestions:
+            self.console.print()
+            self.console.print("[bold]Suggestions:[/bold]")
+            for i, suggestion in enumerate(result.suggestions, 1):
+                self.console.print(f"  {i}. {suggestion}")
+
+        if usage is not None:
+            cost_str = f" (${usage.total_cost:.4f})" if usage.has_pricing else " (no pricing data)"
+            self.console.print(
+                f"\n[dim]Tokens:[/dim] {usage.input_tokens:,} in + "
+                f"{usage.output_tokens:,} out = {usage.total_tokens:,}{cost_str}"
+            )
 
         self.console.print()
 

@@ -41,8 +41,10 @@ sklab
 | Command / Flag | Description |
 |---|---|
 | **Evaluate** | |
-| `sklab evaluate ./my-skill` | Full quality evaluation — runs all checks, produces a 0–100 score |
-| `--verbose / -V` | Show all checks, not just failures |
+| `sklab evaluate ./my-skill` | Static checks + LLM quality review (0-100 scores) |
+| `--verbose / -V` | Show all checks + LLM reasoning |
+| `--skip-review` | Skip LLM review (static checks only) |
+| `--model / -m <model>` | Choose LLM model for review (supports Anthropic, OpenAI, Gemini) |
 | `--spec-only / -s` | Only run spec-required checks |
 | `--format / -f json` | Output as JSON |
 | `--output / -o <file>` | Write output to a file |

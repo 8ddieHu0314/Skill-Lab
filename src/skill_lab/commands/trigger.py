@@ -224,7 +224,7 @@ def trigger(
             output.write_text(report_json)
             console.print(f"Report written to: {output}")
         else:
-            console.print(report_json)
+            console.print(report_json, soft_wrap=True)
     else:
         _print_trigger_report(report)
 
