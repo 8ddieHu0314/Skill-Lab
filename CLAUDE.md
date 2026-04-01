@@ -40,7 +40,7 @@ sklab evaluate --all          # evaluate every skill in CWD (also: --repo for gi
 sklab check                   # quick pass/fail (exit 0/1, good for CI)
 sklab info ./my-skill         # metadata + token estimates
 sklab prompt ./skill-a        # export skill as XML prompt
-sklab trigger                 # run trigger tests (requires Claude CLI)
+sklab trigger                 # run trigger tests (requires Claude CLI, --provider local|docker)
 sklab generate                # generate trigger tests via LLM (multi-provider)
 sklab optimize ./my-skill     # LLM-powered SKILL.md optimization (multi-provider)
 sklab stats                   # usage statistics
@@ -74,6 +74,7 @@ See `docs/ARCHITECTURE.md` for full directory structure and data flow diagrams.
 
 - **Trace checks**: `tracechecks/` is a parallel registration system using `@register_trace_handler` decorator and `TraceCheckRegistry`. 5 handlers: `command_presence`, `file_creation`, `event_sequence`, `loop_detection`, `efficiency`. Scored under the Execution dimension.
 - **Runtimes**: `runtimes/` provides adapters for running trigger tests against live LLMs — `claude_runtime.py` (Claude Code CLI) and `codex_runtime.py` (OpenAI Codex). Both extend `base.py` ABC.
+- **Execution providers**: `providers/` controls WHERE agents run. `LocalProvider` (default) creates an isolated temp directory per test with the skill copied into `.claude/skills/`. `DockerProvider` (planned) will run tests inside containers. Provider is orthogonal to runtime — `RuntimeAdapter` = HOW (CLI args, trace format), `ExecutionProvider` = WHERE (temp dir, Docker).
 - **Scoring**: Weighted across 5 dimensions (Structure, Naming, Description, Content, Execution) by severity (HIGH > MEDIUM > LOW). Execution is trace-based and scored separately. See `scoring.py` for exact weights.
 
 ### LLM Features

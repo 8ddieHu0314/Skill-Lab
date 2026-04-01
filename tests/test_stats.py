@@ -106,8 +106,9 @@ def _create_db(db_path: Path) -> sqlite3.Connection:
     return conn
 
 
-def _ts(year: int = 2026, month: int = 3, day: int = 5) -> str:
-    return datetime(year, month, day, tzinfo=timezone.utc).isoformat()
+def _ts(year: int | None = None, month: int | None = None, day: int = 5) -> str:
+    now = datetime.now(timezone.utc)
+    return datetime(year or now.year, month or now.month, day, tzinfo=timezone.utc).isoformat()
 
 
 def _insert(

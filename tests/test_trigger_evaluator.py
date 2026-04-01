@@ -14,6 +14,8 @@ from skill_lab.core.models import (
     TriggerTestCase,
     TriggerType,
 )
+from skill_lab.providers.base import ExecutionContext, ExecutionProvider
+from skill_lab.providers.local import LocalProvider
 from skill_lab.runtimes.base import RuntimeAdapter
 from skill_lab.triggers.trigger_evaluator import TriggerEvaluator
 
@@ -96,6 +98,58 @@ class MockAnalyzer:
         return self._has_loops
 
 
+class FakeProvider(ExecutionProvider):
+    """Deterministic provider for unit tests — passes through to runtime."""
+
+    def __init__(self) -> None:
+        self.setup_called = False
+        self.teardown_called = False
+        self.prepare_count = 0
+        self.cleanup_count = 0
+
+    @property
+    def name(self) -> str:
+        return "fake"
+
+    def setup(self, skill_path: Path, skill_name: str) -> None:
+        self.setup_called = True
+
+    def prepare_test(
+        self, skill_path: Path, skill_name: str, trace_path: Path
+    ) -> ExecutionContext:
+        self.prepare_count += 1
+        return ExecutionContext(
+            skill_path=skill_path,
+            skill_name=skill_name,
+            working_dir=skill_path,
+            trace_path=trace_path,
+        )
+
+    def execute(
+        self,
+        context: ExecutionContext,
+        runtime: RuntimeAdapter,
+        prompt: str,
+        stop_on_skill: str | None,
+    ) -> int:
+        return runtime.execute(
+            prompt=prompt,
+            skill_path=context.skill_path,
+            trace_path=context.trace_path,
+            stop_on_skill=stop_on_skill,
+            working_dir=context.working_dir,
+        )
+
+    def collect_trace(self, context: ExecutionContext) -> Path:
+        return context.trace_path
+
+    def cleanup_test(self, context: ExecutionContext) -> None:
+        self.cleanup_count += 1
+
+    def teardown(self) -> None:
+        self.teardown_called = True
+
+
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 
@@ -139,75 +193,6 @@ def _make_trigger_result(
         expected_trigger=True,
         message="ok" if passed else "fail",
     )
-
-
-# ─── _find_project_root ───────────────────────────────────────────────────────
-
-
-class TestFindProjectRoot:
-    def test_finds_root_when_claude_skills_in_ancestor(self, tmp_path: Path):
-        """Skill lives in /project/.claude/skills/my-skill; root = /project."""
-        project = tmp_path / "project"
-        skills_dir = project / ".claude" / "skills"
-        skills_dir.mkdir(parents=True)
-        skill = skills_dir / "my-skill"
-        skill.mkdir()
-
-        evaluator = TriggerEvaluator()
-        result = evaluator._find_project_root(skill)
-        assert result == project
-
-    def test_finds_root_when_inside_skills_directory(self, tmp_path: Path):
-        """Skill path is exactly /project/.claude/skills (the skills dir itself)."""
-        project = tmp_path / "project"
-        skills_dir = project / ".claude" / "skills"
-        skills_dir.mkdir(parents=True)
-
-        evaluator = TriggerEvaluator()
-        result = evaluator._find_project_root(skills_dir)
-        assert result == project
-
-    def test_finds_root_when_claude_skills_is_in_current(self, tmp_path: Path):
-        """Skill's parent directly contains .claude/skills/."""
-        project = tmp_path / "myproject"
-        (project / ".claude" / "skills").mkdir(parents=True)
-        skill = project / "my-skill"
-        skill.mkdir()
-
-        evaluator = TriggerEvaluator()
-        result = evaluator._find_project_root(skill)
-        # skill is a sibling of .claude, not inside .claude/skills/ tree
-        # The first iteration checks (skill / ".claude" / "skills").is_dir() → False
-        # Traversal goes up to project, which has .claude/skills/ → returns project
-        assert result == project
-
-    def test_returns_none_when_no_claude_skills_ancestor(self, tmp_path: Path):
-        skill = tmp_path / "random" / "path" / "skill"
-        skill.mkdir(parents=True)
-
-        evaluator = TriggerEvaluator()
-        result = evaluator._find_project_root(skill)
-        assert result is None
-
-    def test_does_not_loop_infinitely_at_filesystem_root(self, tmp_path: Path):
-        """Must return within bounded iterations even for a shallow path."""
-        skill = tmp_path / "skill"
-        skill.mkdir()
-        evaluator = TriggerEvaluator()
-        # Should complete without hanging
-        result = evaluator._find_project_root(skill)
-        assert result is None or isinstance(result, Path)
-
-    def test_nested_skill_finds_outermost_project(self, tmp_path: Path):
-        """Deep nesting: /p/.claude/skills/a/b → finds /p."""
-        project = tmp_path / "p"
-        (project / ".claude" / "skills").mkdir(parents=True)
-        deep_skill = project / ".claude" / "skills" / "a" / "b"
-        deep_skill.mkdir(parents=True)
-
-        evaluator = TriggerEvaluator()
-        result = evaluator._find_project_root(deep_skill)
-        assert result == project
 
 
 # ─── _get_runtime ─────────────────────────────────────────────────────────────
@@ -459,6 +444,11 @@ class TestCheckExpectations:
 
 
 class TestRunSingleTest:
+    def _make_evaluator(self, tmp_path: Path) -> TriggerEvaluator:
+        evaluator = TriggerEvaluator()
+        evaluator._trace_dir = tmp_path / ".sklab" / "traces"
+        return evaluator
+
     def test_returns_passing_result_when_expectations_met(self, tmp_path: Path):
         skill_path = tmp_path / "skill"
         skill_path.mkdir()
@@ -472,11 +462,11 @@ class TestRunSingleTest:
             )
         ]
         runtime = FakeRuntime(events=events)
-        evaluator = TriggerEvaluator()
-        evaluator._trace_dir = tmp_path / ".sklab" / "traces"
+        evaluator = self._make_evaluator(tmp_path)
+        provider = FakeProvider()
 
         test_case = _make_test_case(skill_name="my-skill", skill_triggered=True)
-        result = evaluator._run_single_test(test_case, skill_path, runtime)
+        result = evaluator._run_single_test(test_case, skill_path, runtime, provider)
         assert isinstance(result, TriggerResult)
         assert result.test_id == "test-1"
 
@@ -484,24 +474,23 @@ class TestRunSingleTest:
         skill_path = tmp_path / "skill"
         skill_path.mkdir()
         runtime = FakeRuntime()
-        evaluator = TriggerEvaluator()
-        evaluator._trace_dir = tmp_path / "traces"
+        evaluator = self._make_evaluator(tmp_path)
+        provider = FakeProvider()
 
         test_case = _make_test_case(id="my-test", skill_triggered=False)
-        result = evaluator._run_single_test(test_case, skill_path, runtime)
+        result = evaluator._run_single_test(test_case, skill_path, runtime, provider)
         assert result.trace_path is not None
         assert "my-test.jsonl" in str(result.trace_path)
 
     def test_creates_trace_directory(self, tmp_path: Path):
         skill_path = tmp_path / "skill"
         skill_path.mkdir()
-        trace_dir = tmp_path / "traces" / "nested"
-        runtime = FakeRuntime()
         evaluator = TriggerEvaluator()
-        evaluator._trace_dir = trace_dir
+        evaluator._trace_dir = tmp_path / "traces" / "nested"
+        provider = FakeProvider()
 
-        evaluator._run_single_test(_make_test_case(), skill_path, runtime)
-        assert trace_dir.exists()
+        evaluator._run_single_test(_make_test_case(), skill_path, FakeRuntime(), provider)
+        assert evaluator._trace_dir.exists()
 
     def test_handles_runtime_exception_gracefully(self, tmp_path: Path):
         skill_path = tmp_path / "skill"
@@ -511,10 +500,12 @@ class TestRunSingleTest:
             def execute(self, *args, **kwargs) -> int:
                 raise RuntimeError("CLI not found")
 
-        evaluator = TriggerEvaluator()
-        evaluator._trace_dir = tmp_path / "traces"
+        evaluator = self._make_evaluator(tmp_path)
+        provider = FakeProvider()
 
-        result = evaluator._run_single_test(_make_test_case(), skill_path, BrokenRuntime())
+        result = evaluator._run_single_test(
+            _make_test_case(), skill_path, BrokenRuntime(), provider
+        )
         assert result.passed is False
         assert "CLI not found" in result.message or "execution failed" in result.message.lower()
 
@@ -526,11 +517,11 @@ class TestRunSingleTest:
             TraceEvent(type="item.completed", raw={}),
         ]
         runtime = FakeRuntime(events=events)
-        evaluator = TriggerEvaluator()
-        evaluator._trace_dir = tmp_path / "traces"
+        evaluator = self._make_evaluator(tmp_path)
+        provider = FakeProvider()
 
         result = evaluator._run_single_test(
-            _make_test_case(skill_triggered=False), skill_path, runtime
+            _make_test_case(skill_triggered=False), skill_path, runtime, provider
         )
         assert result.events_count == 2
 
@@ -538,40 +529,16 @@ class TestRunSingleTest:
         skill_path = tmp_path / "skill"
         skill_path.mkdir()
         runtime = FakeRuntime(exit_code=42)
-        evaluator = TriggerEvaluator()
-        evaluator._trace_dir = tmp_path / "traces"
+        evaluator = self._make_evaluator(tmp_path)
+        provider = FakeProvider()
 
         result = evaluator._run_single_test(
-            _make_test_case(skill_triggered=False), skill_path, runtime
+            _make_test_case(skill_triggered=False), skill_path, runtime, provider
         )
         assert result.exit_code == 42
 
-    def test_uses_project_root_as_working_dir(self, tmp_path: Path):
-        """When project_root is provided, execute is called from there."""
-        skill_path = tmp_path / "skill"
-        skill_path.mkdir()
-        project_root = tmp_path / "project"
-        project_root.mkdir()
-
-        recorded: list[Path | None] = []
-
-        class RecordingRuntime(FakeRuntime):
-            def execute(
-                self, prompt, skill_path, trace_path, stop_on_skill=None, working_dir=None
-            ) -> int:
-                recorded.append(working_dir)
-                trace_path.parent.mkdir(parents=True, exist_ok=True)
-                trace_path.write_text("")
-                return 0
-
-        evaluator = TriggerEvaluator()
-        evaluator._trace_dir = tmp_path / "traces"
-        evaluator._run_single_test(
-            _make_test_case(), skill_path, RecordingRuntime(), project_root=project_root
-        )
-        assert recorded[0] == project_root
-
-    def test_uses_skill_path_as_working_dir_when_no_project_root(self, tmp_path: Path):
+    def test_provider_working_dir_used(self, tmp_path: Path):
+        """The provider's working_dir is passed to the runtime."""
         skill_path = tmp_path / "skill"
         skill_path.mkdir()
 
@@ -586,10 +553,34 @@ class TestRunSingleTest:
                 trace_path.write_text("")
                 return 0
 
-        evaluator = TriggerEvaluator()
-        evaluator._trace_dir = tmp_path / "traces"
-        evaluator._run_single_test(_make_test_case(), skill_path, RecordingRuntime())
+        evaluator = self._make_evaluator(tmp_path)
+        provider = FakeProvider()
+        evaluator._run_single_test(_make_test_case(), skill_path, RecordingRuntime(), provider)
+        # FakeProvider sets working_dir = skill_path
         assert recorded[0] == skill_path
+
+    def test_cleanup_called_after_test(self, tmp_path: Path):
+        skill_path = tmp_path / "skill"
+        skill_path.mkdir()
+        evaluator = self._make_evaluator(tmp_path)
+        provider = FakeProvider()
+
+        evaluator._run_single_test(_make_test_case(), skill_path, FakeRuntime(), provider)
+        assert provider.cleanup_count == 1
+
+    def test_cleanup_called_on_exception(self, tmp_path: Path):
+        skill_path = tmp_path / "skill"
+        skill_path.mkdir()
+
+        class BrokenRuntime(FakeRuntime):
+            def execute(self, *args, **kwargs) -> int:
+                raise RuntimeError("boom")
+
+        evaluator = self._make_evaluator(tmp_path)
+        provider = FakeProvider()
+
+        evaluator._run_single_test(_make_test_case(), skill_path, BrokenRuntime(), provider)
+        assert provider.cleanup_count == 1
 
 
 # ─── evaluate() ───────────────────────────────────────────────────────────────
@@ -820,3 +811,91 @@ class TestEvaluate:
         # Basic check: it's a non-empty ISO-like string
         assert "T" in report.timestamp
         assert "Z" in report.timestamp or "+" in report.timestamp
+
+    def test_report_includes_provider_name(self, tmp_path: Path):
+        ev = self._evaluator_with_runtime()
+        with patch(self._PATCH_LOAD, return_value=([], [])):
+            report = ev.evaluate(tmp_path / "skill")
+        assert report.provider == "local"
+
+
+# ─── _get_provider ───────────────────────────────────────────────────────────
+
+
+class TestGetProvider:
+    def test_default_provider_is_local(self):
+        evaluator = TriggerEvaluator()
+        provider = evaluator._get_provider()
+        assert isinstance(provider, LocalProvider)
+        assert provider.name == "local"
+
+    def test_explicit_local_provider(self):
+        evaluator = TriggerEvaluator(provider="local")
+        provider = evaluator._get_provider()
+        assert isinstance(provider, LocalProvider)
+
+    def test_docker_provider_raises_not_implemented(self):
+        from skill_lab.core.exceptions import ProviderError
+
+        evaluator = TriggerEvaluator(provider="docker")
+        with pytest.raises(ProviderError, match="not yet implemented"):
+            evaluator._get_provider()
+
+    def test_unknown_provider_raises_error(self):
+        from skill_lab.core.exceptions import ProviderError
+
+        evaluator = TriggerEvaluator(provider="foobar")
+        with pytest.raises(ProviderError, match="Unknown provider"):
+            evaluator._get_provider()
+
+
+# ─── Provider lifecycle in evaluate() ────────────────────────────────────────
+
+
+class TestProviderLifecycle:
+    _PATCH_LOAD = "skill_lab.triggers.trigger_evaluator.load_trigger_tests"
+
+    def test_setup_and_teardown_called(self, tmp_path: Path):
+        provider = FakeProvider()
+        ev = TriggerEvaluator()
+        ev._get_runtime = lambda: FakeRuntime()  # type: ignore[method-assign]
+        ev._get_provider = lambda: provider  # type: ignore[method-assign]
+
+        with patch(self._PATCH_LOAD, return_value=([], [])):
+            ev.evaluate(tmp_path / "skill")
+
+        assert provider.setup_called
+        assert provider.teardown_called
+
+    def test_teardown_called_on_test_error(self, tmp_path: Path):
+        """teardown() runs even if a test raises."""
+        provider = FakeProvider()
+        ev = TriggerEvaluator()
+        ev._get_runtime = lambda: FakeRuntime()  # type: ignore[method-assign]
+        ev._get_provider = lambda: provider  # type: ignore[method-assign]
+
+        tc = _make_test_case()
+        with patch(self._PATCH_LOAD, return_value=([tc], [])):
+            with patch.object(
+                ev,
+                "_run_single_test",
+                side_effect=RuntimeError("boom"),
+            ):
+                with pytest.raises(RuntimeError):
+                    ev.evaluate(tmp_path / "skill")
+
+        assert provider.teardown_called
+
+    def test_prepare_and_cleanup_called_per_test(self, tmp_path: Path):
+        provider = FakeProvider()
+        ev = TriggerEvaluator()
+        runtime = FakeRuntime()
+        ev._get_runtime = lambda: runtime  # type: ignore[method-assign]
+        ev._get_provider = lambda: provider  # type: ignore[method-assign]
+
+        tcs = [_make_test_case(id=f"t{i}", skill_triggered=False) for i in range(3)]
+        with patch(self._PATCH_LOAD, return_value=(tcs, [])):
+            ev.evaluate(tmp_path / "skill")
+
+        assert provider.prepare_count == 3
+        assert provider.cleanup_count == 3

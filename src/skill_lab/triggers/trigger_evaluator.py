@@ -1,5 +1,7 @@
 """Orchestrate trigger test execution."""
 
+from __future__ import annotations
+
 import time
 from collections.abc import Callable
 from datetime import datetime, timezone
@@ -13,6 +15,8 @@ from skill_lab.core.models import (
     TriggerType,
 )
 from skill_lab.core.scoring import build_summary_by_attribute, calculate_metrics
+from skill_lab.providers.base import ExecutionProvider
+from skill_lab.providers.local import LocalProvider
 from skill_lab.runtimes.base import RuntimeAdapter
 from skill_lab.runtimes.claude_runtime import ClaudeRuntime
 from skill_lab.runtimes.codex_runtime import CodexRuntime
@@ -25,55 +29,25 @@ class TriggerEvaluator:
 
     The evaluator:
     1. Loads test cases from YAML
-    2. Executes each test through the selected runtime
-    3. Analyzes traces for skill invocations
-    4. Produces a TriggerReport with pass rates by trigger type
+    2. Sets up an execution provider (local temp dir or Docker)
+    3. Executes each test through the selected runtime + provider
+    4. Analyzes traces for skill invocations
+    5. Produces a TriggerReport with pass rates by trigger type
     """
 
     def __init__(
         self,
         runtime: str | None = None,
+        provider: str | None = None,
     ) -> None:
         """Initialize the trigger evaluator.
 
         Args:
             runtime: Runtime to use ('codex', 'claude', or None for auto-detect).
+            provider: Execution provider ('local' or 'docker', default 'local').
         """
         self._runtime_name = runtime
-
-    def _find_project_root(self, skill_path: Path) -> Path | None:
-        """Find the project root directory containing .claude/skills/.
-
-        Traverses up from skill_path to find a directory that contains
-        .claude/skills/. This is used to run implicit tests from a location
-        where Claude can discover project-level skills.
-
-        Args:
-            skill_path: Path to the skill directory.
-
-        Returns:
-            Path to project root, or None if not found.
-        """
-        # skill_path is typically: /project/.claude/skills/skill-name
-        # We want to find: /project (which contains .claude/skills/)
-        current = skill_path.resolve()
-
-        # Traverse up to find .claude/skills/
-        for _ in range(10):  # Limit depth to avoid infinite loop
-            # Check if this directory contains .claude/skills/
-            if (current / ".claude" / "skills").is_dir():
-                return current
-
-            # Check if we're inside .claude/skills/ already
-            if current.name == "skills" and current.parent.name == ".claude":
-                return current.parent.parent
-
-            parent = current.parent
-            if parent == current:  # Reached root
-                break
-            current = parent
-
-        return None
+        self._provider_name = provider or "local"
 
     def evaluate(
         self,
@@ -97,9 +71,6 @@ class TriggerEvaluator:
         # Store traces in the skill's .sklab/traces directory
         self._trace_dir = skill_path / TRACES_DIR
 
-        # Find project root for implicit tests (where .claude/skills/ is visible)
-        project_root = self._find_project_root(skill_path)
-
         # Load test cases
         test_cases, load_errors = load_trigger_tests(skill_path)
 
@@ -107,36 +78,41 @@ class TriggerEvaluator:
         if type_filter:
             test_cases = [tc for tc in test_cases if tc.trigger_type == type_filter]
 
-        # Get runtime adapter
+        # Get runtime adapter and execution provider
         runtime = self._get_runtime()
+        exec_provider = self._get_provider()
 
         # Extract skill name
         skill_name = self._get_skill_name(skill_path, test_cases)
 
-        # Run tests
+        # Run tests with provider lifecycle
         results: list[TriggerResult] = []
 
-        if load_errors and not test_cases:
-            # No tests to run, report loading errors
-            for error in load_errors:
-                results.append(
-                    TriggerResult(
-                        test_id="load-error",
-                        test_name="Test Loading",
-                        trigger_type=TriggerType.EXPLICIT,
-                        passed=False,
-                        skill_triggered=False,
-                        expected_trigger=True,
-                        message=error,
+        exec_provider.setup(skill_path, skill_name)
+        try:
+            if load_errors and not test_cases:
+                # No tests to run, report loading errors
+                for error in load_errors:
+                    results.append(
+                        TriggerResult(
+                            test_id="load-error",
+                            test_name="Test Loading",
+                            trigger_type=TriggerType.EXPLICIT,
+                            passed=False,
+                            skill_triggered=False,
+                            expected_trigger=True,
+                            message=error,
+                        )
                     )
-                )
-        else:
-            total = len(test_cases)
-            for i, test_case in enumerate(test_cases):
-                if progress_callback:
-                    progress_callback(i + 1, total, test_case.name)
-                result = self._run_single_test(test_case, skill_path, runtime, project_root)
-                results.append(result)
+            else:
+                total = len(test_cases)
+                for i, test_case in enumerate(test_cases):
+                    if progress_callback:
+                        progress_callback(i + 1, total, test_case.name)
+                    result = self._run_single_test(test_case, skill_path, runtime, exec_provider)
+                    results.append(result)
+        finally:
+            exec_provider.teardown()
 
         # Calculate metrics
         duration_ms = (time.time() - start_time) * 1000
@@ -158,6 +134,7 @@ class TriggerEvaluator:
             pass_rate=metrics.pass_rate / 100 if results else 0.0,  # Convert to 0-1 range
             results=results,
             summary_by_type=summary_by_type,
+            provider=exec_provider.name,
         )
 
     def _get_runtime(self) -> RuntimeAdapter:
@@ -177,6 +154,27 @@ class TriggerEvaluator:
             # Default to codex even if not available (will fail with helpful error)
             return codex
 
+    def _get_provider(self) -> ExecutionProvider:
+        """Get the execution provider to use."""
+        if self._provider_name == "local":
+            return LocalProvider()
+        if self._provider_name == "docker":
+            from skill_lab.core.exceptions import ProviderError
+
+            raise ProviderError(
+                "Docker provider is not yet implemented",
+                provider="docker",
+                suggestion="Use --provider local (default) or wait for a future release",
+            )
+
+        from skill_lab.core.exceptions import ProviderError
+
+        raise ProviderError(
+            f"Unknown provider: {self._provider_name!r}",
+            provider=self._provider_name,
+            suggestion="Available providers: local, docker (planned)",
+        )
+
     def _get_skill_name(self, skill_path: Path, test_cases: list[TriggerTestCase]) -> str:
         """Extract skill name from test cases or path."""
         for tc in test_cases:
@@ -189,7 +187,7 @@ class TriggerEvaluator:
         test_case: TriggerTestCase,
         skill_path: Path,
         runtime: RuntimeAdapter,
-        project_root: Path | None = None,
+        exec_provider: ExecutionProvider,
     ) -> TriggerResult:
         """Execute a single trigger test.
 
@@ -197,8 +195,7 @@ class TriggerEvaluator:
             test_case: The test case to run.
             skill_path: Path to the skill directory.
             runtime: Runtime adapter to use.
-            project_root: Project root directory (where .claude/skills/ exists).
-                Used for implicit/contextual tests to test skill discovery.
+            exec_provider: Execution provider for environment isolation.
 
         Returns:
             TriggerResult for this test.
@@ -207,26 +204,20 @@ class TriggerEvaluator:
         trace_path = self._trace_dir / f"{test_case.id}.jsonl"
         trace_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Always run from project root to ensure all skills are loaded
-        # This provides a consistent testing environment where Claude can
-        # discover all project-level skills via .claude/skills/
-        working_dir = project_root if project_root else skill_path
+        # For positive tests (expecting trigger), enable early termination
+        # to save time and cost once the skill is detected
+        stop_on_skill = None
+        if test_case.expected.skill_triggered:
+            stop_on_skill = test_case.skill_name
 
+        # Prepare isolated environment
+        context = exec_provider.prepare_test(skill_path, test_case.skill_name, trace_path)
         try:
-            # For positive tests (expecting trigger), enable early termination
-            # to save time and cost once the skill is detected
-            stop_on_skill = None
-            if test_case.expected.skill_triggered:
-                stop_on_skill = test_case.skill_name
+            # Execute the prompt in the isolated environment
+            exit_code = exec_provider.execute(context, runtime, test_case.prompt, stop_on_skill)
 
-            # Execute the prompt
-            exit_code = runtime.execute(
-                prompt=test_case.prompt,
-                skill_path=skill_path,
-                trace_path=trace_path,
-                stop_on_skill=stop_on_skill,
-                working_dir=working_dir,
-            )
+            # Collect trace from execution environment to host
+            exec_provider.collect_trace(context)
 
             # Parse and analyze the trace
             events = list(runtime.parse_trace(trace_path))
@@ -273,6 +264,8 @@ class TriggerEvaluator:
                 trace_path=trace_path,
                 details={"error": str(e)},
             )
+        finally:
+            exec_provider.cleanup_test(context)
 
     def _check_expectations(
         self,

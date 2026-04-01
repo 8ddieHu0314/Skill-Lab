@@ -192,6 +192,36 @@ class ValidationError(SkillLabError):
         super().__init__(message, context=ctx, suggestion=suggestion)
 
 
+class ProviderError(SkillLabError):
+    """Error from an execution provider.
+
+    Raised when the execution environment fails (Docker unavailable,
+    container crash, temp directory errors, etc.).
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        provider: str | None = None,
+        context: dict[str, Any] | None = None,
+        suggestion: str | None = None,
+    ) -> None:
+        """Initialize the provider error.
+
+        Args:
+            message: Description of what went wrong.
+            provider: Name of the provider that failed (e.g., 'docker', 'local').
+            context: Additional context for debugging.
+            suggestion: How to fix the issue.
+        """
+        self.provider = provider
+        ctx = context or {}
+        if provider:
+            ctx["provider"] = provider
+        super().__init__(message, context=ctx, suggestion=suggestion)
+
+
 class GenerationError(SkillLabError):
     """Error during LLM-based trigger generation.
 

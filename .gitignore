@@ -86,4 +86,4 @@ tasks/
 !tests/fixtures/**/*.json
 downloaded-skills/
 tests/fixtures/skills/downloaded/
-.sklab/
+**/.sklab/
