@@ -42,18 +42,17 @@ dependencies = [
     "openai>=1.0.0",
     "google-generativeai>=0.8.0",
     "python-dotenv>=1.0.0",
+    "docker>=7.0.0",
 ]
 
 [project.optional-dependencies]
-docker = [
-    "docker>=7.0.0",
-]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "mypy>=1.0",
     "ruff>=0.1.0",
     "types-PyYAML>=6.0",
+    "types-docker>=7.0",
 ]
 
 [project.scripts]
@@ -129,10 +128,6 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = ["dotenv.*"]
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = ["docker.*"]
 ignore_missing_imports = true
 
 # Pytest - Testing

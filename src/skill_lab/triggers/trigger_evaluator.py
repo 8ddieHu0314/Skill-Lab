@@ -159,7 +159,7 @@ class TriggerEvaluator:
         if self._provider_name == "local":
             return LocalProvider()
         if self._provider_name == "docker":
-            from skill_lab.providers.docker import DockerProvider
+            from skill_lab.providers import DockerProvider
 
             return DockerProvider(runtime)
 

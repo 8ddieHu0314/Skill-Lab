@@ -126,17 +126,10 @@ class TestDockerProviderInit:
         provider = DockerProvider(FakeRuntime())
         assert provider.name == "docker"
 
-    def test_get_client_import_error(self) -> None:
-        provider = DockerProvider(FakeRuntime())
-        with patch.dict("sys.modules", {"docker": None}):
-            with pytest.raises(ProviderError, match="Docker SDK not installed"):
-                provider._get_client()
-
     def test_get_client_connection_error(self) -> None:
         provider = DockerProvider(FakeRuntime())
-        mock_docker = MagicMock()
-        mock_docker.from_env.side_effect = Exception("Cannot connect")
-        with patch.dict("sys.modules", {"docker": mock_docker}):
+        with patch("skill_lab.providers.docker.docker_lib") as mock_docker:
+            mock_docker.from_env.side_effect = Exception("Cannot connect")
             with pytest.raises(ProviderError, match="Cannot connect to Docker daemon"):
                 provider._get_client()
 

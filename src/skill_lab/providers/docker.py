@@ -1,7 +1,4 @@
-"""Docker execution provider — container-based isolation.
-
-Requires: pip install skill-lab[docker]
-"""
+"""Docker execution provider — container-based isolation."""
 
 from __future__ import annotations
 
@@ -12,6 +9,8 @@ import os
 import tarfile
 from pathlib import Path
 from typing import Any
+
+import docker as docker_lib
 
 from skill_lab.core.exceptions import ProviderError
 from skill_lab.providers.base import ExecutionContext, ExecutionProvider
@@ -72,8 +71,6 @@ class _ContainerRef:
 class DockerProvider(ExecutionProvider):
     """Execution provider that runs agents inside Docker containers.
 
-    Requires: pip install skill-lab[docker]
-
     Lifecycle:
         setup()         → Build base image, inject skill, commit snapshot
         prepare_test()  → Create container from snapshot
@@ -106,14 +103,6 @@ class DockerProvider(ExecutionProvider):
         """Lazy-init Docker client with helpful error on failure."""
         if self._client is not None:
             return self._client
-        try:
-            import docker as docker_lib
-        except ImportError:
-            raise ProviderError(
-                "Docker SDK not installed",
-                provider="docker",
-                suggestion="Install with: pip install skill-lab[docker]",
-            ) from None
         try:
             client = docker_lib.from_env()
             client.ping()

@@ -100,7 +100,7 @@ src/skill_lab/
 ├── providers/                # Execution environment providers
 │   ├── base.py               # ExecutionProvider ABC + ExecutionContext
 │   ├── local.py              # LocalProvider (temp dir isolation)
-│   └── docker.py             # DockerProvider (container isolation, pip install skill-lab[docker])
+│   └── docker.py             # DockerProvider (container isolation)
 ├── runtimes/                 # Runtime adapters (Phase 2)
 │   ├── base.py               # RuntimeAdapter abstract base class
 │   ├── codex_runtime.py      # OpenAI Codex CLI adapter
