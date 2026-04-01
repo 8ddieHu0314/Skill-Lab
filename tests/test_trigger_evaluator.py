@@ -823,30 +823,34 @@ class TestEvaluate:
 
 
 class TestGetProvider:
+    def _runtime(self) -> FakeRuntime:
+        return FakeRuntime()
+
     def test_default_provider_is_local(self):
         evaluator = TriggerEvaluator()
-        provider = evaluator._get_provider()
+        provider = evaluator._get_provider(self._runtime())
         assert isinstance(provider, LocalProvider)
         assert provider.name == "local"
 
     def test_explicit_local_provider(self):
         evaluator = TriggerEvaluator(provider="local")
-        provider = evaluator._get_provider()
+        provider = evaluator._get_provider(self._runtime())
         assert isinstance(provider, LocalProvider)
 
-    def test_docker_provider_raises_not_implemented(self):
-        from skill_lab.core.exceptions import ProviderError
+    def test_docker_provider_returns_docker(self):
+        from skill_lab.providers.docker import DockerProvider
 
         evaluator = TriggerEvaluator(provider="docker")
-        with pytest.raises(ProviderError, match="not yet implemented"):
-            evaluator._get_provider()
+        provider = evaluator._get_provider(self._runtime())
+        assert isinstance(provider, DockerProvider)
+        assert provider.name == "docker"
 
     def test_unknown_provider_raises_error(self):
         from skill_lab.core.exceptions import ProviderError
 
         evaluator = TriggerEvaluator(provider="foobar")
         with pytest.raises(ProviderError, match="Unknown provider"):
-            evaluator._get_provider()
+            evaluator._get_provider(self._runtime())
 
 
 # ─── Provider lifecycle in evaluate() ────────────────────────────────────────
@@ -859,7 +863,7 @@ class TestProviderLifecycle:
         provider = FakeProvider()
         ev = TriggerEvaluator()
         ev._get_runtime = lambda: FakeRuntime()  # type: ignore[method-assign]
-        ev._get_provider = lambda: provider  # type: ignore[method-assign]
+        ev._get_provider = lambda _rt: provider  # type: ignore[method-assign]
 
         with patch(self._PATCH_LOAD, return_value=([], [])):
             ev.evaluate(tmp_path / "skill")
@@ -872,7 +876,7 @@ class TestProviderLifecycle:
         provider = FakeProvider()
         ev = TriggerEvaluator()
         ev._get_runtime = lambda: FakeRuntime()  # type: ignore[method-assign]
-        ev._get_provider = lambda: provider  # type: ignore[method-assign]
+        ev._get_provider = lambda _rt: provider  # type: ignore[method-assign]
 
         tc = _make_test_case()
         with patch(self._PATCH_LOAD, return_value=([tc], [])):
@@ -891,7 +895,7 @@ class TestProviderLifecycle:
         ev = TriggerEvaluator()
         runtime = FakeRuntime()
         ev._get_runtime = lambda: runtime  # type: ignore[method-assign]
-        ev._get_provider = lambda: provider  # type: ignore[method-assign]
+        ev._get_provider = lambda _rt: provider  # type: ignore[method-assign]
 
         tcs = [_make_test_case(id=f"t{i}", skill_triggered=False) for i in range(3)]
         with patch(self._PATCH_LOAD, return_value=(tcs, [])):

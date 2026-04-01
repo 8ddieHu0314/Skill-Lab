@@ -63,6 +63,35 @@ class RuntimeAdapter(ABC):
         """
         ...
 
+    @property
+    def cli_binary_name(self) -> str:
+        """Public accessor for the CLI binary name (e.g., 'claude', 'codex').
+
+        Used by DockerProvider to determine which CLI to install in the image.
+        """
+        return self._cli_binary_name()
+
+    def build_command(self, cli_path: str, prompt: str) -> list[str]:
+        """Public accessor for command construction.
+
+        Used by DockerProvider to build the command for container.exec_run().
+        """
+        return self._build_command(cli_path, prompt)
+
+    def check_skill_trigger(self, line: str, skill_name: str) -> bool:
+        """Public accessor for skill trigger detection.
+
+        Used by DockerProvider for streaming early-termination.
+        """
+        return self._check_skill_trigger(line, skill_name)
+
+    def format_trace(self, raw_output: str) -> str:
+        """Public accessor for trace formatting.
+
+        Used by DockerProvider to format captured container output.
+        """
+        return self._format_trace(raw_output)
+
     def execute(
         self,
         prompt: str,

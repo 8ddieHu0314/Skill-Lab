@@ -74,7 +74,7 @@ See `docs/ARCHITECTURE.md` for full directory structure and data flow diagrams.
 
 - **Trace checks**: `tracechecks/` is a parallel registration system using `@register_trace_handler` decorator and `TraceCheckRegistry`. 5 handlers: `command_presence`, `file_creation`, `event_sequence`, `loop_detection`, `efficiency`. Scored under the Execution dimension.
 - **Runtimes**: `runtimes/` provides adapters for running trigger tests against live LLMs — `claude_runtime.py` (Claude Code CLI) and `codex_runtime.py` (OpenAI Codex). Both extend `base.py` ABC.
-- **Execution providers**: `providers/` controls WHERE agents run. `LocalProvider` (default) creates an isolated temp directory per test with the skill copied into `.claude/skills/`. `DockerProvider` (planned) will run tests inside containers. Provider is orthogonal to runtime — `RuntimeAdapter` = HOW (CLI args, trace format), `ExecutionProvider` = WHERE (temp dir, Docker).
+- **Execution providers**: `providers/` controls WHERE agents run. `LocalProvider` (default) creates an isolated temp directory per test. `DockerProvider` runs tests inside Docker containers using a "build once, spawn many" snapshot pattern. Provider is orthogonal to runtime — `RuntimeAdapter` = HOW (CLI args, trace format), `ExecutionProvider` = WHERE (temp dir, Docker). RuntimeAdapter exposes public accessors (`cli_binary_name`, `build_command()`, `check_skill_trigger()`, `format_trace()`) for DockerProvider to construct and monitor agent commands inside containers.
 - **Scoring**: Weighted across 5 dimensions (Structure, Naming, Description, Content, Execution) by severity (HIGH > MEDIUM > LOW). Execution is trace-based and scored separately. See `scoring.py` for exact weights.
 
 ### LLM Features

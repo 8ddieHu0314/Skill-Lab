@@ -80,7 +80,7 @@ class TriggerEvaluator:
 
         # Get runtime adapter and execution provider
         runtime = self._get_runtime()
-        exec_provider = self._get_provider()
+        exec_provider = self._get_provider(runtime)
 
         # Extract skill name
         skill_name = self._get_skill_name(skill_path, test_cases)
@@ -154,25 +154,21 @@ class TriggerEvaluator:
             # Default to codex even if not available (will fail with helpful error)
             return codex
 
-    def _get_provider(self) -> ExecutionProvider:
+    def _get_provider(self, runtime: RuntimeAdapter) -> ExecutionProvider:
         """Get the execution provider to use."""
         if self._provider_name == "local":
             return LocalProvider()
         if self._provider_name == "docker":
-            from skill_lab.core.exceptions import ProviderError
+            from skill_lab.providers import DockerProvider
 
-            raise ProviderError(
-                "Docker provider is not yet implemented",
-                provider="docker",
-                suggestion="Use --provider local (default) or wait for a future release",
-            )
+            return DockerProvider(runtime)
 
         from skill_lab.core.exceptions import ProviderError
 
         raise ProviderError(
             f"Unknown provider: {self._provider_name!r}",
             provider=self._provider_name,
-            suggestion="Available providers: local, docker (planned)",
+            suggestion="Available providers: local, docker",
         )
 
     def _get_skill_name(self, skill_path: Path, test_cases: list[TriggerTestCase]) -> str:
