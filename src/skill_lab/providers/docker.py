@@ -30,8 +30,26 @@ _API_KEY_VARS = ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY")
 _DEFAULT_CPU_COUNT = 1
 _DEFAULT_MEM_LIMIT = "512m"
 
+# Minimum secret length to redact (avoids false positives on "true", "1", etc.)
+_MIN_SECRET_LENGTH = 6
+
 # Image tag prefix
 _IMAGE_PREFIX = "sklab"
+
+
+def _redact_secrets(text: str) -> str:
+    """Replace API key values in text with [REDACTED].
+
+    Scans for the current values of known API key env vars and replaces
+    all occurrences. Only the persisted trace file is redacted — in-memory
+    output remains untouched for terminal display.
+    """
+    result = text
+    for var in _API_KEY_VARS:
+        value = os.environ.get(var)
+        if value and len(value) >= _MIN_SECRET_LENGTH:
+            result = result.replace(value, "[REDACTED]")
+    return result
 
 
 def _build_dockerfile(cli_binary: str) -> str:
@@ -178,6 +196,7 @@ class DockerProvider(ExecutionProvider):
                             tar.add(str(file), arcname=arcname)
 
         tar_buffer.seek(0)
+        container.exec_run(["mkdir", "-p", _SKILL_DISCOVERY_PATH])
         container.put_archive(f"{_SKILL_DISCOVERY_PATH}/", tar_buffer.getvalue())
 
     def prepare_test(
@@ -316,11 +335,15 @@ class DockerProvider(ExecutionProvider):
         return int(inspect.get("ExitCode", 0))
 
     def collect_trace(self, context: ExecutionContext) -> Path:
-        """Write captured container output to the host trace path."""
+        """Write captured container output to the host trace path.
+
+        API key values are redacted before writing to disk.
+        """
         raw_output = self._captured_output.pop(context.trace_path, "")
         formatted = self._runtime.format_trace(raw_output)
+        redacted = _redact_secrets(formatted)
         context.trace_path.parent.mkdir(parents=True, exist_ok=True)
-        context.trace_path.write_text(formatted)
+        context.trace_path.write_text(redacted)
         return context.trace_path
 
     def cleanup_test(self, context: ExecutionContext) -> None:

@@ -20,6 +20,7 @@ from skill_lab.providers.docker import (
     _WORKSPACE,
     _base_image_tag,
     _build_dockerfile,
+    _redact_secrets,
     _snapshot_tag,
 )
 from skill_lab.runtimes.base import RuntimeAdapter
@@ -326,6 +327,57 @@ class TestDockerProviderCollectTrace:
         assert trace_path.exists()
         content = trace_path.read_text()
         assert "result" in content
+
+
+class TestRedactSecrets:
+    def test_redacts_api_key_values(self) -> None:
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-ant-secret-key-12345"}):
+            result = _redact_secrets('output contains sk-ant-secret-key-12345 here')
+            assert "sk-ant-secret-key-12345" not in result
+            assert "[REDACTED]" in result
+            assert "output contains [REDACTED] here" == result
+
+    def test_redacts_multiple_keys(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"ANTHROPIC_API_KEY": "sk-ant-abc123", "OPENAI_API_KEY": "sk-oai-xyz789"},
+        ):
+            result = _redact_secrets("keys: sk-ant-abc123 and sk-oai-xyz789")
+            assert "sk-ant-abc123" not in result
+            assert "sk-oai-xyz789" not in result
+            assert result.count("[REDACTED]") == 2
+
+    def test_skips_short_values(self) -> None:
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "short"}):
+            result = _redact_secrets("the value is short here")
+            assert "short" in result
+            assert "[REDACTED]" not in result
+
+    def test_no_env_vars_set(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            result = _redact_secrets("nothing to redact")
+            assert result == "nothing to redact"
+
+    def test_redacts_all_occurrences(self) -> None:
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-secret-repeat"}):
+            result = _redact_secrets("sk-secret-repeat and sk-secret-repeat again")
+            assert "sk-secret-repeat" not in result
+            assert result.count("[REDACTED]") == 2
+
+    def test_collect_trace_redacts_secrets(self, tmp_path: Path) -> None:
+        provider = DockerProvider(FakeRuntime())
+        trace_path = tmp_path / "traces" / "test.jsonl"
+        provider._captured_output[trace_path] = '{"key": "sk-ant-leaked-key-999"}'
+
+        ctx = MagicMock()
+        ctx.trace_path = trace_path
+
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-ant-leaked-key-999"}):
+            provider.collect_trace(ctx)
+
+        content = trace_path.read_text()
+        assert "sk-ant-leaked-key-999" not in content
+        assert "[REDACTED]" in content
 
 
 class TestDockerProviderCleanup:
