@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
 import os
 import tarfile
 from pathlib import Path
@@ -263,7 +264,10 @@ class DockerProvider(ExecutionProvider):
         except ProviderError:
             raise
         except Exception as exc:
-            error_trace = f'{{"type": "error", "message": "Container execution failed: {exc}"}}\n'
+            error_trace = (
+                json.dumps({"type": "error", "message": f"Container execution failed: {exc}"})
+                + "\n"
+            )
             self._captured_output[context.trace_path] = error_trace
             return 1
 
@@ -312,6 +316,13 @@ class DockerProvider(ExecutionProvider):
         self._captured_output[trace_path] = "\n".join(captured_lines)
 
         if skill_triggered:
+            # Stop the container to kill the exec process and prevent
+            # further API calls from burning tokens between detection
+            # and cleanup_test(). The container is restarted so
+            # cleanup_test() can still stop/remove it cleanly.
+            with contextlib.suppress(Exception):
+                container.stop(timeout=2)
+                container.restart()
             return 0
 
         inspect = container.client.api.exec_inspect(exec_id)
