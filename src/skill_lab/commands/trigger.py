@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 from typing import Annotated
 
+import click
 import typer
 from rich import box
 from rich.table import Table
@@ -121,6 +122,7 @@ def trigger(
         typer.Option(
             "--provider",
             help="Execution provider: local (temp dir isolation) or docker (container isolation)",
+            click_type=click.Choice(["local", "docker"], case_sensitive=False),
         ),
     ] = "local",
     type_filter: Annotated[

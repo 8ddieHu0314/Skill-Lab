@@ -156,6 +156,8 @@ class TriggerEvaluator:
 
     def _get_provider(self) -> ExecutionProvider:
         """Get the execution provider to use."""
+        if self._provider_name == "local":
+            return LocalProvider()
         if self._provider_name == "docker":
             from skill_lab.core.exceptions import ProviderError
 
@@ -164,7 +166,14 @@ class TriggerEvaluator:
                 provider="docker",
                 suggestion="Use --provider local (default) or wait for a future release",
             )
-        return LocalProvider()
+
+        from skill_lab.core.exceptions import ProviderError
+
+        raise ProviderError(
+            f"Unknown provider: {self._provider_name!r}",
+            provider=self._provider_name,
+            suggestion="Available providers: local, docker (planned)",
+        )
 
     def _get_skill_name(self, skill_path: Path, test_cases: list[TriggerTestCase]) -> str:
         """Extract skill name from test cases or path."""

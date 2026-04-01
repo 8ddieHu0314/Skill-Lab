@@ -841,6 +841,13 @@ class TestGetProvider:
         with pytest.raises(ProviderError, match="not yet implemented"):
             evaluator._get_provider()
 
+    def test_unknown_provider_raises_error(self):
+        from skill_lab.core.exceptions import ProviderError
+
+        evaluator = TriggerEvaluator(provider="foobar")
+        with pytest.raises(ProviderError, match="Unknown provider"):
+            evaluator._get_provider()
+
 
 # ─── Provider lifecycle in evaluate() ────────────────────────────────────────
 
