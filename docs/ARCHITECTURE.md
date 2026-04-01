@@ -97,6 +97,9 @@ src/skill_lab/
 │   ├── test_loader.py        # Load test cases from YAML
 │   ├── trace_analyzer.py     # Analyze execution traces
 │   └── trigger_evaluator.py  # Orchestrates trigger tests
+├── providers/                # Execution environment providers
+│   ├── base.py               # ExecutionProvider ABC + ExecutionContext
+│   └── local.py              # LocalProvider (temp dir isolation)
 ├── runtimes/                 # Runtime adapters (Phase 2)
 │   ├── base.py               # RuntimeAdapter abstract base class
 │   ├── codex_runtime.py      # OpenAI Codex CLI adapter
@@ -555,16 +558,20 @@ Trigger testing verifies that skills activate correctly for different prompt typ
 │     .sklab/tests/triggers.yaml → Simple flat format                 │
 │     .sklab/tests/scenarios.yaml → GWT DSL                           │
 │                              │                                          │
-│  2. Execute prompts via Runtime Adapter                                 │
-│     RuntimeAdapter (Claude CLI; Codex CLI in v0.3.0)                    │
-│     → Skill metadata injected into context                              │
-│     → Prompt sent to LLM                                                │
+│  2. Prepare execution environment via Provider                          │
+│     ExecutionProvider (local temp dir; Docker container planned)         │
+│     → Creates isolated working directory                                │
+│     → Copies skill into .claude/skills/ discovery path                  │
+│                              │                                          │
+│  3. Execute prompts via Runtime Adapter                                 │
+│     RuntimeAdapter (Claude CLI; Codex CLI)                              │
+│     → Prompt sent to LLM in isolated environment                        │
 │     → Execution trace captured as JSONL                                 │
 │                              │                                          │
-│  3. Analyze trace for skill invocation                                  │
+│  4. Analyze trace for skill invocation                                  │
 │     TraceAnalyzer → Was skill X invoked? Commands run? Loops detected?  │
 │                              │                                          │
-│  4. Report trigger success/failure                                      │
+│  5. Clean up and report trigger success/failure                         │
 │     TriggerReport → pass rate by type, failures list                    │
 │     Progress spinner shows current test during execution                │
 │                                                                         │

@@ -62,6 +62,7 @@ def _print_trigger_report(report: TriggerReport) -> None:
     console.print(
         f"[bold]Trigger Test Report:[/bold] {report.skill_name}\n"
         f"[dim]Runtime:[/dim] {report.runtime} [dim]\u2502[/dim] "
+        f"[dim]Provider:[/dim] {report.provider} [dim]\u2502[/dim] "
         f"[dim]Duration:[/dim] {duration} [dim]\u2502[/dim] "
         f"{pass_status}"
     )
@@ -115,6 +116,13 @@ def trigger(
             hidden=True,
         ),
     ] = "claude",
+    provider: Annotated[
+        str,
+        typer.Option(
+            "--provider",
+            help="Execution provider: local (temp dir isolation) or docker (container isolation)",
+        ),
+    ] = "local",
     type_filter: Annotated[
         str | None,
         typer.Option(
@@ -203,7 +211,7 @@ def trigger(
     )
 
     # Run evaluation with progress display
-    evaluator = TriggerEvaluator(runtime=runtime)
+    evaluator = TriggerEvaluator(runtime=runtime, provider=provider)
 
     with console.status("", spinner="dots") as status:
 

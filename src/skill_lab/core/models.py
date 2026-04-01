@@ -254,6 +254,7 @@ class TriggerReport:
     pass_rate: float
     results: list[TriggerResult]
     summary_by_type: dict[str, dict[str, int]]
+    provider: str = "local"
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -263,6 +264,7 @@ class TriggerReport:
             "timestamp": self.timestamp,
             "duration_ms": self.duration_ms,
             "runtime": self.runtime,
+            "provider": self.provider,
             "tests_run": self.tests_run,
             "tests_passed": self.tests_passed,
             "tests_failed": self.tests_failed,
