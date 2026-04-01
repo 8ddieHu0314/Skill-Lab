@@ -45,6 +45,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+docker = [
+    "docker>=7.0.0",
+]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
@@ -126,6 +129,10 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = ["dotenv.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["docker.*"]
 ignore_missing_imports = true
 
 # Pytest - Testing
