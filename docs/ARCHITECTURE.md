@@ -16,6 +16,7 @@ This document provides a comprehensive overview of Skill-Lab's technology stack 
 | **openai** | ≥1.0.0 | LLM provider for OpenAI models (`gpt-*`, `o3-*`) |
 | **google-generativeai** | ≥0.8.0 | LLM provider for Gemini models (`gemini-*`) |
 | **python-dotenv** | ≥1.0.0 | Loads `.env` file for API keys and config |
+| **docker** | ≥7.0.0 | Docker SDK for container-based test isolation |
 
 ### Development Dependencies
 
@@ -560,7 +561,7 @@ Trigger testing verifies that skills activate correctly for different prompt typ
 │     .sklab/tests/scenarios.yaml → GWT DSL                           │
 │                              │                                          │
 │  2. Prepare execution environment via Provider                          │
-│     ExecutionProvider (local temp dir; Docker container planned)         │
+│     ExecutionProvider (local temp dir; Docker container)                 │
 │     → Creates isolated working directory                                │
 │     → Copies skill into .claude/skills/ discovery path                  │
 │                              │                                          │

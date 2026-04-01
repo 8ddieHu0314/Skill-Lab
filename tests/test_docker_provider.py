@@ -5,10 +5,12 @@ All tests mock the Docker SDK so they run without Docker installed.
 
 from __future__ import annotations
 
+import io
 import os
+import tarfile
 from collections.abc import Iterator
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
@@ -17,6 +19,7 @@ from skill_lab.core.models import TraceEvent
 from skill_lab.providers.docker import (
     DockerProvider,
     _SKILL_DISCOVERY_PATH,
+    _SKILL_SUBDIRS,
     _WORKSPACE,
     _base_image_tag,
     _build_dockerfile,
@@ -195,6 +198,92 @@ class TestDockerProviderSetup:
         with pytest.raises(ProviderError, match="Failed to build"):
             provider.setup(skill_path, "skill")
 
+    def test_inject_skill_includes_subdirectory_files(self, tmp_path: Path) -> None:
+        skill_path = tmp_path / "my-skill"
+        skill_path.mkdir()
+        (skill_path / "SKILL.md").write_text("---\nname: my-skill\n---\nBody")
+
+        # Create subdirectories with files
+        for subdir in _SKILL_SUBDIRS:
+            sub = skill_path / subdir
+            sub.mkdir()
+            (sub / f"{subdir}_file.txt").write_text(f"content of {subdir}")
+
+        # Also create a nested file in scripts/
+        nested = skill_path / "scripts" / "lib"
+        nested.mkdir()
+        (nested / "helper.py").write_text("print('hello')")
+
+        client = _mock_docker_client()
+        client.images.get.side_effect = Exception("not found")
+
+        provider = DockerProvider(FakeRuntime())
+        provider._client = client
+
+        provider.setup(skill_path, "my-skill")
+
+        container = client.containers.create.return_value
+        container.put_archive.assert_called_once()
+
+        # Extract the tar data from the put_archive call and inspect entries
+        call_args = container.put_archive.call_args
+        tar_data = call_args[0][1]
+        tar_buffer = io.BytesIO(tar_data)
+        with tarfile.open(fileobj=tar_buffer, mode="r") as tar:
+            names = {m.name for m in tar.getmembers()}
+
+        assert "my-skill/SKILL.md" in names
+        assert "my-skill/scripts/scripts_file.txt" in names
+        assert "my-skill/assets/assets_file.txt" in names
+        assert "my-skill/references/references_file.txt" in names
+        assert "my-skill/scripts/lib/helper.py" in names
+
+    def test_mkdir_called_before_put_archive(self, tmp_path: Path) -> None:
+        skill_path = tmp_path / "my-skill"
+        skill_path.mkdir()
+        (skill_path / "SKILL.md").write_text("---\nname: my-skill\n---\nBody")
+
+        client = _mock_docker_client()
+        client.images.get.side_effect = Exception("not found")
+
+        provider = DockerProvider(FakeRuntime())
+        provider._client = client
+
+        # Track call ordering via a shared list
+        call_order: list[str] = []
+        container = client.containers.create.return_value
+
+        original_exec_run = container.exec_run
+        original_put_archive = container.put_archive
+
+        def tracked_exec_run(*args: object, **kwargs: object) -> tuple[int, bytes]:
+            call_order.append(("exec_run", args))
+            return original_exec_run(*args, **kwargs)
+
+        def tracked_put_archive(*args: object, **kwargs: object) -> bool:
+            call_order.append(("put_archive", args))
+            return original_put_archive(*args, **kwargs)
+
+        container.exec_run = tracked_exec_run
+        container.put_archive = tracked_put_archive
+
+        provider.setup(skill_path, "my-skill")
+
+        # Find the mkdir call and the put_archive call
+        mkdir_idx = None
+        put_archive_idx = None
+        for i, (method, args) in enumerate(call_order):
+            if method == "exec_run" and args and args[0] == ["mkdir", "-p", _SKILL_DISCOVERY_PATH]:
+                mkdir_idx = i
+            if method == "put_archive":
+                put_archive_idx = i
+
+        assert mkdir_idx is not None, "exec_run with mkdir -p was not called"
+        assert put_archive_idx is not None, "put_archive was not called"
+        assert mkdir_idx < put_archive_idx, (
+            f"mkdir (index {mkdir_idx}) must be called before put_archive (index {put_archive_idx})"
+        )
+
 
 class TestDockerProviderPrepareTest:
     def test_creates_container_from_snapshot(self, tmp_path: Path) -> None:
@@ -310,6 +399,36 @@ class TestDockerProviderExecute:
         output = provider._captured_output[trace_path]
         assert '"thinking"' in output
         assert '"skill": "my-skill"' in output
+
+    @pytest.mark.parametrize("exit_code_value", [0, 1])
+    def test_streaming_exec_inspect_fallback(
+        self, tmp_path: Path, exit_code_value: int
+    ) -> None:
+        client = _mock_docker_client()
+        provider = DockerProvider(FakeRuntime())
+        provider._client = client
+        provider._snapshot_tag = "snap:latest"
+
+        trace_path = tmp_path / "t.jsonl"
+        ctx = provider.prepare_test(tmp_path / "skill", "my-skill", trace_path)
+
+        container = client.containers.get.return_value
+        # Stream output that does NOT contain the skill trigger
+        container.client.api.exec_create.return_value = {"Id": "exec456"}
+        container.client.api.exec_start.return_value = iter(
+            [
+                b'{"type": "thinking"}\n',
+                b'{"type": "result", "data": "done"}\n',
+            ]
+        )
+        container.client.api.exec_inspect.return_value = {"ExitCode": exit_code_value}
+
+        runtime = FakeRuntime()
+        exit_code = provider.execute(ctx, runtime, "prompt", stop_on_skill="my-skill")
+
+        # Verify exec_inspect was called to get the real exit code
+        container.client.api.exec_inspect.assert_called_once_with("exec456")
+        assert exit_code == exit_code_value
 
 
 class TestDockerProviderCollectTrace:
