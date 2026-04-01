@@ -318,11 +318,9 @@ class DockerProvider(ExecutionProvider):
         if skill_triggered:
             # Stop the container to kill the exec process and prevent
             # further API calls from burning tokens between detection
-            # and cleanup_test(). The container is restarted so
-            # cleanup_test() can still stop/remove it cleanly.
+            # and cleanup_test().
             with contextlib.suppress(Exception):
                 container.stop(timeout=2)
-                container.restart()
             return 0
 
         inspect = container.client.api.exec_inspect(exec_id)
