@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Python CLI tool (v0.6.0) that evaluates agent skills (SKILL.md files) via static analysis, LLM-as-judge quality review, trigger testing, and LLM-based test generation. Produces a 0-100 static score across 37 checks (structure:13, naming:3, description:3, content:13, security:5) / 5 dimensions, plus a 0-100 LLM judge score across 9 criteria / 2 axes (Activation Quality + Instruction Quality).
+Python CLI tool (v0.6.1) that evaluates agent skills (SKILL.md files) via static analysis, LLM-as-judge quality review, trigger testing, and LLM-based test generation. Produces a 0-100 static score across 37 checks (structure:13, naming:3, description:3, content:13, security:5) / 5 dimensions, plus a 0-100 LLM judge score across 9 criteria / 2 axes (Activation Quality + Instruction Quality).
 
 ## Attribution
 
