@@ -2,7 +2,7 @@
 
 [![PyPI version](https://badge.fury.io/py/skill-lab.svg?v=0.5.0)](https://badge.fury.io/py/skill-lab)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 **Agent Skills Evaluation Framework**
 
@@ -162,4 +162,4 @@ ruff format src/
 
 ---
 
-MIT License
+Apache License 2.0
