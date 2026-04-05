@@ -22,7 +22,7 @@ from skill_lab.core.llm import (
     get_api_key_env_var,
     resolve_provider,
 )
-from skill_lab.core.models import CheckResult, EvaluationReport
+from skill_lab.core.models import CheckResult, EvaluationReport, JudgeCriterion
 from skill_lab.evaluators.static_evaluator import StaticEvaluator
 
 _SYSTEM_PROMPT_PATH = Path(__file__).parent / "optimize_skill.md"
@@ -35,6 +35,10 @@ SYSTEM_PROMPT = (
 )
 
 MAX_BODY_CHARS = 12000
+
+_PATTERNS_DIR = Path(__file__).parent / "patterns"
+PATTERN_SCORE_THRESHOLD = 2
+MAX_PATTERNS_LOADED = 3
 
 
 def _format_failures(results: list[CheckResult]) -> str:
@@ -54,6 +58,35 @@ def _truncate_content(content: str) -> str:
     if len(content) <= MAX_BODY_CHARS:
         return content
     return content[:MAX_BODY_CHARS] + "\n\n[... content truncated ...]"
+
+
+def _load_patterns_for_criteria(
+    criteria: tuple[JudgeCriterion, ...],
+    score_threshold: int = PATTERN_SCORE_THRESHOLD,
+    max_patterns: int = MAX_PATTERNS_LOADED,
+) -> str:
+    """Load spec-sourced pattern files for low-scoring criteria.
+
+    Filters criteria to those scoring at or below `score_threshold`, sorts by
+    score ascending (worst first), caps at `max_patterns`, and loads the
+    matching pattern file from `patterns/{criterion.id}.md`. Criteria without
+    a matching file (e.g., activation criteria) are silently skipped.
+
+    Returns the concatenated pattern text, or an empty string if nothing was
+    loaded.
+    """
+    low_scoring = sorted(
+        (c for c in criteria if c.score <= score_threshold),
+        key=lambda c: c.score,
+    )[:max_patterns]
+
+    loaded: list[str] = []
+    for criterion in low_scoring:
+        pattern_file = _PATTERNS_DIR / f"{criterion.id}.md"
+        if pattern_file.exists():
+            loaded.append(pattern_file.read_text(encoding="utf-8").rstrip())
+
+    return "\n\n".join(loaded)
 
 
 @dataclass(frozen=True)
@@ -216,6 +249,12 @@ class SkillOptimizer:
                     judge_lines.append(f"  - {s}")
             judge_text = "\n".join(judge_lines)
 
+        # Pattern loading: inject spec-sourced before/after transformations
+        # for criteria scoring at or below PATTERN_SCORE_THRESHOLD.
+        patterns_text = ""
+        if eval_record.judge is not None:
+            patterns_text = _load_patterns_for_criteria(eval_record.judge.criteria)
+
         content = _truncate_content(skill_content)
 
         parts = [
@@ -225,6 +264,8 @@ class SkillOptimizer:
         ]
         if judge_text:
             parts.append(f"--- LLM Judge Feedback ---\n{judge_text}\n")
+        if patterns_text:
+            parts.append(f"--- Relevant Patterns ---\n{patterns_text}\n")
         parts.append(f"--- Current SKILL.md ---\n{content}")
 
         return "\n".join(parts)

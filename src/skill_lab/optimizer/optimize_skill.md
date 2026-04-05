@@ -58,3 +58,12 @@ When the input includes an "LLM Judge Feedback" section, use it alongside failin
 2. **Low Instruction Quality scores** (Domain Expertise, Cognitive Efficiency, Procedural Clarity, Error Resilience, Progressive Disclosure): add domain-specific expertise and gotchas, improve scannability with headers/bullets/code blocks, add step-by-step procedures, include error handling guidance, externalize heavy reference material to separate files with explicit load conditions
 3. **Prioritize judge suggestions** — they represent actionable expert-level feedback
 4. **Do not fabricate expertise** — only restructure, clarify, or add content consistent with the author's original intent
+
+## Relevant Patterns
+
+When the input includes a "Relevant Patterns" section, it contains spec-sourced before/after transformations for the criteria the judge scored lowest. Each sub-pattern is tagged with its spec source (e.g., `*Source: "Provide defaults, not menus"*`).
+
+1. **Match patterns to judge reasoning** — when the judge says "provides multiple options as equal alternatives," look for the sub-pattern whose source mentions "defaults" or "menus" and apply that transformation
+2. **Follow the Before → After shape** — patterns show the structural change; adapt the transformation to the skill's actual content, don't copy pattern text verbatim
+3. **Respect the Principle** — each pattern ends with the underlying principle; if no sub-pattern exactly matches the skill's issue, apply the principle
+4. **Ignore irrelevant patterns** — a loaded file may contain sub-patterns that don't apply to this skill; skip them
