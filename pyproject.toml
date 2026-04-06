@@ -1,6 +1,6 @@
 [project]
 name = "skill-lab"
-version = "0.6.1"
+version = "0.7.0"
 description = "Evaluate agent skills via static analysis, trigger testing, and trace analysis. Run `sklab` after installing to scan your skills."
 readme = "README.md"
 license = "Apache-2.0"

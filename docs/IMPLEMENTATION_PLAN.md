@@ -48,7 +48,7 @@ Build **infrastructure for skill testing at scale** - tooling that enables autom
 | **v0.4.0** | Spec Parity & Correctness | ✅ Released | [v0.4.0.md](versions/v0.4.0.md) |
 | **v0.5.0** | Telemetry, Stats & CLI Refactor | ✅ Released | [v0.5.0.md](versions/v0.5.0.md) |
 | **v0.6.0** | Security Checks | ✅ Released | [v0.6.0.md](versions/v0.6.0.md) |
-| **v0.7.0** | Ecosystem Integration | 🚧 In Progress | [v0.7.0.md](versions/v0.7.0.md) |
+| **v0.7.0** | Ecosystem Integration | ✅ Released | [v0.7.0.md](versions/v0.7.0.md) |
 | **v0.8.0** | API-Based Runtimes | 📋 Planned | [v0.8.0.md](versions/v0.8.0.md) |
 | **v1.0.0** | Stable Release | 📋 Planned | [v1.0.0.md](versions/v1.0.0.md) |
 
