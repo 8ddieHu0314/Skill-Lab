@@ -62,24 +62,33 @@ def make_report(
     )
 
 
-def make_judge(score: float = 68.8) -> JudgeResult:
-    """Build a minimal JudgeResult for testing."""
-    criteria = (
-        JudgeCriterion(
-            id="intent_clarity",
-            name="Intent Clarity",
-            axis="activation",
-            score=3,
-            reasoning="Clear description.",
-        ),
-        JudgeCriterion(
-            id="trigger_coverage",
-            name="Trigger Coverage",
-            axis="activation",
-            score=2,
-            reasoning="Missing implicit triggers.",
-        ),
-    )
+def make_judge(
+    score: float = 68.8,
+    criteria: tuple[JudgeCriterion, ...] | None = None,
+) -> JudgeResult:
+    """Build a JudgeResult for testing.
+
+    When ``criteria`` is None, uses a minimal default pair.  Pass custom
+    criteria as ``(id, axis, score)``-style ``JudgeCriterion`` tuples to
+    exercise specific criterion combinations (e.g., pattern loader tests).
+    """
+    if criteria is None:
+        criteria = (
+            JudgeCriterion(
+                id="intent_clarity",
+                name="Intent Clarity",
+                axis="activation",
+                score=3,
+                reasoning="Clear description.",
+            ),
+            JudgeCriterion(
+                id="trigger_coverage",
+                name="Trigger Coverage",
+                axis="activation",
+                score=2,
+                reasoning="Missing implicit triggers.",
+            ),
+        )
     return JudgeResult(
         criteria=criteria,
         activation_score=62.5,
@@ -87,6 +96,22 @@ def make_judge(score: float = 68.8) -> JudgeResult:
         judge_score=score,
         verdict="Needs work",
         suggestions=("Add trigger phrases.", "Improve error handling."),
+    )
+
+
+def make_criteria(
+    *crit_tuples: tuple[str, str, int],
+) -> tuple[JudgeCriterion, ...]:
+    """Build a JudgeCriterion tuple from ``(id, axis, score)`` shorthand."""
+    return tuple(
+        JudgeCriterion(
+            id=crit_id,
+            name=crit_id.replace("_", " ").title(),
+            axis=axis,
+            score=score,
+            reasoning=f"{crit_id} scored {score}",
+        )
+        for crit_id, axis, score in crit_tuples
     )
 
 

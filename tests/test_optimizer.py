@@ -11,14 +11,13 @@ from skill_lab.commands.optimize import _build_diff_text, _increment_patch
 from skill_lab.core.eval_history import save_eval
 from skill_lab.core.exceptions import GenerationError
 from skill_lab.core.llm import LLMResponse
-from skill_lab.core.models import JudgeCriterion, JudgeResult
 from skill_lab.optimizer.optimizer import (
     MAX_BODY_CHARS,
     OptimizationResult,
     SkillOptimizer,
     _load_patterns_for_criteria,
 )
-from tests.conftest import make_eval_record, make_judge, make_report
+from tests.conftest import make_criteria, make_eval_record, make_judge, make_report
 
 # Sample optimized SKILL.md that a model might return
 OPTIMIZED_SKILL_MD = """\
@@ -473,8 +472,10 @@ class TestBuildPromptFromHistory:
         self, optimizer: SkillOptimizer, valid_skill_path: Path
     ) -> None:
         """Low procedural_clarity score triggers pattern loading."""
-        judge = _make_judge_with_criteria(
-            (("procedural_clarity", "instruction", 1),)
+        judge = make_judge(
+            criteria=make_criteria(
+                ("procedural_clarity", "instruction", 1),
+            )
         )
         record = make_eval_record(judge=judge)
         content = (valid_skill_path / "SKILL.md").read_text()
@@ -486,8 +487,8 @@ class TestBuildPromptFromHistory:
         self, optimizer: SkillOptimizer, valid_skill_path: Path
     ) -> None:
         """All criteria ≥3 means no patterns loaded."""
-        judge = _make_judge_with_criteria(
-            (
+        judge = make_judge(
+            criteria=make_criteria(
                 ("cognitive_efficiency", "instruction", 3),
                 ("procedural_clarity", "instruction", 4),
             )
@@ -507,42 +508,16 @@ class TestBuildPromptFromHistory:
         assert "--- Relevant Patterns ---" not in prompt
 
 
-def _make_judge_with_criteria(
-    crit_tuples: tuple[tuple[str, str, int], ...],
-) -> JudgeResult:
-    """Build a JudgeResult from (id, axis, score) tuples."""
-    criteria = tuple(
-        JudgeCriterion(
-            id=crit_id,
-            name=crit_id.replace("_", " ").title(),
-            axis=axis,
-            score=score,
-            reasoning=f"{crit_id} scored {score}",
-        )
-        for crit_id, axis, score in crit_tuples
-    )
-    return JudgeResult(
-        criteria=criteria,
-        activation_score=50.0,
-        instruction_score=50.0,
-        judge_score=50.0,
-        verdict="Needs work",
-        suggestions=(),
-    )
-
-
 class TestPatternLoader:
     """Tests for _load_patterns_for_criteria()."""
 
     def test_filters_by_score(self) -> None:
         """Only criteria with score <= threshold are loaded."""
-        criteria = _make_judge_with_criteria(
-            (
-                ("procedural_clarity", "instruction", 3),  # skip
-                ("error_resilience", "instruction", 2),  # load
-                ("cognitive_efficiency", "instruction", 4),  # skip
-            )
-        ).criteria
+        criteria = make_criteria(
+            ("procedural_clarity", "instruction", 3),  # skip
+            ("error_resilience", "instruction", 2),  # load
+            ("cognitive_efficiency", "instruction", 4),  # skip
+        )
         result = _load_patterns_for_criteria(criteria)
         assert "Error Resilience Patterns" in result
         assert "Procedural Clarity Patterns" not in result
@@ -550,14 +525,12 @@ class TestPatternLoader:
 
     def test_loads_all_matching_pattern_files(self) -> None:
         """All qualifying criteria with pattern files are loaded."""
-        criteria = _make_judge_with_criteria(
-            (
-                ("cognitive_efficiency", "instruction", 2),
-                ("procedural_clarity", "instruction", 1),
-                ("error_resilience", "instruction", 0),
-                ("progressive_disclosure", "instruction", 2),
-            )
-        ).criteria
+        criteria = make_criteria(
+            ("cognitive_efficiency", "instruction", 2),
+            ("procedural_clarity", "instruction", 1),
+            ("error_resilience", "instruction", 0),
+            ("progressive_disclosure", "instruction", 2),
+        )
         result = _load_patterns_for_criteria(criteria)
         assert "Cognitive Efficiency Patterns" in result
         assert "Procedural Clarity Patterns" in result
@@ -567,19 +540,17 @@ class TestPatternLoader:
     def test_activation_criteria_dont_block_instruction_patterns(self) -> None:
         """Regression: activation criteria without pattern files must not prevent
         instruction patterns from loading when both score low."""
-        criteria = _make_judge_with_criteria(
-            (
-                ("intent_clarity", "activation", 0),
-                ("trigger_coverage", "activation", 0),
-                ("scope_precision", "activation", 0),
-                ("distinctiveness", "activation", 0),
-                ("cognitive_efficiency", "instruction", 0),
-                ("procedural_clarity", "instruction", 0),
-                ("error_resilience", "instruction", 0),
-                ("domain_expertise", "instruction", 1),
-                ("progressive_disclosure", "instruction", 1),
-            )
-        ).criteria
+        criteria = make_criteria(
+            ("intent_clarity", "activation", 0),
+            ("trigger_coverage", "activation", 0),
+            ("scope_precision", "activation", 0),
+            ("distinctiveness", "activation", 0),
+            ("cognitive_efficiency", "instruction", 0),
+            ("procedural_clarity", "instruction", 0),
+            ("error_resilience", "instruction", 0),
+            ("domain_expertise", "instruction", 1),
+            ("progressive_disclosure", "instruction", 1),
+        )
         result = _load_patterns_for_criteria(criteria)
         # Instruction patterns MUST load even though activation criteria
         # tie at the lowest score and have no pattern files
@@ -590,12 +561,10 @@ class TestPatternLoader:
 
     def test_sorts_lowest_first(self) -> None:
         """Lowest-scoring criterion appears first in output."""
-        criteria = _make_judge_with_criteria(
-            (
-                ("cognitive_efficiency", "instruction", 2),
-                ("procedural_clarity", "instruction", 0),
-            )
-        ).criteria
+        criteria = make_criteria(
+            ("cognitive_efficiency", "instruction", 2),
+            ("procedural_clarity", "instruction", 0),
+        )
         result = _load_patterns_for_criteria(criteria)
         # procedural_clarity (score 0) should come before cognitive_efficiency (score 2)
         proc_idx = result.index("Procedural Clarity Patterns")
@@ -604,13 +573,11 @@ class TestPatternLoader:
 
     def test_skips_missing_pattern_files(self) -> None:
         """Criteria without matching pattern files (e.g., activation) are skipped."""
-        criteria = _make_judge_with_criteria(
-            (
-                ("intent_clarity", "activation", 1),  # no pattern file
-                ("trigger_coverage", "activation", 0),  # no pattern file
-                ("procedural_clarity", "instruction", 2),  # has pattern file
-            )
-        ).criteria
+        criteria = make_criteria(
+            ("intent_clarity", "activation", 1),  # no pattern file
+            ("trigger_coverage", "activation", 0),  # no pattern file
+            ("procedural_clarity", "instruction", 2),  # has pattern file
+        )
         result = _load_patterns_for_criteria(criteria)
         assert "Procedural Clarity Patterns" in result
         # Activation criteria silently skipped (no file exists)
@@ -618,20 +585,18 @@ class TestPatternLoader:
 
     def test_returns_empty_when_all_pass(self) -> None:
         """All criteria above threshold → empty string."""
-        criteria = _make_judge_with_criteria(
-            (
-                ("procedural_clarity", "instruction", 3),
-                ("error_resilience", "instruction", 4),
-            )
-        ).criteria
+        criteria = make_criteria(
+            ("procedural_clarity", "instruction", 3),
+            ("error_resilience", "instruction", 4),
+        )
         result = _load_patterns_for_criteria(criteria)
         assert result == ""
 
     def test_loads_real_pattern_file_content(self) -> None:
         """Verify actual pattern file content is loaded."""
-        criteria = _make_judge_with_criteria(
-            (("procedural_clarity", "instruction", 1),)
-        ).criteria
+        criteria = make_criteria(
+            ("procedural_clarity", "instruction", 1),
+        )
         result = _load_patterns_for_criteria(criteria)
         # Check for content from the actual procedural_clarity.md file
         assert "Menu → Default" in result
