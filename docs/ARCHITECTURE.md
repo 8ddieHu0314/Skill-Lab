@@ -91,8 +91,13 @@ src/skill_lab/
 │   ├── judge.py              # SkillJudge class (9-criterion rubric evaluation)
 │   └── rubric.md             # System prompt with scoring rubric
 ├── optimizer/                # LLM-powered SKILL.md optimization
-│   ├── optimizer.py          # SkillOptimizer class + OptimizationResult
-│   └── optimize_skill.md     # System prompt for the LLM
+│   ├── optimizer.py          # SkillOptimizer class + OptimizationResult + pattern loader
+│   ├── optimize_skill.md     # System prompt for the LLM
+│   └── patterns/             # Spec-sourced before/after transformation patterns
+│       ├── cognitive_efficiency.md
+│       ├── procedural_clarity.md
+│       ├── error_resilience.md
+│       └── progressive_disclosure.md
 ├── triggers/                 # Trigger testing (Phase 2)
 │   ├── generator.py          # LLM-based trigger test generation (v0.3.0)
 │   ├── test_loader.py        # Load test cases from YAML
@@ -533,6 +538,55 @@ Structured output for programmatic use:
 - Full `EvaluationReport` serialized via `to_dict()` methods
 - Machine-readable for CI/CD integration
 - **Schema versioning**: Includes `"schema_version": "1.0"` field for API consumers to track compatibility
+
+---
+
+## Pattern-Based Optimizer Guidance
+
+When the optimizer runs from eval history (`optimize_from_history()`), it dynamically injects spec-sourced before/after transformation patterns into the prompt based on judge criterion scores.
+
+### Loading Pipeline
+
+1. Judge scores 9 criteria (0-4 each) as part of `sklab evaluate`.
+2. Pattern loader filters to criteria scoring ≤ `PATTERN_SCORE_THRESHOLD` (default 2, "below adequate").
+3. Sorts by score ascending (lowest first).
+4. Loads matching files from `optimizer/patterns/{criterion_id}.md`.
+5. Injects patterns into the user prompt as a `--- Relevant Patterns ---` section, inserted between judge feedback and the current SKILL.md content.
+6. Criteria without a matching pattern file (e.g., activation criteria) are silently skipped.
+
+### Pattern File Structure
+
+Each file contains 1-4 tagged sub-patterns. Each sub-pattern has:
+- A descriptive name (`## Pattern: Menu → Default`)
+- A source tag (`*Source: "Provide defaults, not menus"*`) linking back to the spec subsection
+- `### Before` and `### After` code examples showing the transformation
+- A `### Principle` explaining why the transformation matters
+
+Some entries are principle-only (no Before/After) when the spec has the principle but no concrete example.
+
+### Matching Mechanism
+
+The optimizer LLM self-selects which sub-pattern applies — there is no routing code and no second LLM call. The LLM reads the judge's criterion reasoning, sees the tagged sub-patterns in the loaded file(s), and matches patterns to reasoning in the same optimize call. Example: judge says "provides pypdf, pdfplumber, PyMuPDF as equal options" → LLM picks the `*Source: "Provide defaults, not menus"*` sub-pattern and applies its Before → After transformation shape.
+
+### Files Shipped
+
+Instruction criteria only (5 criteria total, 4 with pattern files):
+
+| File | Sub-patterns |
+|---|---|
+| `cognitive_efficiency.md` | 1 before/after + 2 principle-only |
+| `procedural_clarity.md` | 4 before/after (menu→default, declaration→procedure, prose→template, vague→checklist) |
+| `error_resilience.md` | 3 before/after (gotchas, validation loops, plan-validate-execute) |
+| `progressive_disclosure.md` | 1 before/after (generic reference → conditional load) |
+
+Activation criteria (intent_clarity, trigger_coverage, scope_precision, distinctiveness) have no pattern files. Transformations for those come from a separate spec guide and are deferred. The optimizer falls back to the general guardrails in its system prompt.
+
+### Key References
+
+- Loader function: `_load_patterns_for_criteria()` in `src/skill_lab/optimizer/optimizer.py`
+- Constant: `PATTERN_SCORE_THRESHOLD` in `optimizer.py`
+- Integration point: `_build_prompt_from_history()` in `optimizer.py`
+- System prompt instructions: "Relevant Patterns" section in `optimize_skill.md`
 
 ---
 
