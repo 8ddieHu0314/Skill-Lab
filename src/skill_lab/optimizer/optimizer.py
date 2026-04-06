@@ -38,7 +38,6 @@ MAX_BODY_CHARS = 12000
 
 _PATTERNS_DIR = Path(__file__).parent / "patterns"
 PATTERN_SCORE_THRESHOLD = 2
-MAX_PATTERNS_LOADED = 3
 
 
 def _format_failures(results: list[CheckResult]) -> str:
@@ -63,14 +62,13 @@ def _truncate_content(content: str) -> str:
 def _load_patterns_for_criteria(
     criteria: tuple[JudgeCriterion, ...],
     score_threshold: int = PATTERN_SCORE_THRESHOLD,
-    max_patterns: int = MAX_PATTERNS_LOADED,
 ) -> str:
     """Load spec-sourced pattern files for low-scoring criteria.
 
     Filters criteria to those scoring at or below `score_threshold`, sorts by
-    score ascending (worst first), caps at `max_patterns`, and loads the
-    matching pattern file from `patterns/{criterion.id}.md`. Criteria without
-    a matching file (e.g., activation criteria) are silently skipped.
+    score ascending (worst first), and loads the matching pattern file from
+    ``patterns/{criterion.id}.md``. Criteria without a matching file (e.g.,
+    activation criteria) are silently skipped.
 
     Returns the concatenated pattern text, or an empty string if nothing was
     loaded.
@@ -78,7 +76,7 @@ def _load_patterns_for_criteria(
     low_scoring = sorted(
         (c for c in criteria if c.score <= score_threshold),
         key=lambda c: c.score,
-    )[:max_patterns]
+    )
 
     loaded: list[str] = []
     for criterion in low_scoring:

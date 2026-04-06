@@ -549,7 +549,7 @@ When the optimizer runs from eval history (`optimize_from_history()`), it dynami
 
 1. Judge scores 9 criteria (0-4 each) as part of `sklab evaluate`.
 2. Pattern loader filters to criteria scoring ≤ `PATTERN_SCORE_THRESHOLD` (default 2, "below adequate").
-3. Sorts by score ascending (lowest first) and caps at `MAX_PATTERNS_LOADED` (default 3).
+3. Sorts by score ascending (lowest first).
 4. Loads matching files from `optimizer/patterns/{criterion_id}.md`.
 5. Injects patterns into the user prompt as a `--- Relevant Patterns ---` section, inserted between judge feedback and the current SKILL.md content.
 6. Criteria without a matching pattern file (e.g., activation criteria) are silently skipped.
@@ -584,7 +584,7 @@ Activation criteria (intent_clarity, trigger_coverage, scope_precision, distinct
 ### Key References
 
 - Loader function: `_load_patterns_for_criteria()` in `src/skill_lab/optimizer/optimizer.py`
-- Constants: `PATTERN_SCORE_THRESHOLD`, `MAX_PATTERNS_LOADED` in `optimizer.py`
+- Constant: `PATTERN_SCORE_THRESHOLD` in `optimizer.py`
 - Integration point: `_build_prompt_from_history()` in `optimizer.py`
 - System prompt instructions: "Relevant Patterns" section in `optimize_skill.md`
 

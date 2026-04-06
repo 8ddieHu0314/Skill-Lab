@@ -14,7 +14,6 @@ from skill_lab.core.llm import LLMResponse
 from skill_lab.core.models import JudgeCriterion, JudgeResult
 from skill_lab.optimizer.optimizer import (
     MAX_BODY_CHARS,
-    MAX_PATTERNS_LOADED,
     OptimizationResult,
     SkillOptimizer,
     _load_patterns_for_criteria,
@@ -549,8 +548,8 @@ class TestPatternLoader:
         assert "Procedural Clarity Patterns" not in result
         assert "Cognitive Efficiency Patterns" not in result
 
-    def test_caps_at_max_patterns(self) -> None:
-        """Cap at MAX_PATTERNS_LOADED even when more criteria qualify."""
+    def test_loads_all_matching_pattern_files(self) -> None:
+        """All qualifying criteria with pattern files are loaded."""
         criteria = _make_judge_with_criteria(
             (
                 ("cognitive_efficiency", "instruction", 2),
@@ -560,18 +559,34 @@ class TestPatternLoader:
             )
         ).criteria
         result = _load_patterns_for_criteria(criteria)
-        # All 4 criteria have pattern files, but cap is 3
-        loaded_count = sum(
-            1
-            for title in (
-                "Cognitive Efficiency Patterns",
-                "Procedural Clarity Patterns",
-                "Error Resilience Patterns",
-                "Progressive Disclosure Patterns",
+        assert "Cognitive Efficiency Patterns" in result
+        assert "Procedural Clarity Patterns" in result
+        assert "Error Resilience Patterns" in result
+        assert "Progressive Disclosure Patterns" in result
+
+    def test_activation_criteria_dont_block_instruction_patterns(self) -> None:
+        """Regression: activation criteria without pattern files must not prevent
+        instruction patterns from loading when both score low."""
+        criteria = _make_judge_with_criteria(
+            (
+                ("intent_clarity", "activation", 0),
+                ("trigger_coverage", "activation", 0),
+                ("scope_precision", "activation", 0),
+                ("distinctiveness", "activation", 0),
+                ("cognitive_efficiency", "instruction", 0),
+                ("procedural_clarity", "instruction", 0),
+                ("error_resilience", "instruction", 0),
+                ("domain_expertise", "instruction", 1),
+                ("progressive_disclosure", "instruction", 1),
             )
-            if title in result
-        )
-        assert loaded_count == MAX_PATTERNS_LOADED
+        ).criteria
+        result = _load_patterns_for_criteria(criteria)
+        # Instruction patterns MUST load even though activation criteria
+        # tie at the lowest score and have no pattern files
+        assert "Cognitive Efficiency Patterns" in result
+        assert "Procedural Clarity Patterns" in result
+        assert "Error Resilience Patterns" in result
+        assert "Progressive Disclosure Patterns" in result
 
     def test_sorts_lowest_first(self) -> None:
         """Lowest-scoring criterion appears first in output."""
