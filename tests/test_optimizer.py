@@ -614,7 +614,7 @@ class TestPatternLoader:
         result = _load_patterns_for_criteria(criteria)
         assert "Procedural Clarity Patterns" in result
         # Activation criteria silently skipped (no file exists)
-        assert "intent_clarity" not in result.lower() or "Procedural Clarity" in result
+        assert "intent_clarity" not in result.lower()
 
     def test_returns_empty_when_all_pass(self) -> None:
         """All criteria above threshold → empty string."""
