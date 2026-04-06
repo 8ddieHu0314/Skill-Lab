@@ -57,6 +57,8 @@ src/skill_lab/
 │   ├── telemetry.py          # Usage analytics: opt-in prompt, SQLite, Supabase sync, version check
 │   ├── stats.py              # SQLite query functions for usage stats (sklab stats)
 │   ├── eval_history.py       # Eval history persistence (.sklab/evals/) — save, load, prune
+│   ├── llm.py               # LLMProvider protocol + 3 provider implementations + pricing
+│   ├── skill_config.py      # Per-skill config read/write/update (.sklab/config.yaml)
 │   ├── setup.py              # Hook setup for Claude Code / Cursor (sklab setup)
 │   ├── utils.py              # Shared utilities (generic Registry[T])
 │   └── exceptions.py         # Custom exception hierarchy (SkillLabError, ParseError, etc.)

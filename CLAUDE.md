@@ -67,7 +67,7 @@ See `docs/ARCHITECTURE.md` for full directory structure and data flow diagrams.
 - **Adding a schema check**: append a `FieldRule` to `FRONTMATTER_SCHEMA` list in `schema.py` — no class needed. The `_make_schema_check()` factory auto-generates a registered class per rule.
 - **Side-effect registration**: `StaticEvaluator.__init__()` imports check modules (`content`, `naming`, `schema`, `security`, `structure`) to trigger `@register_check` decorators. All checks must be registered before `registry.get_all()` is called.
 - **Sync requirement**: `SPEC_FRONTMATTER_FIELDS` in `structure.py` must stay in sync with `FRONTMATTER_SCHEMA` in `schema.py`.
-- **Security checks**: `security.py` has a single `SecurityScanCheck` class that registers 5 separate checks (injection, evaluator, unicode, yaml, size) via dynamic class creation — same pattern as schema checks.
+- **Security checks**: `security.py` has 5 separate `@register_check` classes (injection, evaluator, unicode, yaml, size) plus an unregistered `SecurityScanCheck` composite used by `sklab scan`.
 - **Check count**: When adding/removing checks, update the "37 checks" count in this file's opening line and run `/update-counts` to sync docs and tests.
 
 ### Trace Checks & Runtimes
@@ -79,7 +79,7 @@ See `docs/ARCHITECTURE.md` for full directory structure and data flow diagrams.
 
 ### LLM Features
 
-- **LLM config**: `core/llm.py` defines the default model (`claude-haiku-4-5-20251001`), pricing table, `GenerationUsage` class, and the `LLMProvider` abstraction (Anthropic, OpenAI, Gemini). Model resolution: `--model` flag > `SKLAB_MODEL` env var > default. Provider is auto-detected from model ID prefix (`gpt-*`/`o3-*` → OpenAI, `gemini-*` → Gemini, else Anthropic). When adding new models, update `_PRICING` dict in `core/llm.py`.
+- **LLM config**: `core/llm.py` defines the default model (`claude-haiku-4-5-20251001`), pricing table, `GenerationUsage` class, and the `LLMProvider` abstraction (Anthropic, OpenAI, Gemini). Model resolution: `--model` flag > config model > `SKLAB_MODEL` env var > default. Provider is auto-detected from model ID prefix (`gpt-*`/`o3-*` → OpenAI, `gemini-*` → Gemini, else Anthropic). When adding new models, update `_PRICING` dict in `core/llm.py`.
 - **LLM-as-judge**: `judge/judge.py` (SkillJudge) + `judge/rubric.md` (system prompt with 9-criterion rubric). Runs automatically during `sklab evaluate` when API key is available. `--skip-review` to disable, `--model` to choose provider. Scores: Activation Quality (4 criteria) + Instruction Quality (5 criteria), each 0-4, normalized to 0-100%. Verdict bands: 90+ Excellent, 75-89 Good, 50-74 Needs work, <50 Poor.
 - **Optimizer**: `optimizer/optimizer.py` (SkillOptimizer) + `optimizer/optimize_skill.md` (system prompt) + `optimizer/patterns/` (spec-sourced before/after transformations). `optimize_from_history()` reads eval history instead of running its own evaluation — sees both static failures AND judge feedback, and dynamically loads matching patterns from `optimizer/patterns/{criterion_id}.md` for criteria scoring ≤2 (`PATTERN_SCORE_THRESHOLD`). The optimizer LLM self-selects tagged sub-patterns matching judge reasoning — no routing code, no second LLM call. Pattern files shipped for instruction criteria only (4 files: cognitive_efficiency, procedural_clarity, error_resilience, progressive_disclosure). Chained via `sklab evaluate --optimize` or standalone `sklab optimize`.
 - **LLM SDKs**: `anthropic`, `openai`, and `google-generativeai` are all required dependencies. API key env vars: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`.
@@ -88,7 +88,7 @@ See `docs/ARCHITECTURE.md` for full directory structure and data flow diagrams.
 
 - **Shared paths**: `core/constants.py` defines all `.sklab/` paths (`SKILLLAB_DIR`, `EVALS_DIR`, `TESTS_DIR`, `TRACES_DIR`, `CONFIG_FILE`) and `~/.sklab/` home paths. Always use these constants, not hardcoded strings.
 - **Eval history**: `core/eval_history.py` persists full evaluation results (static + judge) to `.sklab/evals/{timestamp}.json`. Capped at 20 files with automatic pruning. Timestamps are UTC-normalized. The optimizer reads the latest eval file via `load_latest_eval()`.
-- **Per-skill config**: `core/skill_config.py` manages `.sklab/config.yaml` — stores `last-review` (judge results) and other per-skill settings.
+- **Per-skill config**: `core/skill_config.py` manages `.sklab/config.yaml` — stores `last-evaluate` (static results), `last-review` (judge results), and other per-skill settings.
 - **Trigger test files**: `.sklab/tests/triggers.yaml`.
 - **`.env` support**: `python-dotenv` loads `.env` from CWD at CLI startup (`cli.main()`). Real env vars override `.env` values (`override=False`). The `pyproject.toml` entry point is `cli:main` (not `cli:app`) so dotenv loads before Typer dispatch.
 
