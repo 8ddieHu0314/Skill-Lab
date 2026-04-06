@@ -61,4 +61,13 @@ We follow [Semantic Versioning](https://semver.org/):
 
 Pre-1.0 versions may have breaking changes between minor versions.
 
+### Deferred Indefinitely
+
+- XDG Base Directory migration (`~/.sklab/` → `~/.config/sklab/`)
+
+### Removed from Roadmap
+
+- ~~Marketplace publishing API~~ — not building our own marketplace
+- ~~Quality tier system (Gold/Silver/Bronze/Unrated)~~ — scoring is sufficient
+
 ---

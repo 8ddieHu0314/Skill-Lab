@@ -2,8 +2,8 @@
 
 Collects anonymous command usage data locally (SQLite) and syncs to Supabase.
 All telemetry errors are silently swallowed — network failures never crash the CLI.
-Telemetry is enabled by default (opt-out); a notice is printed on first run.
-Set SKLAB_NO_ANALYTICS=1 to disable telemetry without any prompt.
+Telemetry is enabled by default (opt-out). Privacy policy: docs/PRIVACY.md.
+Set SKLAB_NO_ANALYTICS=1 to disable telemetry.
 """
 
 import contextlib
@@ -29,14 +29,6 @@ from skill_lab.core.constants import SKLAB_CONFIG, SKLAB_DB, SKLAB_HOME
 
 _TELEMETRY_ENDPOINT = "https://api.skill-lab.dev/v1/events"
 _RETENTION_DAYS = 90
-
-_FIRST_RUN_NOTICE = (
-    "sklab collects anonymous usage data (command names, flags, duration, exit codes, "
-    "OS, Python version, skill names, scores, token counts). "
-    "No skill content, source paths, or flag values are collected.\n"
-    "To opt out: set SKLAB_NO_ANALYTICS=1 or DO_NOT_TRACK=1.\n"
-    "Privacy policy: docs/PRIVACY.md"
-)
 
 # Module-level cache so we only read config once per process
 _analytics_enabled: bool | None = None
@@ -221,7 +213,7 @@ def _ensure_db() -> None:
 
 
 def init_telemetry() -> bool:
-    """Return True if analytics is enabled. Print a notice on first run.
+    """Return True if analytics is enabled.
 
     Telemetry is enabled by default (opt-out model).
     Returns False immediately if any opt-out signal is present:
@@ -236,7 +228,7 @@ def init_telemetry() -> bool:
     if _analytics_enabled is not None:
         return _analytics_enabled
 
-    # Env var overrides — disable without any prompt
+    # Env var overrides
     if os.environ.get("SKLAB_NO_ANALYTICS", "").strip() == "1":
         _analytics_enabled = False
         return False
@@ -255,19 +247,13 @@ def init_telemetry() -> bool:
 
     if "analytics_enabled" not in config:
         # Non-interactive context (CI, piped input, cron jobs) — disable silently.
-        # Do NOT write config so the next interactive run still shows the notice.
+        # Do NOT write config so the next interactive run can enable properly.
         if not sys.stdout.isatty():
             _analytics_enabled = False
             return False
 
-        # First interactive run — enable by default and print a notice (opt-out model)
-        try:
-            import typer
-
-            typer.echo(_FIRST_RUN_NOTICE)
-        except Exception:
-            print(_FIRST_RUN_NOTICE)  # noqa: T201
-
+        # First interactive run — enable by default (opt-out model).
+        # Privacy details in docs/PRIVACY.md and README.
         config["analytics_enabled"] = True
         config["user_uuid"] = str(uuid.uuid4())
         _write_config(config)

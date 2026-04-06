@@ -838,31 +838,6 @@ class TestInitTelemetry:
         assert config["analytics_enabled"] is True
         assert "user_uuid" in config
 
-    def test_first_run_prints_notice(self, tmp_telemetry, monkeypatch):
-        monkeypatch.delenv("SKLAB_NO_ANALYTICS", raising=False)
-        monkeypatch.delenv("DO_NOT_TRACK", raising=False)
-        with patch("sys.stdout.isatty", return_value=True), patch("typer.echo") as mock_echo:
-            init_telemetry()
-        mock_echo.assert_called_once()
-        assert "opt out" in mock_echo.call_args[0][0].lower()
-
-    def test_first_run_notice_mentions_do_not_track(self, tmp_telemetry, monkeypatch):
-        monkeypatch.delenv("SKLAB_NO_ANALYTICS", raising=False)
-        monkeypatch.delenv("DO_NOT_TRACK", raising=False)
-        with patch("sys.stdout.isatty", return_value=True), patch("typer.echo") as mock_echo:
-            init_telemetry()
-        assert "DO_NOT_TRACK" in mock_echo.call_args[0][0]
-
-    def test_first_run_notice_exception_still_enables(self, tmp_telemetry, monkeypatch):
-        monkeypatch.delenv("SKLAB_NO_ANALYTICS", raising=False)
-        monkeypatch.delenv("DO_NOT_TRACK", raising=False)
-        with (
-            patch("sys.stdout.isatty", return_value=True),
-            patch("typer.echo", side_effect=Exception("no tty")),
-        ):
-            result = init_telemetry()
-        assert result is True
-
     # ── DO_NOT_TRACK ──────────────────────────────────────────────────────────
 
     def test_do_not_track_zero_does_not_block(self, tmp_telemetry, monkeypatch):
@@ -915,20 +890,12 @@ class TestInitTelemetry:
         assert telemetry_module._analytics_enabled is False
 
     def test_non_interactive_first_run_does_not_write_config(self, tmp_telemetry, monkeypatch):
-        """Config must NOT be written in non-interactive mode so the next interactive
-        run still shows the first-run notice."""
+        """Config must NOT be written in non-interactive mode."""
         monkeypatch.delenv("SKLAB_NO_ANALYTICS", raising=False)
         monkeypatch.delenv("DO_NOT_TRACK", raising=False)
         with patch("sys.stdout.isatty", return_value=False):
             init_telemetry()
         assert not tmp_telemetry["config"].exists()
-
-    def test_non_interactive_first_run_does_not_print_notice(self, tmp_telemetry, monkeypatch):
-        monkeypatch.delenv("SKLAB_NO_ANALYTICS", raising=False)
-        monkeypatch.delenv("DO_NOT_TRACK", raising=False)
-        with patch("sys.stdout.isatty", return_value=False), patch("typer.echo") as mock_echo:
-            init_telemetry()
-        mock_echo.assert_not_called()
 
     def test_interactive_first_run_writes_config(self, tmp_telemetry, monkeypatch):
         monkeypatch.delenv("SKLAB_NO_ANALYTICS", raising=False)

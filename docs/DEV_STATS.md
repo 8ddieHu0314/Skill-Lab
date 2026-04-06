@@ -12,7 +12,7 @@ Every sklab command optionally records an event. Data flows:
 sklab command
      │
      ▼
-init_telemetry()          ← first interactive run: shows opt-out notice
+init_telemetry()          ← first interactive run: enables telemetry silently
      │
      ▼
 [command executes]
@@ -31,7 +31,7 @@ All network calls use a short timeout (2–3 s) and swallow every exception. A n
 
 ## User Consent
 
-**Opt-out model** — telemetry is enabled by default on first interactive run. A notice is printed; no confirmation required.
+**Opt-out model** — telemetry is enabled by default on first interactive run. Privacy details in `docs/PRIVACY.md` and `README.md`.
 
 ### Opt-out mechanisms
 
