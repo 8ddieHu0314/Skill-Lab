@@ -85,22 +85,14 @@ def _increment_patch(version: str) -> str:
     return ".".join(parts)
 
 
-def _prompt_version_bump(skill_path: Path, *, auto: bool = False) -> None:
-    """Ask user if they want to bump the skill version after optimization.
-
-    Skips the prompt entirely in --auto mode or non-TTY environments.
-    """
-    if auto or not sys.stdin.isatty():
-        return
+def _bump_version(skill_path: Path) -> None:
+    """Auto-bump patch version after optimization is applied."""
     config = load_config(skill_path)
     current = config.version or "0.0.0"
-    console.print(f"\n[dim]Current version: {current}[/dim]")
-    if typer.confirm("Bump skill version?", default=False):
-        default_next = _increment_patch(current)
-        new_version = typer.prompt("New version", default=default_next)
-        updated = replace(config, version=new_version)
-        save_config(skill_path, updated)
-        console.print(f"[green]Version updated to {new_version}[/green]")
+    new_version = _increment_patch(current)
+    updated = replace(config, version=new_version)
+    save_config(skill_path, updated)
+    console.print(f"[green]Version bumped: {current} → {new_version}[/green]")
 
 
 def _show_result_and_apply(
@@ -186,9 +178,9 @@ def _show_result_and_apply(
         console.print(f"\n[green]Changes applied to {skill_md}[/green]")
         push_telemetry_extra(applied=True)
 
-        # Persist resolved model and prompt version bump
+        # Persist resolved model and bump version
         update_model(skill_path, resolved_model)
-        _prompt_version_bump(skill_path, auto=auto)
+        _bump_version(skill_path)
     else:
         console.print("[dim]Changes discarded.[/dim]")
         push_telemetry_extra(applied=False)
