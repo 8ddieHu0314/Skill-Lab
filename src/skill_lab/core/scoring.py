@@ -6,6 +6,28 @@ from typing import Any, Protocol, TypeVar
 
 from skill_lab.core.models import CheckResult, EvalDimension, Severity
 
+# ---------------------------------------------------------------------------
+# Scoring model constants
+# ---------------------------------------------------------------------------
+
+# Combined score weighting (static analysis + LLM judge)
+STATIC_WEIGHT: float = 0.6
+JUDGE_WEIGHT: float = 0.4
+
+# Verdict bands: (minimum_score, label) — evaluated top-down
+VERDICT_BANDS: tuple[tuple[float, str], ...] = (
+    (90.0, "Excellent"),
+    (75.0, "Good"),
+    (50.0, "Needs work"),
+    (0.0, "Poor"),
+)
+
+# Score below which `sklab evaluate` offers to chain into the optimizer
+OPTIMIZE_SCORE_THRESHOLD: float = 90.0
+
+# Load optimizer patterns for judge criteria scoring at or below this value (0-4)
+PATTERN_SCORE_THRESHOLD: int = 2
+
 # Weights for each dimension in the final score
 # Note: EXECUTION dimension is for trace-based checks and has 0 weight
 # in static analysis scoring. It's evaluated separately via trace evaluation.
@@ -24,6 +46,21 @@ SEVERITY_WEIGHTS: dict[Severity, float] = {
     Severity.MEDIUM: 0.5,
     Severity.LOW: 0.25,
 }
+
+
+def combined_score(static_score: float, judge_score: float | None) -> float:
+    """Compute weighted overall score from static and judge components."""
+    if judge_score is None:
+        return static_score
+    return static_score * STATIC_WEIGHT + judge_score * JUDGE_WEIGHT
+
+
+def verdict(score: float) -> str:
+    """Map a 0-100 score to a verdict label."""
+    for threshold, label in VERDICT_BANDS:
+        if score >= threshold:
+            return label
+    return "Poor"
 
 
 # Protocol for results that have a 'passed' attribute

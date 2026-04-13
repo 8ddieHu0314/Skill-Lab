@@ -8,6 +8,7 @@ from rich.text import Text
 
 from skill_lab.core.llm import GenerationUsage
 from skill_lab.core.models import EvaluationReport, JudgeResult, Severity, TraceReport
+from skill_lab.core.scoring import combined_score, verdict
 
 # Shared severity display mappings — keyed by Severity.value string
 SEVERITY_STYLES: dict[str, str] = {
@@ -15,11 +16,6 @@ SEVERITY_STYLES: dict[str, str] = {
     "medium": "yellow",
     "low": "blue",
 }
-
-# Combined score weighting (static + judge)
-STATIC_WEIGHT: float = 0.6
-JUDGE_WEIGHT: float = 0.4
-
 
 def score_color(score: float) -> str:
     """Return a rich color name based on a 0-100 quality score."""
@@ -55,26 +51,6 @@ def _verdict_color(verdict: str) -> str:
         return "yellow"
     return "red"
 
-
-def _combined_score(
-    static_score: float,
-    judge_score: float | None,
-) -> float:
-    """Compute weighted overall score from static and judge components."""
-    if judge_score is None:
-        return static_score
-    return static_score * STATIC_WEIGHT + judge_score * JUDGE_WEIGHT
-
-
-def _verdict(score: float) -> str:
-    """Return a verdict label for a 0-100 score."""
-    if score >= 90:
-        return "Excellent"
-    if score >= 75:
-        return "Good"
-    if score >= 50:
-        return "Needs work"
-    return "Poor"
 
 
 class ConsoleReporter:
@@ -230,7 +206,7 @@ class ConsoleReporter:
         """
         is_hybrid = judge_result is not None
         judge_score = judge_result.judge_score if judge_result else None
-        overall = _combined_score(report.quality_score, judge_score)
+        overall = combined_score(report.quality_score, judge_score)
 
         # --- Header ---
         skill_name = report.skill_name or "Unknown"
@@ -262,7 +238,7 @@ class ConsoleReporter:
         self.console.print(Rule("Overall Score", style="bold"))
         self.console.print()
 
-        v = _verdict(overall)
+        v = verdict(overall)
         oc = score_color(overall)
         vc = _verdict_color(v)
         self.console.print(

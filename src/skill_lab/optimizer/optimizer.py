@@ -23,6 +23,7 @@ from skill_lab.core.llm import (
     resolve_provider,
 )
 from skill_lab.core.models import CheckResult, EvaluationReport, JudgeCriterion
+from skill_lab.core.scoring import PATTERN_SCORE_THRESHOLD
 from skill_lab.evaluators.static_evaluator import StaticEvaluator
 
 _SYSTEM_PROMPT_PATH = Path(__file__).parent / "optimize_skill.md"
@@ -37,7 +38,6 @@ SYSTEM_PROMPT = (
 MAX_BODY_CHARS = 12000
 
 _PATTERNS_DIR = Path(__file__).parent / "patterns"
-PATTERN_SCORE_THRESHOLD = 2
 
 
 def _format_failures(results: list[CheckResult]) -> str:

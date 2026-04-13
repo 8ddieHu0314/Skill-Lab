@@ -24,6 +24,7 @@ NEVER include Co-Authored-By lines, "Generated with Claude Code", or any AI co-a
 | [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) | Vision, roadmap, design decisions |
 | [docs/SECURITY.md](docs/SECURITY.md) | 5-layer security scan details |
 | [docs/PRIVACY.md](docs/PRIVACY.md) | Telemetry & privacy policy |
+| [docs/DEV_STATS.md](docs/DEV_STATS.md) | Telemetry flow, SQLite schema, event types, CI detection |
 | [docs/versions/](docs/versions/) | Per-version specs (v0.1.0–v1.0.0) |
 
 After code changes: update `ARCHITECTURE.md` (modules/CLI) and the relevant `docs/versions/vX.X.X.md`.

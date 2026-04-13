@@ -11,10 +11,10 @@ import pytest
 from skill_lab.core.exceptions import GenerationError
 from skill_lab.core.llm import LLMResponse
 from skill_lab.core.models import JudgeCriterion, JudgeResult
+from skill_lab.core.scoring import verdict
 from skill_lab.judge.judge import (
     CRITERIA_DEFS,
     SkillJudge,
-    _compute_verdict,
 )
 
 
@@ -192,20 +192,20 @@ class TestScoreCalculation:
         assert result.verdict == "Needs work"
 
     def test_verdict_excellent(self) -> None:
-        assert _compute_verdict(95.0) == "Excellent"
-        assert _compute_verdict(90.0) == "Excellent"
+        assert verdict(95.0) == "Excellent"
+        assert verdict(90.0) == "Excellent"
 
     def test_verdict_good(self) -> None:
-        assert _compute_verdict(85.0) == "Good"
-        assert _compute_verdict(75.0) == "Good"
+        assert verdict(85.0) == "Good"
+        assert verdict(75.0) == "Good"
 
     def test_verdict_needs_work(self) -> None:
-        assert _compute_verdict(60.0) == "Needs work"
-        assert _compute_verdict(50.0) == "Needs work"
+        assert verdict(60.0) == "Needs work"
+        assert verdict(50.0) == "Needs work"
 
     def test_verdict_poor(self) -> None:
-        assert _compute_verdict(30.0) == "Poor"
-        assert _compute_verdict(0.0) == "Poor"
+        assert verdict(30.0) == "Poor"
+        assert verdict(0.0) == "Poor"
 
 
 class TestParseResponse:

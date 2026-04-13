@@ -20,9 +20,8 @@ from skill_lab.core.models import (
 from skill_lab.reporters.console_reporter import (
     SEVERITY_STYLES,
     ConsoleReporter,
-    _combined_score,
-    _verdict,
 )
+from skill_lab.core.scoring import combined_score, verdict
 from skill_lab.reporters.json_reporter import SCHEMA_VERSION, JsonReporter
 
 
@@ -406,28 +405,28 @@ class TestConsoleReporterReport:
 
 class TestCombinedScore:
     def test_static_only(self) -> None:
-        assert _combined_score(80.0, None) == 80.0
+        assert combined_score(80.0, None) == 80.0
 
     def test_blended(self) -> None:
         # 80 * 0.6 + 50 * 0.4 = 48 + 20 = 68
-        assert _combined_score(80.0, 50.0) == pytest.approx(68.0)
+        assert combined_score(80.0, 50.0) == pytest.approx(68.0)
 
     def test_perfect(self) -> None:
-        assert _combined_score(100.0, 100.0) == pytest.approx(100.0)
+        assert combined_score(100.0, 100.0) == pytest.approx(100.0)
 
 
 class TestVerdict:
     def test_excellent(self) -> None:
-        assert _verdict(95.0) == "Excellent"
+        assert verdict(95.0) == "Excellent"
 
     def test_good(self) -> None:
-        assert _verdict(80.0) == "Good"
+        assert verdict(80.0) == "Good"
 
     def test_needs_work(self) -> None:
-        assert _verdict(60.0) == "Needs work"
+        assert verdict(60.0) == "Needs work"
 
     def test_poor(self) -> None:
-        assert _verdict(30.0) == "Poor"
+        assert verdict(30.0) == "Poor"
 
 
 # ─── ConsoleReporter.report_evaluation() ─────────────────────────────────────

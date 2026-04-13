@@ -26,6 +26,7 @@ from skill_lab.core.exceptions import GenerationError
 from skill_lab.core.llm import GenerationUsage, detect_provider_name, get_api_key_env_var
 from skill_lab.core.models import EvalDimension, EvaluationReport, JudgeResult
 from skill_lab.core.registry import registry
+from skill_lab.core.scoring import OPTIMIZE_SCORE_THRESHOLD, combined_score
 from skill_lab.core.skill_config import resolve_model, update_evaluate, update_model, update_review
 from skill_lab.core.telemetry import push_telemetry_extra
 from skill_lab.evaluators.static_evaluator import StaticEvaluator
@@ -33,8 +34,6 @@ from skill_lab.reporters.console_reporter import SEVERITY_STYLES, ConsoleReporte
 from skill_lab.reporters.json_reporter import JsonReporter
 
 logger = logging.getLogger(__name__)
-
-OPTIMIZE_SCORE_THRESHOLD = 90
 
 
 def _run_bulk_evaluate(
@@ -280,13 +279,15 @@ def evaluate(
             _print_api_key_hint(missing_env_var)
 
     # Chain into optimization: --optimize flag (unconditional) or interactive prompt (score < 90)
+    judge_score = judge_result.judge_score if judge_result else None
+    combined = combined_score(report.quality_score, judge_score)
     if optimize and not all_skills and not repo:
         _run_optimize(skill_path, model)
     elif (
         format == OutputFormat.console
         and not all_skills
         and not repo
-        and report.quality_score < OPTIMIZE_SCORE_THRESHOLD
+        and combined < OPTIMIZE_SCORE_THRESHOLD
     ):
         _offer_optimize(skill_path, model)
 

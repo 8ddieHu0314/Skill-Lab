@@ -20,6 +20,7 @@ from skill_lab.core.llm import (
     resolve_provider,
 )
 from skill_lab.core.models import JudgeCriterion, JudgeResult, Skill
+from skill_lab.core.scoring import verdict
 from skill_lab.parsers.skill_parser import parse_skill
 
 logger = logging.getLogger(__name__)
@@ -47,21 +48,6 @@ CRITERIA_DEFS: tuple[tuple[str, str, str], ...] = (
     ("error_resilience", "Error Resilience", "instruction"),
     ("progressive_disclosure", "Progressive Disclosure", "instruction"),
 )
-
-VERDICT_BANDS: tuple[tuple[float, str], ...] = (
-    (90.0, "Excellent"),
-    (75.0, "Good"),
-    (50.0, "Needs work"),
-    (0.0, "Poor"),
-)
-
-
-def _compute_verdict(score: float) -> str:
-    """Map a 0-100 score to a verdict label."""
-    for threshold, label in VERDICT_BANDS:
-        if score >= threshold:
-            return label
-    return "Poor"
 
 
 class SkillJudge:
@@ -246,7 +232,7 @@ class SkillJudge:
         instruction_score = round(instruction_raw / 20 * 100, 1)
         judge_score = round((activation_score + instruction_score) / 2, 1)
 
-        verdict = _compute_verdict(judge_score)
+        verdict_label = verdict(judge_score)
 
         raw_suggestions = data.get("suggestions")
         if isinstance(raw_suggestions, list):
@@ -259,6 +245,6 @@ class SkillJudge:
             activation_score=activation_score,
             instruction_score=instruction_score,
             judge_score=judge_score,
-            verdict=verdict,
+            verdict=verdict_label,
             suggestions=suggestions,
         )
