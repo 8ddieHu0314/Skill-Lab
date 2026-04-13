@@ -3,7 +3,6 @@
 import difflib
 import os
 import re
-import sys
 from dataclasses import replace
 from pathlib import Path
 from typing import Annotated
