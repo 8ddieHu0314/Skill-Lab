@@ -32,8 +32,7 @@ def skill_dir(tmp_path: Path) -> Path:
 class TestLoadConfig:
     def test_missing_file_returns_defaults(self, skill_dir: Path) -> None:
         config = load_config(skill_dir)
-        assert config == SkillConfig()
-        assert config.version is None
+        assert config.version == "0.0.0"
         assert config.model is None
         assert config.last_evaluate is None
 

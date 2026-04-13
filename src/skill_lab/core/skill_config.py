@@ -100,7 +100,7 @@ def load_config(skill_path: Path) -> SkillConfig:
     """Load .sklab/config.yaml, returning defaults if missing or corrupt."""
     path = _config_path(skill_path)
     if not path.exists():
-        return SkillConfig()
+        return SkillConfig(version="0.0.0")
 
     try:
         text = path.read_text(encoding="utf-8")
